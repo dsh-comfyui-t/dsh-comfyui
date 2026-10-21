@@ -117,8 +117,11 @@ if ((Test-Path -LiteralPath $cfgPath) -and -not $Force) {
 # ---- 6. next steps ----
 Write-Host ''
 Say 'done. Next:'
-Write-Host '  1) register the plugin in your DSH profile (copy this folder into %USERPROFILE%\.dsh\plugins\ and add'
+Write-Host '  1) register the plugin in YOUR profile (layout differs per install; examples below)'
 Write-Host '     an insert line pointing at it, or use: dsh plugin add <this folder>)'
+Write-Host '     - npm layout : <DSH_HOME>\profiles\node_modules\@local\dsh-comfyui-console\'
+Write-Host '     - cordis     : <profile>\cordis.patch.yml  insert { id: comfyui-console, name: "@local/dsh-comfyui-console" }'
+Write-Host '     - legacy     : <DSH_HOME>\plugins\ (older builds only)'
 Write-Host '  2) restart the DSH web process (plugin code is cached per process)'
 Write-Host '  3) open the drawing console, then check the sidecar:'
 Write-Host ('     Invoke-RestMethod http://127.0.0.1:' + $SidecarPort + '/health')

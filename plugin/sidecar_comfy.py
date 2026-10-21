@@ -24,6 +24,9 @@ from sidecar_state import (
     COMFY_EXTRA_ARGS,
     COMFY_MAIN,
     COMFY_PORT,
+    COMFY_BASE,
+    BACKEND_MODE,
+    MANAGED,
     COMFY_PY,
     COMFY_ROOT,
     WATCH_INTERVAL,
@@ -94,7 +97,26 @@ class Comfy:
         return None
 
     def running(self):
-        return self.port_open()
+        """ComfyUI 现在能不能用。
+
+        ⚠️ 必须按后端模式选探测方式：
+          managed  本地端口有人占着就算"进程在" —— 快，不依赖 HTTP
+          remote   comfyUrl 指向别处，**本机端口毫无意义**（本机 8188 恰好有实例
+                   在跑就会误判成"远程可用"），只能真问 HTTP
+        2026-10-21 实测踩到：remote 下用 port_open 误判为 True，
+        于是 busy() 去连不可达的远程 /queue，挂满 10 秒，面板像死了。
+        """
+        if MANAGED:
+            return self.port_open()
+        # 远程要真问 HTTP，3 秒封顶；面板会周期性问，所以加 5 秒 TTL 缓存，
+        # 免得网络抖一下面板就反复卡。
+        now = time.time()
+        cached = getattr(self, '_probe_cache', None)
+        if cached and (now - cached[0]) < 5:
+            return cached[1]
+        ok = self.serving(3)
+        self._probe_cache = (now, ok)
+        return ok
 
     def touch(self):
         with self.lock:
@@ -105,7 +127,7 @@ class Comfy:
         if not self.running():
             return False
         try:
-            q = _http_json('http://127.0.0.1:%d/queue' % COMFY_PORT, '', timeout=10)
+            q = _http_json(COMFY_BASE + '/queue', '', timeout=5)
             return len(q.get('queue_running') or []) > 0
         except Exception:
             return False
@@ -113,7 +135,7 @@ class Comfy:
     def serving(self, timeout=3):
         """端口上是不是**真在应答**（不只是端口被占用）。"""
         try:
-            _http_json('http://127.0.0.1:%d/system_stats' % COMFY_PORT, '', timeout=timeout)
+            _http_json(COMFY_BASE + '/system_stats', '', timeout=timeout)
             return True
         except Exception:
             return False
@@ -264,6 +286,10 @@ class Comfy:
         根因是上一轮进程没退干净（端口还占着或应答不了），旧实现只探端口，
         于是把僵尸当「已在运行」，或者新进程绑定失败直接退出。
         """
+        if not MANAGED:
+            return False, ('远程模式（backendMode=%s，地址 %s）：本插件不管理 ComfyUI 进程。'
+                           '要能起停，把 config.json 的 comfyRoot 指向本地 ComfyUI 安装目录；'
+                           '只想连远程就保持现状。' % (BACKEND_MODE, COMFY_BASE))
         self.touch()
         if self.serving(2):
             return True, '已在运行'
@@ -324,7 +350,7 @@ class Comfy:
         self.touch()
         try:
             # ⚠️ /free 返回空 body，按 JSON 解析会抛错，见 docs/生成经验.md #4
-            _http_post_nojson('http://127.0.0.1:%d/free' % COMFY_PORT,
+            _http_post_nojson(COMFY_BASE + '/free',
                               {'unload_models': True, 'free_memory': True}, timeout=30)
             with self.lock:
                 self.unloaded_at = time.time()
@@ -334,6 +360,10 @@ class Comfy:
 
     def stop(self):
         """彻底关掉 ComfyUI 进程：杀掉监听进程，并**等端口真的释放**再返回。"""
+        if not MANAGED:
+            return False, ('远程模式（backendMode=%s，地址 %s）：本插件不管理 ComfyUI 进程。'
+                           '要能起停，把 config.json 的 comfyRoot 指向本地 ComfyUI 安装目录；'
+                           '只想连远程就保持现状。' % (BACKEND_MODE, COMFY_BASE))
         if not self.port_open() and not self.serving(1):
             return True, 'ComfyUI 没在跑'
         pid = self.pid_on_port()
@@ -357,9 +387,14 @@ class Comfy:
     def status(self):
         with self.lock:
             idle = time.time() - self.last_activity
+        rn = self.running()
         return {
-            'running': self.running(),
-            'busy': self.busy(),
+            'running': rn,
+            'busy': self.busy() if rn else False,   # 没在跑就别再去问 /queue（省一次超时）
+            # 去依赖化：面板要知道自己在跟"本地托管"还是"远程"说话
+            'backend_mode': BACKEND_MODE,
+            'managed': MANAGED,
+            'comfy_base': COMFY_BASE,
             'idle_seconds': round(idle, 1),
             'auto_unload_after': AUTO_UNLOAD_SECONDS,
             'auto_unload_in': max(0, round(AUTO_UNLOAD_SECONDS - idle, 1)),
@@ -368,7 +403,13 @@ class Comfy:
         }
 
     def watcher(self):
-        """后台巡检：闲置超时且**不在出图** -> 卸载模型（不杀进程）。"""
+        """后台巡检：闲置超时且**不在出图** -> 卸载模型（不杀进程）。
+
+        ⚠️ 远程模式下**不启用**：那台 ComfyUI 可能是别人的，替人清显存是越界行为。
+        """
+        if not MANAGED:
+            print('[comfy] 远程模式（%s）：不做闲置自动卸载' % COMFY_BASE, flush=True)
+            return
         while True:
             try:
                 time.sleep(WATCH_INTERVAL)

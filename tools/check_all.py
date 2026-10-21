@@ -54,6 +54,9 @@ def main():
     print('=== 3. client.js 与源一致 ===')
     run('build_client --check', [sys.executable, 'tools/build_client.py', '--check'], cwd=PLUGIN)
 
+    print('=== 3b. 包名一致性 ===')
+    run('check_naming', [sys.executable, os.path.join(TOOLS, 'check_naming.py')])
+
     print('=== 4. TDZ ===')
     run('check_tdz', [sys.executable, os.path.join(TOOLS, 'check_tdz.py'),
                       os.path.join(PLUGIN, 'lib', 'app.js')])

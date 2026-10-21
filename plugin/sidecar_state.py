@@ -145,7 +145,41 @@ def _load_cfg():
 
 CFG = _load_cfg()
 # 回退顺序与原 expander.py 中部那处重算一致：配置 -> 环境变量 -> 本机默认
-COMFY_ROOT = (CFG['comfyRoot'] or os.environ.get('DSH_COMFY_ROOT') or r'D:\paint\ComfyUI')
+# ---- ComfyUI 后端（去依赖化）------------------------------------------------
+# 原来这里写死 r'D:\paint\ComfyUI'（上游作者的开发机路径），别的机器上根本不存在，
+# 于是 comfyRoot 永远"看起来配了但实际无效"，报错全落在下游。
+# 现在：
+#   comfyUrl      完整地址，可指向局域网/远程（http://192.168.1.10:8188）
+#   backendMode   auto | managed | remote
+#       auto      有可用 comfyRoot -> managed；否则 remote
+#       managed   能拉起/停止本地 ComfyUI，能推算 output 目录
+#       remote    只走 HTTP，绝不碰进程与本地路径
+# 两者取一即可：只填 comfyUrl 就是纯客户端（远程 ComfyUI 场景）。
+_COMFY_ROOT_CFG = (CFG['comfyRoot'] or os.environ.get('DSH_COMFY_ROOT') or '').strip()
+
+
+def comfy_root_usable(root):
+    """这个 root 到底能不能当本地 ComfyUI 用（有 main.py 或 python_embeded）。"""
+    if not root or not os.path.isdir(root):
+        return False
+    return (os.path.isfile(os.path.join(root, 'python_embeded', 'python.exe'))
+            or os.path.isfile(os.path.join(root, 'ComfyUI', 'main.py'))
+            or os.path.isfile(os.path.join(root, 'main.py')))
+
+
+COMFY_ROOT = _COMFY_ROOT_CFG
+_BACKEND_MODE_CFG = (CFG.get('backendMode') or os.environ.get('DSH_COMFY_BACKEND') or '').strip().lower()
+if _BACKEND_MODE_CFG in ('managed', 'remote'):
+    BACKEND_MODE = _BACKEND_MODE_CFG
+else:
+    BACKEND_MODE = 'managed' if comfy_root_usable(COMFY_ROOT) else 'remote'
+MANAGED = (BACKEND_MODE == 'managed')
+
+# 地址：显式 comfyUrl 优先；否则按 comfyPort 拼本地默认
+_COMFY_URL_CFG = (CFG.get('comfyUrl') or os.environ.get('DSH_COMFY_URL') or '').strip()
+COMFY_BASE = (_COMFY_URL_CFG.rstrip('/') if _COMFY_URL_CFG
+              else 'http://127.0.0.1:%d' % int(CFG.get('comfyPort') or 8188))
+
 COMFY_PY = CFG['comfyPy']
 COMFY_MAIN = CFG['comfyMain']
 COMFY_PORT = CFG['comfyPort']
@@ -187,5 +221,6 @@ def _read_creds():
 _CREDS_CACHE = {'v': None}
 
 # ComfyUI 下的两个固定子目录（原在 expander.py 中部，被 cards 与 pack 两组共用）
-COMFY_INPUT = os.path.join(COMFY_ROOT, 'input')
-COMFY_PATCHES = os.path.join(COMFY_ROOT, 'models', 'model_patches')
+# 这两个是本地磁盘路径，remote 模式下没有意义，置空（下游都已判空）
+COMFY_INPUT = os.path.join(COMFY_ROOT, 'input') if MANAGED else ''
+COMFY_PATCHES = os.path.join(COMFY_ROOT, 'models', 'model_patches') if MANAGED else ''

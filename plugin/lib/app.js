@@ -170,11 +170,89 @@ function saveUser() {
 
 /** 老卡里的胶囊备注可能只剩英文（n === t）：开机补一次中文，不动用户自己写过的备注 */
 function healUserZh() {
-  /* zhFillParts 定义在 Console() 内部，此处（模块顶层）作用域不可见；typeof 守卫避免启动即崩，外层补不到就保留原值 */
+  /* zhFillParts / zhOf / CARD_ZH 已提到本函数之前，这里真的能补到中文了 */
   const fix = (c) => (c && c.parts && typeof c.parts === "object" ? Object.assign({}, c, { parts: (typeof zhFillParts === "function" ? zhFillParts(c.parts) : c.parts) }) : c);
   if (Array.isArray(USER.cards)) USER.cards = USER.cards.map(fix);
   if (Array.isArray(USER.styleCards)) USER.styleCards = USER.styleCards.map(fix);
 }
+// ==================== 卡片中文字段 ====================
+// 2026-10-21 搬到模块顶部（原来在文件尾部）。
+//
+// 原因是一个**只在有角色卡时才触发**的崩：
+//   healUserZh() 在模块加载时立即执行 -> zhFillParts() -> zhOf() -> 读 CARD_ZH
+//   而 CARD_ZH 是 const，原来声明在调用点之后 ->
+//   ReferenceError: Cannot access 'CARD_ZH' before initialization
+//   typeof 守卫拦不住：zhFillParts 是函数声明，会提升，typeof 恒为 "function"。
+//
+// 依赖顺序：CARD_ZH -> zhOf -> zhFillParts -> cardFromJson，别打乱。
+// ⚠️ CARD_ZH 是 const，有 TDZ —— 必须留在 healUserZh() 调用之前。
+
+/** 常见标签的中文备注（没命中就显示英文本身） */
+const CARD_ZH = {
+	"1girl": "单人女", "1boy": "单人男", "solo": "单人", "group": "多人",
+	"long hair": "长发", "blonde hair": "金发", "brown hair": "棕发", "red hair": "红发", "silver hair": "银发", "white hair": "白发", "curly hair": "卷发", "wavy hair": "波浪发", "green eyes": "绿眼睛", "purple eyes": "紫眼睛", "heterochromia": "异色瞳", "no glasses": "不戴眼镜", "black hair": "黑发", "long black hair": "黑色长发", "maple leaf hair ornament": "枫叶发饰", "straight hair": "直发", "blunt bangs": "齐刘海", "short hair": "短发",
+	"ponytail": "马尾", "twintails": "双马尾", "braid": "辫子", "bun": "丸子头", "bangs": "刘海",
+	"blue eyes": "蓝眼睛", "small breasts": "小胸", "medium breasts": "中等胸", "large breasts": "大胸", "huge breasts": "巨乳", "slim": "纤细身材", "pubic hair": "阴毛", "hairy": "体毛", "red eyes": "红眼睛", "detailed eyes": "眼睛细节", "sparkling eyes": "闪亮眼", "eyes": "眼睛",
+	"glasses": "眼镜", "round eyewear": "圆框眼镜", "maple leaf hair ornament": "枫叶发饰", "hair ornament": "发饰",
+	"beige trench coat": "米色风衣", "trench coat": "风衣", "white shirt": "白衬衫", "shirt": "衬衫",
+	"blue necktie": "蓝领带", "necktie": "领带", "black skirt": "黑裙", "skirt": "裙子",
+	"dress": "连衣裙", "jacket": "外套", "uniform": "制服", "stockings": "丝袜", "kneehighs": "及膝袜",
+	"closed mouth": "闭嘴", "smile": "微笑", "open mouth": "张嘴", "blush": "脸红",
+};
+
+/** 取中文备注：整串优先，其次最长命中，都没有就空 */
+function zhOf(t) {
+	const s = String(t || "").toLowerCase().trim();
+	if (!s) return "";
+	if (CARD_ZH[s]) return CARD_ZH[s];
+	let best = "", hit = "";
+	for (const k of Object.keys(CARD_ZH)) { if (s.indexOf(k) >= 0 && k.length > best.length) { best = k; hit = CARD_ZH[k]; } }
+	return hit;
+}
+
+/** 从 .json 导入角色卡（兼容单卡 / 数组 / {cards:[]}） */
+/** 导入 JSON 里的一条卡 → 内部记录（纯函数：守住 name/tags 必有，其余缺省补齐）
+ *  guard / locks / lora 必须原样带过来，否则「卡随分发走」就丢了特征锁和 LoRA */
+/** 补齐胶囊中文备注：n 为空或等于英文本身时，用 CARD_ZH 查一次；查不到就保留原值 */
+function zhFillParts(parts) {
+  const out = {};
+  for (const k of Object.keys(parts || {})) {
+    const raw = parts[k];
+    if (typeof raw === "string") { out[k] = raw; continue; }
+    if (raw && !Array.isArray(raw)) { out[k] = raw; continue; }
+    const arr = Array.isArray(raw) ? raw : [];
+    out[k] = arr.map((x) => {
+      const t = String((x && x.t) || "").trim();
+      let n = String((x && x.n) || "").trim();
+      if (t && (!n || n === t)) { const z = zhOf(t); if (z && z !== t) n = z; }
+      return { t: t, n: n || t };
+    }).filter((x) => x.t);
+  }
+  return out;
+}
+
+function cardFromJson(c) {
+  const nm = String((c && c.name) || "").trim();
+  if (!nm) return null;
+  const tags = String(c.tags || joinCardParts((c && c.parts) || {})).trim();
+  if (!tags) return null;
+  return {
+    id: "u" + String(Date.now()) + "_" + Math.random().toString(36).slice(2, 7),
+    name: nm,
+    tags: tags,
+    note: String(c.note || ""),
+    cover: String(c.cover || ""),
+    file: String((c && c.__file) || ""),
+    parts: zhFillParts((c && c.parts && typeof c.parts === "object") ? c.parts : splitCardTags(tags)),
+    neg: normPart(c && c.neg),
+    lora: String((c && c.lora) || ""),
+    loraW: Number(c && c.loraW) > 0 ? Number(c.loraW) : 0.7,
+    loraAlt: String((c && c.loraAlt) || ""),
+    conditioning: condForSave(c && c.conditioning),
+    locks: (c && Array.isArray(c.locks)) ? c.locks : [],
+  };
+}
+// ==================== 卡片中文字段 结束 ====================
 healUserZh();
 /** 记住「上次用的那一套」：底模/编码器/编码器类型/VAE/LoRA/宽高/步数/CFG/采样器/调度器/文件名前缀 */
 function saveLast(patch) {
@@ -2567,29 +2645,6 @@ const CARD_BTN = { fontSize: "12px", fontWeight: 600, padding: "6px 14px", borde
 const CARD_BTN_ACCENT = Object.assign({}, CARD_BTN, { border: "1px solid var(--c-accent)" });
 const CARD_BTN_DANGER = Object.assign({}, CARD_BTN, { border: "1px solid var(--c-bad)", background: "var(--c-bad-bg)" });
 
-/** 常见标签的中文备注（没命中就显示英文本身） */
-const CARD_ZH = {
-	"1girl": "单人女", "1boy": "单人男", "solo": "单人", "group": "多人",
-	"long hair": "长发", "blonde hair": "金发", "brown hair": "棕发", "red hair": "红发", "silver hair": "银发", "white hair": "白发", "curly hair": "卷发", "wavy hair": "波浪发", "green eyes": "绿眼睛", "purple eyes": "紫眼睛", "heterochromia": "异色瞳", "no glasses": "不戴眼镜", "black hair": "黑发", "long black hair": "黑色长发", "maple leaf hair ornament": "枫叶发饰", "straight hair": "直发", "blunt bangs": "齐刘海", "short hair": "短发",
-	"ponytail": "马尾", "twintails": "双马尾", "braid": "辫子", "bun": "丸子头", "bangs": "刘海",
-	"blue eyes": "蓝眼睛", "small breasts": "小胸", "medium breasts": "中等胸", "large breasts": "大胸", "huge breasts": "巨乳", "slim": "纤细身材", "pubic hair": "阴毛", "hairy": "体毛", "red eyes": "红眼睛", "detailed eyes": "眼睛细节", "sparkling eyes": "闪亮眼", "eyes": "眼睛",
-	"glasses": "眼镜", "round eyewear": "圆框眼镜", "maple leaf hair ornament": "枫叶发饰", "hair ornament": "发饰",
-	"beige trench coat": "米色风衣", "trench coat": "风衣", "white shirt": "白衬衫", "shirt": "衬衫",
-	"blue necktie": "蓝领带", "necktie": "领带", "black skirt": "黑裙", "skirt": "裙子",
-	"dress": "连衣裙", "jacket": "外套", "uniform": "制服", "stockings": "丝袜", "kneehighs": "及膝袜",
-	"closed mouth": "闭嘴", "smile": "微笑", "open mouth": "张嘴", "blush": "脸红",
-};
-
-/** 取中文备注：整串优先，其次最长命中，都没有就空 */
-function zhOf(t) {
-	const s = String(t || "").toLowerCase().trim();
-	if (!s) return "";
-	if (CARD_ZH[s]) return CARD_ZH[s];
-	let best = "", hit = "";
-	for (const k of Object.keys(CARD_ZH)) { if (s.indexOf(k) >= 0 && k.length > best.length) { best = k; hit = CARD_ZH[k]; } }
-	return hit;
-}
-
 /** 统一成 [{t:提示词, n:中文备注}]；兼容旧的纯字符串 */
 function normPart(v) {
 	if (Array.isArray(v)) return v.map((x) => (typeof x === "string" ? { t: x, n: zhOf(x) } : { t: String((x && x.t) || ""), n: String((x && x.n) || "") })).filter((x) => x.t || x.n);
@@ -2633,49 +2688,6 @@ function exportAllCards() {
 	const fn = "角色卡-全部-" + cards.length + "张-" + day + ".json";
 	const ok = downloadText(JSON.stringify(obj, null, 2), fn);
 	setMsg(ok ? ("已导出全部 " + cards.length + " 张角色卡 → " + fn) : "导出失败：浏览器不允许下载");
-}
-
-/** 从 .json 导入角色卡（兼容单卡 / 数组 / {cards:[]}） */
-/** 导入 JSON 里的一条卡 → 内部记录（纯函数：守住 name/tags 必有，其余缺省补齐）
- *  guard / locks / lora 必须原样带过来，否则「卡随分发走」就丢了特征锁和 LoRA */
-/** 补齐胶囊中文备注：n 为空或等于英文本身时，用 CARD_ZH 查一次；查不到就保留原值 */
-function zhFillParts(parts) {
-  const out = {};
-  for (const k of Object.keys(parts || {})) {
-    const raw = parts[k];
-    if (typeof raw === "string") { out[k] = raw; continue; }
-    if (raw && !Array.isArray(raw)) { out[k] = raw; continue; }
-    const arr = Array.isArray(raw) ? raw : [];
-    out[k] = arr.map((x) => {
-      const t = String((x && x.t) || "").trim();
-      let n = String((x && x.n) || "").trim();
-      if (t && (!n || n === t)) { const z = zhOf(t); if (z && z !== t) n = z; }
-      return { t: t, n: n || t };
-    }).filter((x) => x.t);
-  }
-  return out;
-}
-
-function cardFromJson(c) {
-  const nm = String((c && c.name) || "").trim();
-  if (!nm) return null;
-  const tags = String(c.tags || joinCardParts((c && c.parts) || {})).trim();
-  if (!tags) return null;
-  return {
-    id: "u" + String(Date.now()) + "_" + Math.random().toString(36).slice(2, 7),
-    name: nm,
-    tags: tags,
-    note: String(c.note || ""),
-    cover: String(c.cover || ""),
-    file: String((c && c.__file) || ""),
-    parts: zhFillParts((c && c.parts && typeof c.parts === "object") ? c.parts : splitCardTags(tags)),
-    neg: normPart(c && c.neg),
-    lora: String((c && c.lora) || ""),
-    loraW: Number(c && c.loraW) > 0 ? Number(c.loraW) : 0.7,
-    loraAlt: String((c && c.loraAlt) || ""),
-    conditioning: condForSave(c && c.conditioning),
-    locks: (c && Array.isArray(c.locks)) ? c.locks : [],
-  };
 }
 
 /** 拖拽导入：.json / .dslcard / .dslrecipe 都能拖（和「导入」按钮同一条通道） */

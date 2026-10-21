@@ -3,6 +3,74 @@
 版本号语义：`MAJOR.MINOR.PATCH`。
 `package.json` 里的 `dsh.configVersion` 是**配置结构版本**，与插件版本独立——插件小版本升级通常不涨它。
 
+## 0.7.0 · 2026-10-21
+
+**去依赖化。** 目标：不再假设 ComfyUI 装在哪台机器的哪个盘，插件可以只当一个客户端用。
+
+### 新增
+
+1. **`comfyUrl`** —— ComfyUI 的完整地址，可指向局域网或远程（`http://192.168.1.10:8188`）。
+   留空则用 `http://127.0.0.1:<comfyPort>`。
+2. **`backendMode`** —— `auto` | `managed` | `remote`
+   - `managed`：有本地 `comfyRoot`，能拉起/停止 ComfyUI、能推算 output 目录
+   - `remote`：只走 HTTP，**绝不碰进程**；`/comfy/start|stop|restart` 返回 500 并说明怎么改；
+     **闲置自动卸载关闭**（那可能是别人的服务器，替他清显存是越界）
+   - `auto`：有可用 `comfyRoot` → managed，否则 remote
+3. `tools/check_naming.py` 进 CI —— 包名四处一致性检查。
+
+### 修
+
+4. **`CARD_ZH` 的 TDZ（致命，只在有角色卡时触发）**
+   `healUserZh()` 在模块加载时立即执行 → `zhFillParts()` → `zhOf()` → 读 `CARD_ZH`，
+   而 `CARD_ZH` 是 `const`，**声明在调用点之后** →
+   `ReferenceError: Cannot access 'CARD_ZH' before initialization`，插件整个不激活。
+   `typeof zhFillParts === "function"` 守卫拦不住：函数声明会提升，`typeof` 恒为 `"function"`。
+   → 把 `CARD_ZH` / `zhOf` / `zhFillParts` / `cardFromJson` 整体搬到 `healUserZh()` 之前。
+   验证：vm 沙箱 + mock loader + 真实存档键 `dsh-comfyui-console/v1`，9/9；
+   反例（把 `CARD_ZH` 挪回末尾）确实抛 `Cannot access 'CARD_ZH' before initialization`。
+   ⚠️ 复现有陷阱：`zhFillParts` 对**字符串**值直接透传，只有 `parts: {k: [{t,n}]}`
+   的**数组**分支才走 `zhOf` —— 随便塞数据测不出来。
+
+5. **`comfyRoot` 默认值硬编码 `D:\paint\ComfyUI`**（上游作者的开发机路径）。
+   别的机器上它永远"看起来配了但实际无效"，报错全落在下游。→ 默认置空，改为模式判定。
+
+6. **`running()` 永远探 `127.0.0.1`**。remote 模式下 `comfyUrl` 指向别处，
+   本机端口有没有人占**与远程 ComfyUI 无关**。实测：本机 8188 恰好有实例在跑 →
+   误判"远程可用" → `busy()` 去连不可达的远程 `/queue` → 挂满 10 秒，面板像死了。
+   → managed 探端口，remote 走 HTTP。
+
+7. **`/comfy/status` 双倍超时**。`status()` 里 `running()` 探一次、`busy()` 又探一次。
+   实测不可达远程 6.04s。→ running 只算一次、没在跑就不问 `/queue`、
+   remote 探测加 5 秒 TTL 缓存。实测 **6.04s → 0.01s**。
+
+8. **包名不一致**：`lib/index.js` 的 `export name` 与 `cordis.patch.yml` 的 `insert name`
+   还是 `dsh-comfyui-console`，而 `package.json.name` 是 `@local/dsh-comfyui-console`。
+   本机靠 profile patch 硬指才没炸，按标准方式装就会静默不激活。→ 四处对齐，并进 CI。
+
+9. `install.ps1` 的安装提示不再写死 `%USERPROFILE%\.dsh\plugins\`，
+   改为列出 npm / cordis / legacy 三种布局。
+
+### 验证
+
+```
+check_all.py    JS 6 + Python 10 语法 OK
+                client.js 与源一致 · 包名一致性 OK · TDZ OK
+                主题单测 13/13 · 视角单测 28/28
+comfyUrl 三模式  remote+不可达 status 0.01s running=False start 500
+                remote+可达   status 0.01s running=True  start 500
+                managed       status 0.09s running=True  start 200
+CARD_ZH TDZ     vm 沙箱 9/9，反例真抛 ReferenceError
+```
+
+### 已知未解决
+
+- `anima\loras\4x-UltraSharpV2.safetensors` 是放大模型，误放在 LoRA 目录里，
+  会出现在 LoRA 候选第一条，选中出图必失败。
+- `anima-aesthetic-v1.1-Q8_0.gguf` 是 `.gguf`，需要 ComfyUI-GGUF 自定义节点；
+  `extra_model_paths.yaml` 也还没映射 `diffusion_models`。
+- `lib/index.js` 里 `Console()` 仍是单函数约 2500 行（`healUserZh` 的 TDZ 已修，
+  但拆函数这件事本身没做）。
+
 ## 0.6.1 · 2026-10-21
 
 **本机适配版。** 0.6.0 合进来之后又修了四处才真正能跑，这一版把它们与代码收敛一起发。

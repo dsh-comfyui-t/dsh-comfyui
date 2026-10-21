@@ -250,7 +250,7 @@ async function ensureServices(opts) {
   }
 }
 
-export const name = 'dsh-comfyui-console'
+export const name = '@local/dsh-comfyui-console'
 export const version = PLUGIN_VERSION
 export const configVersion = CONFIG_VERSION
 

@@ -15,6 +15,7 @@ from sidecar_state import (
     CFG,
     COMFY_PORT,
     COMFY_ROOT,
+    MANAGED,
     CONFIG,
     CONFIG_VERSION,
 )
@@ -40,10 +41,13 @@ def _output_dirs():
     extra = CFG.get('outputDir') if isinstance(CFG, dict) else ''
     if extra:
         cands.append(extra)
-    cands += [
-        os.path.join(COMFY_ROOT, 'out'),
-        os.path.join(COMFY_ROOT, 'ComfyUI', 'output'),
-    ]
+    # root 派生的候选只在 managed 下有意义；remote 模式下 comfyRoot 是空的，
+    # 拼出来的路径只会让「打开文件所在位置」报文件不存在。
+    if MANAGED and COMFY_ROOT:
+        cands += [
+            os.path.join(COMFY_ROOT, 'out'),
+            os.path.join(COMFY_ROOT, 'ComfyUI', 'output'),
+        ]
     seen = []
     for c in cands:
         n = os.path.normcase(os.path.normpath(c))

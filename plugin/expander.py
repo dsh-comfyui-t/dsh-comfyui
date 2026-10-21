@@ -102,6 +102,9 @@ from sidecar_state import (
     _load_cfg,
     CFG,
     COMFY_ROOT,
+    COMFY_BASE,
+    BACKEND_MODE,
+    MANAGED,
     COMFY_PY,
     COMFY_MAIN,
     COMFY_PORT,
@@ -327,7 +330,7 @@ class H(BaseHTTPRequestHandler):
                     'queue_pending': 0, 'exec_info': {}}
             if info['running']:
                 try:
-                    q = _http_json('http://127.0.0.1:%d/queue' % COMFY_PORT, '', timeout=10)
+                    q = _http_json(COMFY_BASE + '/queue', '', timeout=5)
                     info['queue_running'] = len(q.get('queue_running') or [])
                     info['queue_pending'] = len(q.get('queue_pending') or [])
                     info['busy'] = info['queue_running'] > 0
