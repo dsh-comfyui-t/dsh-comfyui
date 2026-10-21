@@ -1,27 +1,27 @@
 # 代码归属
 #
 # 谁 push 到这个路径，GitHub 会自动请求对应人的 review。
-# 把 @REPLACE_OWNER / @REPLACE_A / @REPLACE_B 换成真实用户名。
+# 把 @LQH-A-A-O / @Aves0607 / @shumourena 换成真实用户名。
 #
 # 规则：按"最后匹配到的优先"生效，所以把最具体的写最下面。
 
 # 兜底：所有改动都需要维护者过一眼
-*                               @REPLACE_OWNER
+*                               @LQH-A-A-O
 
 # 插件本体：两个人都是主力，都可以 review
-plugin/lib/                     @REPLACE_OWNER @REPLACE_A
-plugin/lib/app.js               @REPLACE_OWNER @REPLACE_A @REPLACE_B
+plugin/lib/                     @LQH-A-A-O @Aves0607
+plugin/lib/app.js               @LQH-A-A-O @Aves0607 @shumourena
 
 # 侧车与鉴权：出错是致命的（整个插件加载不了 / 面板连不上），收窄到 owner + B
-plugin/expander.py              @REPLACE_OWNER @REPLACE_B
-plugin/sidecar_*.py             @REPLACE_OWNER @REPLACE_B
+plugin/expander.py              @LQH-A-A-O @shumourena
+plugin/sidecar_*.py             @LQH-A-A-O @shumourena
 
 # 生成物与版本号：只有维护者能定
-plugin/lib/client.js            @REPLACE_OWNER
-VERSION.json                    @REPLACE_OWNER
-MANIFEST.sha256                 @REPLACE_OWNER
-plugin/CHANGELOG.md             @REPLACE_OWNER
+plugin/lib/client.js            @LQH-A-A-O
+VERSION.json                    @LQH-A-A-O
+MANIFEST.sha256                 @LQH-A-A-O
+plugin/CHANGELOG.md             @LQH-A-A-O
 
 # CI 与检查脚本：改它们等于改验收标准，必须 owner
-.github/                        @REPLACE_OWNER
-tools/                          @REPLACE_OWNER @REPLACE_B
+.github/                        @LQH-A-A-O
+tools/                          @LQH-A-A-O @shumourena
