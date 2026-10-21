@@ -1,0 +1,6 @@
+{
+  "<lora-name-without-extension>": {
+    "kind": "local-derived",
+    "note": "自己训的 LoRA 写这里：kind 决定面板角标（local-derived = 本地自训），note 自由文本；留空也能跑"
+  }
+}

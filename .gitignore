@@ -1,0 +1,21 @@
+# 私人配置：里面是各人的本机路径，绝不入库
+plugin/config.json
+
+# Python 缓存 / 编译产物
+__pycache__/
+*.py[cod]
+
+# 构建备份（build_client.py 每次重建都会生成）
+plugin/.build-backup/
+*.bak-*
+*.prev
+
+# 编辑器 / 系统
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# 打包产物
+dist/
+*.zip

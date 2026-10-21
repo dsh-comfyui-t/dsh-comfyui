@@ -1,0 +1,22 @@
+{
+  "configVersion": 2,
+  "_note": "Template. install.ps1 (or first plugin load) copies this to config.json and fills the real paths. Keys: comfyRoot=ComfyUI portable root or a plain ComfyUI clone dir; pythonExe=python.exe used to run expander.py; workDir=runtime logs and caches; cardsDir=role-card JSON dir scanned by /cards; outputDir=ComfyUI output dir; allowLan=true lets sidecar accept requests from private-LAN pages (default false = localhost only).",
+  "comfyRoot": "",
+  "pythonExe": "",
+  "workDir": "",
+  "credsFile": "",
+  "comfyPort": 8188,
+  "sidecarPort": 8199,
+  "extraComfyArgs": [
+    "--disable-pinned-memory",
+    "--disable-async-offload",
+    "--disable-dynamic-vram",
+    "--cache-none"
+  ],
+  "outputDir": "",
+  "saveDir": "",
+  "cardsDir": "",
+  "allowLan": false,
+  "requireToken": true,
+  "sidecarToken": ""
+}

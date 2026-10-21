@@ -1,0 +1,24 @@
+name: check
+
+# 每次 push / PR 都跑：语法、TDZ、client 与源是否一致、两个单测。
+# 这些检查加起来 5 秒内，但能挡住 90% 的"改完看着没问题、装上去就崩"。
+on:
+  push:
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: 全套检查
+        run: python tools/check_all.py

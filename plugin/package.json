@@ -1,0 +1,90 @@
+{
+  "name": "@local/dsh-comfyui-console",
+  "version": "0.6.1",
+  "description": "ComfyUI drawing console for DSH (Anima / LLLite / role & style cards)",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": {
+      "default": "./lib/index.js"
+    },
+    "./client": {
+      "default": "./lib/client.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib/",
+    "docs/",
+    "expander.py",
+    "sidecar_auth.py",
+    "sidecar_cards.py",
+    "sidecar_comfy.py",
+    "sidecar_config.py",
+    "sidecar_llm.py",
+    "sidecar_pack.py",
+    "sidecar_routes.py",
+    "sidecar_state.py",
+    "sidecar_util.py",
+    "config.example.json",
+    "cordis.patch.yml",
+    "install.ps1",
+    "README.md",
+    "lora来源.example.json",
+    "routes.json",
+    "tools/build_client.py",
+    "CHANGELOG.md",
+    "tools/update.ps1",
+    "tools/build_suite.py"
+  ],
+  "scripts": {
+    "build:client": "python tools/build_client.py",
+    "check:client": "python tools/build_client.py --check"
+  },
+  "keywords": [
+    "dsh",
+    "cordis",
+    "comfyui",
+    "lora",
+    "anima",
+    "lllite",
+    "image-generation"
+  ],
+  "dsh": {
+    "client": {
+      "inject": [],
+      "platform": "web"
+    },
+    "configVersion": 2,
+    "minHost": "0.2.0-rc.2",
+    "update": {
+      "inPlace": [
+        "lib/",
+        "expander.py",
+        "sidecar_auth.py",
+        "sidecar_cards.py",
+        "sidecar_comfy.py",
+        "sidecar_config.py",
+        "sidecar_llm.py",
+        "sidecar_pack.py",
+        "sidecar_routes.py",
+        "sidecar_state.py",
+        "sidecar_util.py",
+        "routes.json",
+        "lora来源.json"
+      ],
+      "preserve": [
+        "config.json",
+        "config.example.json",
+        "workDir",
+        "cardsDir",
+        "outputDir"
+      ],
+      "restart": "dsh web"
+    }
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "^4.0.2"
+  },
+  "license": "MIT"
+}

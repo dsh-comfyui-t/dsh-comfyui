@@ -1,0 +1,46 @@
+{
+  "bundle": "dsh-comfyui-console + comfyui-cards",
+  "bundleVersion": "0.6.1",
+  "builtAt": "2026-10-21T19:21:16+0800",
+  "components": {
+    "plugin": {
+      "name": "dsh-comfyui-console",
+      "version": "0.6.1",
+      "configVersion": 2,
+      "minHost": "0.2.0-rc.2",
+      "entry": "plugin/lib/index.js",
+      "client": "plugin/lib/client.js",
+      "sidecar": "plugin/expander.py",
+      "probe": "http://127.0.0.1:8199/version"
+    },
+    "skill": {
+      "name": "comfyui-cards",
+      "path": "skills/comfyui-cards/SKILL.md"
+    }
+  },
+  "requires": {
+    "dsh": ">=0.2.0-rc.2",
+    "node": ">=18",
+    "python": ">=3.10",
+    "comfyui": "any (with UNETLoader / LoraLoader / VAELoader / CLIPLoader)",
+    "ports": {
+      "comfyui": 8188,
+      "sidecar": 8199,
+      "dshWeb": 10722
+    }
+  },
+  "install": {
+    "ai": "START-HERE-AI.md",
+    "human": "安装说明-给人看.md",
+    "script": "install/install-ai.ps1",
+    "verify": "install/verify.ps1"
+  },
+  "checksums": "MANIFEST.sha256",
+  "upgrade": "plugin/tools/update.ps1（只换代码，不重装；config.json 自动迁移）",
+  "notIncluded": [
+    "角色卡 / 风格卡 JSON（.dslcard 等）",
+    "LoRA 权重（.safetensors / .ckpt / .pt）",
+    "本机 config.json（私人路径）",
+    "lora来源.json 真件（只发 lora来源.example.json 占位版）"
+  ]
+}
