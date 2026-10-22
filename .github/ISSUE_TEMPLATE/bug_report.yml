@@ -1,0 +1,38 @@
+name: Bug report
+description: Something is broken — help me reproduce it
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. A reproduction is worth more than a description.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you did, what you expected, what you got instead.
+      placeholder: |
+        1. ran `...`
+        2. expected `...`
+        3. got `...`
+    validations:
+      required: true
+  - type: textarea
+    id: env
+    attributes:
+      label: Environment
+      description: OS, version, runtime version.
+      placeholder: |
+        Windows 11 23H2
+        Node 20.11 / Python 3.12.7
+        dsh-comfyui-t/dsh-comfyui <version or commit sha>
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Paste the full error output, not just the last line.
+      render: shell
+    validations:
+      required: false
