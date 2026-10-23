@@ -4,7 +4,7 @@
 
 ## 2026-10-23
 
-- feat: 版本线合并为单线（插件 semver = 套件版本 = 包名 = tag），废弃内部品线 `1.2.x`
+- chore(release): 版本号收敛为单一来源（插件版本 = 套件版本 = 包名 = tag），文档与产物名随版本自动同步
 - fix(update): `dsh.update.inPlace` 13 → 16 项，补 `sidecar_dirs.py` / `sidecar_loras.py` / `tools/build_client.py`——就地升级此前会漏掉两个侧车模块
 - feat(plugin): 卡包全量导出/导入、封面随包分发、LLLite 身份控制按卡绑定、词库卡（dictcard）
 - fix(cards): 卡目录扫描显式区分非卡 JSON（`lllite-index.json` 等进 `skipped`，不再被静默丢弃）
