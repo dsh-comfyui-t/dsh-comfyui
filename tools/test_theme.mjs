@@ -59,6 +59,7 @@ function checkPalette(name, obj) {
     const v = obj[k]
     if (v === undefined) { console.log('    ✗ ' + name + ' 缺 ' + k); bad++; continue }
     if (k === '--c-ink-rgb') { if (!RGBT.test(v)) { console.log('    ✗ ' + name + '.' + k + ' = ' + v); bad++ } }
+    else if (k === '--c-scheme') { if (!/^(light|dark)$/.test(String(v))) { console.log('    ✗ ' + name + '.' + k + ' = ' + v); bad++ } }
     else if (!HEX.test(v)) { console.log('    ✗ ' + name + '.' + k + ' = ' + v); bad++ }
   }
   return bad

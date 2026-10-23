@@ -15,7 +15,7 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)][string]$Source,
-    [string]$PluginDir = 'D:\dshl\.dsh\plugins\dsh-comfyui-console\plugin',
+    [string]$PluginDir = '',
     [string]$Profile = '0.2.0-rc.2',
     [string]$NodeExe = 'node',
     [string]$PythonExe = '',
@@ -24,11 +24,24 @@ param(
     [switch]$Force
 )
 
+if (-not $PluginDir) { $PluginDir = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path }
+
 $ErrorActionPreference = 'Stop'
 function Info([string]$m) { Write-Host "[update] $m" }
 function Fail([string]$m) { Write-Host "[update][FAIL] $m" -ForegroundColor Red; exit 1 }
 
 if (-not (Test-Path $PluginDir)) { Fail "plugin dir not found: $PluginDir" }
+$PluginDir = (Resolve-Path $PluginDir).Path
+Info ("target: " + $PluginDir)
+# Same-directory trap: running the updater that ships INSIDE a freshly extracted
+# package makes the default target that same package ("same version" failure that
+# looks like a version bug). Run the copy from your INSTALLED plugin dir instead.
+if (Test-Path $Source) {
+    $srcFull = (Resolve-Path $Source).Path
+    if ($srcFull.TrimEnd('\') -ieq $PluginDir.TrimEnd('\')) {
+        Fail ("source and target are the same directory: " + $srcFull + " -- run tools/update.ps1 from the INSTALLED plugin dir, or pass -PluginDir <installed plugin dir>")
+    }
+}
 $pkgPath = Join-Path $PluginDir 'package.json'
 if (-not (Test-Path $pkgPath)) { Fail "package.json not found in $PluginDir" }
 $cur = Get-Content $pkgPath -Raw | ConvertFrom-Json
@@ -69,22 +82,32 @@ if ($new.version -eq $cur.version -and -not $Force) {
     Fail ("same version " + $new.version + " - pass -Force to overwrite anyway")
 }
 
-# ---------- 2. plan ----------
-$codeItems = @('lib', 'tools', 'expander.py', 'sidecar_auth.py', 'sidecar_cards.py', 'sidecar_comfy.py', 'sidecar_config.py', 'sidecar_llm.py', 'sidecar_pack.py', 'sidecar_routes.py', 'sidecar_state.py', 'sidecar_util.py', 'routes.json',
-               'cordis.patch.yml', 'install.ps1', 'README.md', 'CHANGELOG.md', 'config.example.json')
-$plan = @()
-foreach ($it in $codeItems) {
-    $from = Join-Path $srcRoot $it
-    if (Test-Path $from) { $plan += $it }
+# ---------- 2. plan: sync the whole source payload, never touch user data ----------
+# 0.7.83: this list used to be HARD-CODED. Every new sidecar_*.py then stayed behind on
+# update: the version bumped, the module did not arrive, and the sidecar died with
+# ModuleNotFoundError while /version cheerfully reported the new version
+# (2026-10-22 report: sidecar_dirs.py / sidecar_loras.py). The plan is now derived
+# from the source tree, with an explicit deny list for user data.
+$keepNames = @('package.json', 'config.json', 'routes.json', 'sidecar-token.txt')
+$keepDirs  = @('work', '__pycache__', 'node_modules', '.git', '.pytest_cache')
+function Test-Keep([string]$rel) {
+    foreach ($p in ($rel -split '\\')) { if ($keepDirs -contains $p) { return $true } }
+    $leaf = ($rel -split '\\')[-1]
+    if ($keepNames -contains $leaf) { return $true }
+    if ($leaf -match '\.(pyc|bak|orig|rej)$' -or $leaf -like '*.bak-*') { return $true }
+    return $false
 }
-# extra root-level json (e.g. model/source tables) except the three that must never be overwritten blindly
-Get-ChildItem $srcRoot -Filter '*.json' -File | ForEach-Object {
-    if ($_.Name -notin @('package.json', 'config.json', 'config.example.json')) {
-        if ($plan -notcontains $_.Name) { $plan += $_.Name }
-    }
+
+$plan = New-Object System.Collections.ArrayList
+Get-ChildItem $srcRoot -Recurse -File | ForEach-Object {
+    $rel = $_.FullName.Substring($srcRoot.Length + 1)
+    if (-not (Test-Keep $rel)) { [void]$plan.Add($rel) }
 }
-Info ("will replace: " + ($plan -join ', '))
-Info 'will keep   : config.json, workDir, cardsDir, outputDir, user json tables, .bak-*'
+if ($plan.Count -eq 0) { Fail 'source contains no files to install' }
+Info ("will replace: " + $plan.Count + " files")
+$plan | Select-Object -First 12 | ForEach-Object { Info ("  + " + $_) }
+if ($plan.Count -gt 12) { Info ("  ... +" + ($plan.Count - 12) + " more") }
+Info 'will keep   : package.json (replaced last), config.json, routes.json, sidecar-token.txt, work/, *.bak-*'
 
 if ($DryRun) {
     Info 'dry run - nothing written'
@@ -92,24 +115,34 @@ if ($DryRun) {
     exit 0
 }
 
-# ---------- 3. backup ----------
+# ---------- 3. backup (mirrors exactly what is about to be replaced) ----------
 $bakRoot = Join-Path $PluginDir ('.bak-update-' + (Get-Date -Format 'yyyyMMdd-HHmmss'))
 New-Item -ItemType Directory -Path $bakRoot -Force | Out-Null
-foreach ($it in @('lib', 'expander.py', 'sidecar_auth.py', 'sidecar_cards.py', 'sidecar_comfy.py', 'sidecar_config.py', 'sidecar_llm.py', 'sidecar_pack.py', 'sidecar_routes.py', 'sidecar_state.py', 'sidecar_util.py', 'package.json')) {
-    $p = Join-Path $PluginDir $it
-    if (Test-Path $p) { Copy-Item $p (Join-Path $bakRoot $it) -Recurse -Force }
+$bakCount = 0
+foreach ($rel in $plan) {
+    $p = Join-Path $PluginDir $rel
+    if (Test-Path $p -PathType Leaf) {
+        $dst = Join-Path $bakRoot $rel
+        $dstDir = Split-Path $dst -Parent
+        if (-not (Test-Path $dstDir)) { New-Item -ItemType Directory -Path $dstDir -Force | Out-Null }
+        Copy-Item $p $dst -Force
+        $bakCount++
+    }
 }
-Info ("backup: " + $bakRoot)
+Copy-Item $pkgPath (Join-Path $bakRoot 'package.json') -Force
+Info ("backup: " + $bakRoot + " (" + $bakCount + " files)")
 
 # ---------- 4. copy code ----------
-foreach ($it in $plan) {
-    $from = Join-Path $srcRoot $it
-    $to = Join-Path $PluginDir $it
-    if (Test-Path $to -PathType Container) { Remove-Item $to -Recurse -Force }
-    elseif (Test-Path $to) { Remove-Item $to -Force }
-    Copy-Item $from $to -Recurse -Force
-    Info ("  replaced " + $it)
+$copied = 0
+foreach ($rel in $plan) {
+    $from = Join-Path $srcRoot $rel
+    $to = Join-Path $PluginDir $rel
+    $toDir = Split-Path $to -Parent
+    if (-not (Test-Path $toDir)) { New-Item -ItemType Directory -Path $toDir -Force | Out-Null }
+    Copy-Item $from $to -Force
+    $copied++
 }
+Info ("  replaced " + $copied + " files")
 # package.json last (version bump is what /version compares against)
 Copy-Item $srcPkg.FullName $pkgPath -Force
 Info '  replaced package.json'
@@ -134,6 +167,24 @@ if (-not $SkipVerify) {
     } else {
         Info 'python not found - skipped py_compile'
     }
+    # import coverage: every sidecar_*.py the code imports must exist after the copy.
+    # "version is right, file is missing" is the worst failure mode there is (0.7.82 report).
+    $missing = @()
+    Get-ChildItem $PluginDir -Filter '*.py' -File | ForEach-Object {
+        $fn = $_.Name
+        $txt = Get-Content $_.FullName -Raw
+        foreach ($m in [regex]::Matches($txt, '(?m)^\s*(?:from|import)\s+(sidecar_[a-z_0-9]+)')) {
+            $mod = $m.Groups[1].Value
+            if (-not (Test-Path (Join-Path $PluginDir ($mod + '.py')))) { $missing += ($fn + ' -> ' + $mod + '.py') }
+        }
+    }
+    if ($missing.Count -gt 0) {
+        Fail ('missing local modules after update: ' + (($missing | Select-Object -Unique) -join ', '))
+    }
+    $nSrcPy = (Get-ChildItem $srcRoot -Filter '*.py' -File).Count
+    $nDstPy = (Get-ChildItem $PluginDir -Filter '*.py' -File).Count
+    if ($nDstPy -lt $nSrcPy) { Fail ("py count after update: " + $nDstPy + " < source " + $nSrcPy) }
+    Info ('import coverage OK (' + $nDstPy + ' py files, all sidecar imports resolved)')
     $dsh = (Get-Command dsh -ErrorAction SilentlyContinue)
     if ($dsh) {
         & $dsh.Source --profile $Profile --dump-config | Out-Null

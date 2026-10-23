@@ -15,7 +15,7 @@
  */
 import { spawn } from 'node:child_process'
 import { createConnection } from 'node:net'
-import { appendFileSync, closeSync, existsSync, openSync, readFileSync, mkdirSync, writeFileSync } from 'node:fs'
+import { appendFileSync, closeSync, existsSync, openSync, readFileSync, mkdirSync, renameSync, statSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -185,14 +185,32 @@ function openLogFd(name) {
  * pythonw 没有控制台可弹；它的 stdout/stderr 仍按句柄继承，所以照旧接进
  * `sidecar.out.log` / `sidecar.err.log`，expander.py 的 print 与 traceback 不丢。
  */
+/**
+ * 日志轮转：err.log 超过 2 MB 就滚成 .1。
+ *
+ * err.log 是追加写的，之前失败的 traceback 会一直躺在文件里，用户补完文件重启后
+ * 看到旧 traceback 会以为还没修好（2026-10-22 报告 ②）。轮转 + 启动分隔线一起解决。
+ */
+function rotateLog(name, maxBytes) {
+  try {
+    const p = join(CFG.workDir, name)
+    if (statSync(p).size > (maxBytes || 2 * 1024 * 1024)) renameSync(p, p + '.1')
+  } catch (e) { /* 文件不存在或正被占用，忽略 */ }
+}
+
 function launch(exe, args, cwd, tag) {
   const lowered = /(^|[\\/])python\.exe$/i.test(exe)
   const wantExe = lowered ? exe.replace(/python\.exe$/i, 'pythonw.exe') : exe
   const useExe = lowered && existsSync(wantExe) ? wantExe : exe
   if (lowered && useExe !== wantExe) log('⚠ 找不到 pythonw.exe，退回 python.exe（可能弹控制台）: ' + wantExe)
   log('launch ' + tag + ' -> ' + useExe + '  cwd=' + cwd)
+  rotateLog('sidecar.err.log')
   const outFd = openLogFd('sidecar.out.log')
   const errFd = openLogFd('sidecar.err.log')
+  try {
+    appendFileSync(join(CFG.workDir, 'sidecar.err.log'),
+      '\n---------- sidecar start ' + new Date().toISOString() + ' (' + tag + ') ----------\n')
+  } catch (e) { /* 忽略 */ }
   const child = spawn(useExe, args, {
     cwd,
     detached: true,
@@ -250,7 +268,7 @@ async function ensureServices(opts) {
   }
 }
 
-export const name = '@local/dsh-comfyui-console'
+export const name = 'dsh-comfyui-console'
 export const version = PLUGIN_VERSION
 export const configVersion = CONFIG_VERSION
 

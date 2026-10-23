@@ -1,6 +1,6 @@
 {
-  "name": "@local/dsh-comfyui-console",
-  "version": "0.7.0",
+  "name": "dsh-comfyui-console",
+  "version": "0.7.92",
   "description": "ComfyUI drawing console for DSH (Anima / LLLite / role & style cards)",
   "type": "module",
   "main": "lib/index.js",
@@ -21,7 +21,9 @@
     "sidecar_cards.py",
     "sidecar_comfy.py",
     "sidecar_config.py",
+    "sidecar_dirs.py",
     "sidecar_llm.py",
+    "sidecar_loras.py",
     "sidecar_pack.py",
     "sidecar_routes.py",
     "sidecar_state.py",
@@ -35,7 +37,9 @@
     "tools/build_client.py",
     "CHANGELOG.md",
     "tools/update.ps1",
-    "tools/build_suite.py"
+    "tools/build_suite.py",
+    "tools/check_naming.py",
+    "tools/check_tdz.py"
   ],
   "scripts": {
     "build:client": "python tools/build_client.py",
@@ -71,7 +75,10 @@
         "sidecar_state.py",
         "sidecar_util.py",
         "routes.json",
-        "lora来源.json"
+        "lora来源.json",
+        "sidecar_dirs.py",
+        "sidecar_loras.py",
+        "tools/build_client.py"
       ],
       "preserve": [
         "config.json",
@@ -81,6 +88,9 @@
         "outputDir"
       ],
       "restart": "dsh web"
+    },
+    "bundle": {
+      "patch": "./cordis.patch.yml"
     }
   },
   "peerDependencies": {

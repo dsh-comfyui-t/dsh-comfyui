@@ -32,7 +32,10 @@ def load_routes():
     routes = []
     if os.path.exists(CONFIG):
         try:
-            c = json.load(open(CONFIG, encoding='utf-8'))
+            try:
+                c = json.load(open(CONFIG, encoding='utf-8'))
+            except Exception:
+                c = json.load(open(CONFIG, encoding='utf-8-sig'))   # 带 BOM 的 config
             if c.get('base_url'):
                 routes.append({'name': c.get('name', 'config'), 'base': c['base_url'].rstrip('/'),
                                'key': c.get('api_key') or '', 'model': c.get('model') or ''})

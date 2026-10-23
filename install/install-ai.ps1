@@ -146,14 +146,22 @@ if (Test-Path $cfgDst) {
 
 # ---------- 4. skill ----------
 if (-not $SkipSkill) {
-    $skSrc = Join-Path $here 'skills\comfyui-cards\SKILL.md'
-    if (Test-Path $skSrc) {
+    $skSrc = Join-Path $here 'skills\comfyui-cards'
+    if (Test-Path (Join-Path $skSrc 'SKILL.md')) {
         $skDst = Join-Path $DshHome 'skills\comfyui-cards'
         New-Item -ItemType Directory -Path $skDst -Force | Out-Null
         $skFile = Join-Path $skDst 'SKILL.md'
         if (Test-Path $skFile) { Copy-Item $skFile ($skFile + '.bak-install-' + (Get-Date -Format 'yyyyMMdd-HHmmss')) -Force }
-        Copy-Item $skSrc $skFile -Force
-        Step 'skill' 'ok' $skFile
+        Copy-Item (Join-Path $skSrc 'SKILL.md') $skFile -Force
+        # scripts\ (train.ps1 / style_check.py / toml templates / README) travel with the skill
+        $skScripts = Join-Path $skSrc 'scripts'
+        $skN = 0
+        if (Test-Path $skScripts) {
+            $skOut = Join-Path $skDst 'scripts'
+            New-Item -ItemType Directory -Path $skOut -Force | Out-Null
+            Get-ChildItem $skScripts -File | ForEach-Object { Copy-Item $_.FullName (Join-Path $skOut $_.Name) -Force; $skN++ }
+        }
+        Step 'skill' 'ok' ($skFile + '  (+' + $skN + ' scripts)')
     } else { Step 'skill' 'skipped' 'skills\comfyui-cards\SKILL.md not in bundle' }
 } else { Step 'skill' 'skipped' 'by -SkipSkill' }
 

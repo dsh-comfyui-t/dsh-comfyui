@@ -1,0 +1,13 @@
+[general]
+enable_bucket = true
+caption_extension = ".txt"
+
+[[datasets]]
+resolution = 1024
+batch_size = 1
+
+[[datasets.subsets]]
+# 换成你的素材目录（正斜杠或转义反斜杠都行；含中文要保证文件本身是 UTF-8 无 BOM）
+image_dir = "D:/datasets/character-NAME/image"
+num_repeats = 4
+caption_dropout_rate = 0.05
