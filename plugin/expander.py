@@ -126,6 +126,13 @@ from sidecar_comfy import (
 )
 
 # 卡的读写与 LLLite 资产在 sidecar_cards.py（0.5.4 起）
+from sidecar_dirs import (
+    _dir_scan,
+    _dir_clear,
+    _dir_split,
+    _dir_write,
+    _dir_del,
+)
 from sidecar_cards import (
     _cards_scan,
     _cards_write,
@@ -140,6 +147,15 @@ from sidecar_cards import (
 )
 
 # 卡包打包与拆包在 sidecar_pack.py（0.5.4 起）
+from sidecar_loras import (
+    _loras_list,
+    _loras_import_url,
+    _loras_import_zip,
+    _loras_scan,
+    _loras_import_path,
+    _loras_import_stream,
+    _loras_del,
+)
 from sidecar_pack import (
     PACK_MAGIC,
     CORE_EMBED,
@@ -251,8 +267,61 @@ COMFY = Comfy()
 
 # 请求体上限分档：普通 JSON 接口与二进制上传分开，避免小接口也吃 256MB
 MAX_BODY = 8 << 20            # /expand /cards/write /lllite /config/* ...
-MAX_BODY_UPLOAD = 256 << 20   # 卡包二进制上传（实测本机最大卡包 89.7MB）
-UPLOAD_PATHS = ('/stylecards/unpack', '/cards/import', '/cards/selfcontained')
+MAX_BODY_UPLOAD = 1024 << 20  # 卡包二进制上传：上限 1GB（unpack 是边收边落盘的流式写法，不吃内存）
+UPLOAD_PATHS = ('/stylecards/unpack', '/cards/import', '/cards/selfcontained', '/loras/import')
+
+
+
+def _pack_out_dir():
+    """0.7.54：卡包落盘目录 = cardsDir 同级「卡包」，不存在就建。"""
+    try:
+        cd = os.path.abspath(CFG.get('cardsDir') or '') if isinstance(CFG, dict) else ''
+    except Exception:
+        cd = ''
+    base = os.path.dirname(cd) if cd else ''
+    d = os.path.join(base, '卡包') if base else os.path.join(os.getcwd(), '卡包')
+    if not os.path.isdir(d):
+        os.makedirs(d)
+    return d
+
+
+def _reveal_card_target(path, kind):
+    """0.7.52：打开某类卡片的落盘位置。path 有值且存在就选中它，否则按 kind 打开目录。"""
+    k = str(kind or '').strip().lower()
+    raw = str(path or '').strip()
+    try:
+        cd = os.path.abspath(CFG.get('cardsDir') or '') if isinstance(CFG, dict) else ''
+    except Exception:
+        cd = ''
+    base = os.path.dirname(cd) if cd else ''
+    dirs = {
+        'cards': cd,
+        'style': (os.path.join(base, '\u753b\u98ce') if base else ''),
+        'dict': (os.path.join(base, '\u8bcd\u5e93') if base else ''),
+        'pack': (os.path.join(base, '卡包') if base else ''),
+    }
+    want = dirs.get(k, '')
+    if raw:
+        p = os.path.abspath(raw)
+        if os.path.isfile(p):
+            ok, m = _reveal_in_explorer(p)
+            return (ok, m, p)
+        if os.path.isdir(p):
+            want = p
+    if not want:
+        return (False, '\u6ca1\u6709\u53ef\u6253\u5f00\u7684\u76ee\u5f55\uff08config.json \u6ca1\u914d cardsDir\uff09', '')
+    if not os.path.isdir(want):
+        try:
+            os.makedirs(want)
+        except Exception as e:
+            return (False, '\u76ee\u5f55\u4e0d\u5b58\u5728\u4e5f\u5efa\u4e0d\u51fa\u6765: %s (%s)' % (want, e), want)
+    if os.name != 'nt':
+        return (False, '\u4ec5\u652f\u6301 Windows', want)
+    try:
+        os.startfile(want)
+        return (True, '\u5df2\u6253\u5f00\u76ee\u5f55', want)
+    except Exception as e:
+        return (False, str(e), want)
 
 
 class H(BaseHTTPRequestHandler):
@@ -347,6 +416,13 @@ class H(BaseHTTPRequestHandler):
             q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
             d = ((q.get('dir') or [''])[0] or ((CFG.get('cardsDir') or '') if isinstance(CFG, dict) else ''))
             self._json(200, _cards_scan(d))
+        elif p == '/loras':
+            qs = self.path.split('?', 1)[1] if '?' in self.path else ''
+            self._json(200, _loras_list('sha=1' in qs))
+        elif p == '/dir/list':
+            q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+            kind = ((q.get('kind') or ['cards'])[0] or 'cards')
+            self._json(200, _dir_scan(kind))
         elif p == '/lllite':
             q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
             d = ((q.get('dir') or [''])[0] or '')
@@ -375,7 +451,27 @@ class H(BaseHTTPRequestHandler):
             return
         if p == '/stylecards/unpack':
             auto = 'auto=1' in (self.path or '')
-            self._json(200, _stylecards_unpack(self, n, 1 if auto else 0))
+            import time as _t
+            _t0 = _t.time()
+            _r = _stylecards_unpack(self, n, 1 if auto else 0)
+            _line = '[unpack %s] %.1f MB %.2fs auto=%d ok=%s card=%s err=%s' % (
+                _t.strftime('%Y-%m-%d %H:%M:%S'), n / 1048576.0, _t.time() - _t0, auto,
+                _r.get('ok'), ((_r.get('card') or {}).get('name') or ''), (_r.get('error') or ''))
+            print(_line, flush=True)
+            try:
+                _lg = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'work')
+                os.makedirs(_lg, exist_ok=True)
+                with open(os.path.join(_lg, 'unpack.log'), 'a', encoding='utf-8') as _f:
+                    _f.write(_line + '\n')
+            except Exception:
+                pass
+            self._json(200, _r)
+            return
+        if p == '/loras/import' and (self.headers.get('X-Filename') or ''):
+            # 浏览器上传：body 是文件本身（不是 JSON），文件名走 X-Filename（URL 编码过）
+            import urllib.parse as _up
+            fn = _up.unquote(self.headers.get('X-Filename') or '')
+            self._json(200, _loras_import_stream(self.rfile, n, fn))
             return
         try:
             body = json.loads(self.rfile.read(n) or b'{}')
@@ -403,6 +499,36 @@ class H(BaseHTTPRequestHandler):
             head_bytes = plan.get('header') or b''
             total = len(head_bytes) + sum(os.path.getsize(x) for x in blob_list)
             meta['bytes'] = total
+            if bool(body.get('toDisk')):
+                d_out = _pack_out_dir()
+                fn = str(meta.get('filename') or '').strip() or 'card.dslcard'
+                fn = ''.join(ch for ch in fn if ch not in '\\/:*?"<>|').strip() or 'card.dslcard'
+                fp_out = os.path.join(d_out, fn)
+                n = 2
+                while os.path.isfile(fp_out):
+                    stem, ext2 = os.path.splitext(fn)
+                    fp_out = os.path.join(d_out, '%s-%d%s' % (stem, n, ext2))
+                    n += 1
+                try:
+                    with open(fp_out, 'wb') as fh2:
+                        fh2.write(head_bytes)
+                        for fpp in blob_list:
+                            with open(fpp, 'rb') as f2:
+                                while True:
+                                    b3 = f2.read(1 << 20)
+                                    if not b3:
+                                        break
+                                    fh2.write(b3)
+                except Exception as e:
+                    self._json(500, {'ok': False, 'error': '\u5199\u5361\u5305\u5931\u8d25: %s' % e})
+                    return
+                out_meta = dict(meta)
+                out_meta['ok'] = True
+                out_meta['path'] = fp_out
+                out_meta['bytes'] = total
+                out_meta['filename'] = os.path.basename(fp_out)
+                self._json(200, out_meta)
+                return
             self.send_response(200)
             self.send_header('Content-Type', 'application/octet-stream')
             self.send_header('Content-Length', str(total))
@@ -517,6 +643,65 @@ class H(BaseHTTPRequestHandler):
         elif p == '/config/save':
             ok, m, d = _set_save_dir(body.get('dir', ''))
             self._json(200 if ok else 400, {'ok': ok, 'message': m, 'dir': d})
+        elif p == '/reveal':
+            ok, m, tpath = _reveal_card_target(body.get('path', ''), body.get('kind', ''))
+            self._json(200 if ok else 400, {'ok': ok, 'message': m, 'error': ('' if ok else m), 'path': tpath})
+        elif p == '/save-json':
+            fn0 = str(body.get('filename') or 'export.json').strip()
+            # 0.7.78：拒绝 .. 路径段（以前会被拼成 '....逃逸.json' 落在卡包目录里）
+            if '..' in fn0 or fn0.rstrip() in ('.', ''):
+                self._json(400, {'ok': False, 'error': 'filename 非法（不能含 ..）: %s' % fn0})
+                return
+            txt = body.get('text')
+            if txt is None:
+                self._json(400, {'ok': False, 'error': '\u7f3a text'})
+                return
+            try:
+                d_out = _pack_out_dir()
+                fn = ''.join(ch for ch in fn0 if ch not in '\\/:*?"<>|').strip() or 'export.json'
+                fp = os.path.join(d_out, fn)
+                n2 = 2
+                while os.path.isfile(fp):
+                    stem, ext2 = os.path.splitext(fn)
+                    fp = os.path.join(d_out, '%s-%d%s' % (stem, n2, ext2))
+                    n2 += 1
+                data = str(txt).encode('utf-8')
+                with open(fp, 'wb') as fh3:
+                    fh3.write(data)
+                self._json(200, {'ok': True, 'path': fp, 'bytes': len(data)})
+            except Exception as e:
+                self._json(500, {'ok': False, 'error': '\u5199\u6587\u4ef6\u5931\u8d25: %s' % e})
+        elif p == '/log':
+            txt = str(body.get('text') or '')[:4000]
+            try:
+                lp = os.path.join(WORK_DIR, 'client-err.log')
+                with open(lp, 'a', encoding='utf-8') as fh9:
+                    fh9.write(time.strftime('[%Y-%m-%d %H:%M:%S] ') + txt + '\n')
+                self._json(200, {'ok': True, 'path': lp})
+            except Exception as e:
+                self._json(500, {'ok': False, 'error': str(e)})
+        elif p == '/loras/import':
+            # 网址 / 本机路径（含 .zip）三态；上传模式在上面已 return
+            _u = str(body.get('url') or '').strip()
+            _p = str(body.get('path') or '').strip().strip('"')
+            if _u:
+                self._json(200, _loras_import_url(_u, body.get('token') or '', body.get('filename') or ''))
+            elif _p.lower().endswith('.zip'):
+                self._json(200, _loras_import_zip(_p))
+            else:
+                self._json(200, _loras_import_path(_p))
+        elif p == '/loras/scan':
+            self._json(200, _loras_scan(body.get('dir') or ''))
+        elif p == '/loras/del':
+            self._json(200, _loras_del(body.get('name') or ''))
+        elif p == '/dir/write':
+            self._json(200, _dir_write(body or {}))
+        elif p == '/dir/clear':
+            self._json(200, _dir_clear(body or {}))
+        elif p == '/dir/split':
+            self._json(200, _dir_split(str((body or {}).get('kind') or 'cards')))
+        elif p == '/dir/del':
+            self._json(200, _dir_del(body or {}))
         elif p == '/save':
             ok, m, path = _copy_to_save(body.get('filename', ''), body.get('subfolder', ''))
             self._json(200 if ok else 400, {'ok': ok, 'message': m, 'path': path})
@@ -541,6 +726,20 @@ class H(BaseHTTPRequestHandler):
 
 
 
+def _mark_started_ok(port):
+    """往 work/sidecar.err.log 追加一行「本次起来了」。
+
+    err.log 只增不减：历史失败的 traceback 会一直留在里面（2026-10-22 报告 ②）。
+    成功启动时补一条状态行，看日志的人一眼就知道哪一段是本次运行的。
+    """
+    try:
+        with open(os.path.join(WORK_DIR, 'sidecar.err.log'), 'a', encoding='utf-8') as f:
+            f.write('---------- started OK %s pid=%d port=%d v%s ----------\n'
+                    % (time.strftime('%Y-%m-%dT%H:%M:%S'), os.getpid(), port, VERSION_LOADED or '?'))
+    except Exception:
+        pass
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--port', type=int, default=CFG['sidecarPort'])
@@ -563,6 +762,7 @@ def main():
     print('  扩写路线（按序试）:', ', '.join(r['name'] for r in H.routes))
     print('  ComfyUI 闲置 %.0f 分钟自动卸载模型（进程保留）' % (AUTO_UNLOAD_SECONDS / 60))
     print('  ComfyUI 当前状态:', '运行中' if COMFY.running() else '未运行')
+    _mark_started_ok(a.port)
 
     if not a.no_watch:
         t = threading.Thread(target=COMFY.watcher, daemon=True)

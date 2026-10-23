@@ -90,8 +90,12 @@ def _cfg_set(**kw):
     try:
         cfg = {}
         if os.path.exists(CONFIG):
-            with open(CONFIG, encoding='utf-8') as f:
-                cfg = json.load(f)
+            try:
+                with open(CONFIG, encoding='utf-8') as f:
+                    cfg = json.load(f)
+            except Exception:
+                with open(CONFIG, encoding='utf-8-sig') as f:   # 记事本 / PS 5.1 写过 BOM
+                    cfg = json.load(f)
         cfg.update(kw)
         try:
             if int(cfg.get('configVersion') or 0) < CONFIG_VERSION:

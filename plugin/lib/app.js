@@ -85,8 +85,22 @@ function ConsoleSafe(props) { return h(RootBoundary, null, h(Console, props)); }
 
 
 // ==================== 配置 ====================
-const COMFY = "http://127.0.0.1:8188";
-const EXPANDER = "http://127.0.0.1:8199";
+/** 端口/地址可覆盖（换机器、改过 config.json 的 comfyPort / sidecarPort 时用）：
+ *   1) window.__DSH_CUI__ = { comfyUrl, sidecarUrl }   —— 宿主注入优先
+ *   2) localStorage "dsh-comfyui-console/ports" = {"comfy":"http://…","sidecar":"http://…"}
+ *   3) 都没有就用本机默认 8188 / 8199
+ */
+const CUI_CFG = (() => {
+	let w = {}, ls = {};
+	try { w = (typeof window !== "undefined" && window.__DSH_CUI__) || {}; } catch (e) { }
+	try { ls = JSON.parse(localStorage.getItem("dsh-comfyui-console/ports") || "{}") || {}; } catch (e) { }
+	return {
+		comfy: String(w.comfyUrl || ls.comfy || "").replace(/\/+$/, "") || "http://127.0.0.1:8188",
+		sidecar: String(w.sidecarUrl || ls.sidecar || "").replace(/\/+$/, "") || "http://127.0.0.1:8199",
+	};
+})();
+const COMFY = CUI_CFG.comfy;
+const EXPANDER = CUI_CFG.sidecar;
 /**
  * 侧车握手头（不是密钥）。作用：让侧车请求变成"非简单请求"，强制浏览器先发 CORS 预检；
  * 侧车 ACAO 只回显白名单 Origin，别的站点预检必败 → 恶意页面连请求都发不出去。
@@ -165,6 +179,8 @@ const USER = migrateState(Object.assign({
 function saveUser() {
 	const ok = lsWrite(USER);
 	if (!ok) MSG("本地存档写不进去（localStorage 满或被禁用），这次改动没保存");
+	// 0.7.78：以前这两行写在 return 之后 —— 永远是死代码，词库改动不会即时落盘
+	try { dictFlushSoon(); } catch (e) { /* ignore */ }
 	return ok;
 }
 
@@ -231,26 +247,76 @@ function zhFillParts(parts) {
   return out;
 }
 
+// 0.7.77：cardFromJson 在**模块顶层**，而 joinCardParts / splitCardTags / normPart / condForSave
+// 都在内层作用域里 —— 以前只要 tags 为空（导出时没写 tags、只有 parts 的卡包就是这样）
+// 就会抛 ReferenceError，整条导入链路静默死掉：「导入瞬间结束、绘图台里没有、消息卡在正在解析」。
+// 这里给它一份自带的顶层实现，不再依赖内层函数。
+const CF_ORDER = ["trigger", "base", "hair", "eyes", "glasses", "outfit", "extra"];
+function cfNormPart(v) {
+  if (Array.isArray(v)) return v.map((x) => (typeof x === "string")
+    ? { t: x, n: zhOf(x) || x }
+    : { t: String((x && x.t) || ""), n: String((x && x.n) || (x && x.t) || "") }).filter((x) => x.t);
+  if (typeof v === "string") return v.split(",").map((x) => x.trim()).filter(Boolean).map((x) => ({ t: x, n: zhOf(x) || x }));
+  return [];
+}
+function cfTagsOf(parts) {
+  const p = (parts && typeof parts === "object") ? parts : {};
+  const out = [];
+  const trg = String(p.trigger || "").trim();
+  if (trg) out.push(trg);
+  for (const k of CF_ORDER) {
+    if (k === "trigger") continue;
+    const s = cfNormPart(p[k]).map((x) => String(x.t || "").trim()).filter(Boolean).join(", ");
+    if (s) out.push(s);
+  }
+  if (out.length) return out.join(", ");
+  // 兜底：不认识的键也把词捞出来（英文键 / 自定义分组），总比判成「没有卡」好
+  const loose = [];
+  const walk = (v) => {
+    if (!v) return;
+    if (typeof v === "string") { const s = v.trim(); if (s) loose.push(s); return; }
+    if (Array.isArray(v)) { v.forEach(walk); return; }
+    if (typeof v === "object") { if (v.t) walk(v.t); else Object.keys(v).forEach((k) => walk(v[k])); }
+  };
+  Object.keys(p).forEach((k) => { if (k !== "trigger") walk(p[k]); });
+  return Array.from(new Set(loose)).join(", ");
+}
+function cfPartsFromTags(tags) {
+  const parts = { trigger: "", base: [], hair: [], eyes: [], glasses: [], outfit: [], extra: [] };
+  String(tags || "").split(",").map((x) => x.trim()).filter(Boolean).forEach((tok, i) => {
+    if (i === 0 && tok.indexOf(" ") < 0) { parts.trigger = tok; return; }
+    parts.extra.push({ t: tok, n: zhOf(tok) || tok });
+  });
+  return parts;
+}
 function cardFromJson(c) {
   const nm = String((c && c.name) || "").trim();
   if (!nm) return null;
-  const tags = String(c.tags || joinCardParts((c && c.parts) || {})).trim();
+  const tags = String(c.tags || cfTagsOf((c && c.parts) || {})).trim();
   if (!tags) return null;
+  const condRaw = (c && (c.conditioning || c.cond)) || null;
   return {
     id: "u" + String(Date.now()) + "_" + Math.random().toString(36).slice(2, 7),
     name: nm,
     tags: tags,
     note: String(c.note || ""),
     cover: String(c.cover || ""),
-    file: String((c && c.__file) || ""),
-    parts: zhFillParts((c && c.parts && typeof c.parts === "object") ? c.parts : splitCardTags(tags)),
-    neg: normPart(c && c.neg),
+    file: String((c && c.__file) || (c && c.file) || ""),
+    parts: zhFillParts((c && c.parts && typeof c.parts === "object") ? c.parts : cfPartsFromTags(tags)),
+    neg: cfNormPart(c && c.neg),
     lora: String((c && c.lora) || ""),
     loraW: Number(c && c.loraW) > 0 ? Number(c.loraW) : 0.7,
     loraAlt: String((c && c.loraAlt) || ""),
-    conditioning: condForSave(c && c.conditioning),
+    conditioning: (condRaw && typeof condRaw === "object" && condRaw.presets && Object.keys(condRaw.presets).length) ? condRaw : undefined,
     locks: (c && Array.isArray(c.locks)) ? c.locks : [],
   };
+  // 0.7.92：卡里其它字段（cover / loraNote / schemaVersion / embeddedDir / packMode / baseModels …）
+  // 以前只抄上面这份白名单 → 导入卡包时 `cover` 和 `embeddedDir` 到面板就没了，随后 persistCards 落盘自然也没有。
+  Object.keys(c || {}).forEach((k) => {
+    if (k in rec || k === "__file" || k === "cond") return;
+    if (c[k] !== undefined) rec[k] = c[k];
+  });
+  return rec;
 }
 // ==================== 卡片中文字段 结束 ====================
 healUserZh();
@@ -290,13 +356,86 @@ const OFFICIAL_NEG = (typeof SEED_PRESETS !== 'undefined' && SEED_PRESETS[0] && 
 /** 全部图库 = 内置分类 + 用户自定义分类 */
 function allLib() {
 	const out = {};
-	for (const k of Object.keys(LIB)) { if (String(k).indexOf("角色-") === 0) continue; const h = new Set(((USER.hidden || {})[builtinKey(k) || k] || []).map((x) => String(x).trim())); const dest = (USER.moved || {})[k] || k; const arr = LIB[k].filter((p) => !h.has(String(p[0]).trim())); if (arr.length) out[dest] = (out[dest] || []).concat(arr); }
+	// 0.7.66：词库「清空（含内置）」后，内置词库整体不出现在面板里
+	// 0.7.81：只跳过内置循环 —— 早退会把 USER.frags / USER.cats 一起砍掉，导入进来的卡也会「全部 0 条」
+	const hideBuiltin = !!(USER && USER.hideBuiltinDict);
+	for (const k of (hideBuiltin ? [] : Object.keys(LIB))) { if (String(k).indexOf("角色-") === 0) continue; const hid = new Set(((USER.hidden || {})[builtinKey(k) || k] || []).map((x) => String(x).trim())); const dest = (USER.moved || {})[k] || k; const ovs = (USER.ov || {})[k] || []; const arr = LIB[k].filter((p) => !hid.has(String(p[0]).trim())).map((p) => { const r = ovs.find((x) => x[0] === String(p[0]).trim()); return r ? [r[1], r[2]] : p; }); if (arr.length) out[dest] = (out[dest] || []).concat(arr); }
 	for (const k of Object.keys(USER.frags || {})) { if (String(k).indexOf("角色-") === 0) continue;
 		out[k] = (out[k] || []).concat(USER.frags[k]);
 	}
 
 	for (const k of (USER.cats || [])) { if (!out[k]) out[k] = []; }
 	return out;
+}
+
+/** 生成页胶囊视图里「带中文备注」新加的词落到这个词库分类（自建，可改名/删除） */
+const PR_HOME_CAT = "自加词";
+
+/** 新卡片的落盘分类：全部→自加词，自建→自己，内置→最后一个源分类 */
+function dictCardTargetCat(grp) {
+	if (!grp) return "";
+	if (grp.all) return PR_HOME_CAT;
+	if (grp.custom) return grp.name;
+	return (grp.src && grp.src[grp.src.length - 1]) || grp.name || "";
+}
+
+
+
+/** 胶囊词性：pos=永远进正向 / neg=永远进负面 / 没记＝按正向算（插入时进正向） */
+function capPolOf(tag) {
+	const k = String(tag || "").trim().toLowerCase();
+	if (!k) return "";
+	return (USER.capPol || {})[k] || "";
+}
+
+/** 写/清一颗胶囊的词性（不是 pos/neg 就清掉） */
+function setCapPol(tag, v) {
+	const k = String(tag || "").trim().toLowerCase();
+	if (!k) return;
+	USER.capPol = USER.capPol || {};
+	if (v === "pos" || v === "neg") USER.capPol[k] = v; else delete USER.capPol[k];
+	saveUser();
+}
+
+/** 英文标签 → 中文名（取词库卡片的 cn；一个卡片的 en 有多段就每段都映射）。
+ *  胶囊视图用它决定显示中文还是英文，口径与角色卡一致。 */
+function tagIndex() {
+	const idx = {};
+	try {
+		const lib = allLib();
+		Object.keys(lib).forEach((cat) => {
+			(lib[cat] || []).forEach((p) => {
+				const cn = String((p && p[0]) || "").trim();
+				const en = String((p && p[1]) || "").trim();
+				if (!cn) return;
+				en.split(",").forEach((raw) => {
+					const tk = raw.trim().toLowerCase();
+					if (tk && !idx[tk]) idx[tk] = { cat: cat, cn: cn, en: en };
+				});
+			});
+		});
+	} catch (e) { /* 词库没加载好就当全部不认识，不影响功能 */ }
+	return idx;
+}
+
+/** 胶囊中文备注：用户手填的优先，其次退回词库词条的中文名 */
+function capNoteOf(tag) {
+	const k = String(tag || "").trim().toLowerCase();
+	if (!k) return "";
+	const mine = (USER.capNote || {})[k];
+	if (mine) return mine;
+	const hit = tagIndex()[k];
+	return hit ? hit.cn : "";
+}
+
+/** 写/删一颗胶囊的中文备注（空串＝清掉，回到词库中文名） */
+function setCapNote(tag, note) {
+	const k = String(tag || "").trim().toLowerCase();
+	if (!k) return;
+	USER.capNote = USER.capNote || {};
+	const v = String(note || "").trim();
+	if (v) USER.capNote[k] = v; else delete USER.capNote[k];
+	saveUser();
 }
 
 /** ===== 词库分类：路径工具（'A/B' 层级，像文件夹） ===== */
@@ -383,6 +522,476 @@ function allCards() {
   out.sort((a, b) => (a.builtin === b.builtin ? 0 : a.builtin ? 1 : -1));
 
 	return out;
+}
+
+/** 磁盘角色卡（0.7.47）：侧车 /cards 已经扫好 cardsDir，前端启动与手动重扫时拉一次。
+ *  规则（2026-10-22 用户报告定的口径）：
+ *    · 磁盘来的卡打 fromDisk + file 标记，同一张以磁盘为准（磁盘是底稿）
+ *    · 界面上手工建 / 手工导入的卡（没有 fromDisk）同名时保护，不覆盖，只计入「保护跳过」
+ *    · 磁盘文件删了 → 对应的 fromDisk 卡从面板移除
+ *  之前 0.7.46 前端一次都没调过 /cards，磁盘卡等于死文件（报告 2026-10-22）。 */
+const CARD_DISK = { runs: 0, busy: false, okAt: 0, note: "" };
+let REPAINT_SINK = null;
+function repaintAll() { try { if (REPAINT_SINK) REPAINT_SINK(); } catch (e) { /* ignore */ } }
+function cardFileKey(p) { return String(p || "").replace(/\//g, "\\").toLowerCase(); }
+
+const CLIENT_VER = "0.7.92";
+
+/** 0.7.58：把前端异常写到侧车 client-err.log（排障不用靠人抄屏） */
+function clientLog(tag, detail) {
+	try {
+		fetch(EXPANDER + "/log", {
+			method: "POST",
+			headers: Object.assign({ "Content-Type": "application/json" }, CONSOLE_HEADERS),
+			body: JSON.stringify({ text: "v" + CLIENT_VER + " [" + tag + "] " + String(detail || "") }),
+		}).catch(() => {});
+	} catch (e) { /* ignore */ }
+}
+
+/** 0.7.52：在资源管理器里定位卡文件；没有落盘文件就打开那类卡片的目录 */
+/** 0.7.70：LoRA 目录管理（列表 / 导入 / 删除），走侧车 /loras*，删除是搬 _trash 不是硬删 */
+function loraApplyList(list) {
+	try { if (window.__dshSetLoras) window.__dshSetLoras(list); } catch (e) { }
+}
+
+function loraRefresh() {
+	return jget(EXPANDER + "/loras", 20000).then((d) => {
+		if (!d || !d.ok) throw new Error(String((d && d.error) || "侧车没响应"));
+		const names = (d.loras || []).map((x) => x.name);
+		loraApplyList(names);
+		return { names: names, dir: d.dir, count: d.count, totalBytes: d.totalBytes };
+	});
+}
+
+/** 导入一支 LoRA，四种来源：
+ *   1) 网站直链 —— 粘 https://… （Civitai 的 /api/download/models/<id> 直链也行，要登录就在后面加空白+token）
+ *   2) 本机路径 —— 单个 .safetensors / .pt / .ckpt
+ *   3) 压缩包   —— .zip（里面挑出所有权重，图/说明忽略）
+ *   4) 文件夹   —— 传下载文件夹，列出里面的权重与 zip 让你挑
+ *   留空则上传刚才选中的文件（浏览器拿不到本机路径时用这条）。
+ */
+function loraShowResult(d) {
+	if (!d) return null;
+	if (!d.ok) { MSG("导入失败：" + String(d.error || "unknown")); return null; }
+	if (d.items && d.items.length) {
+		const good = d.items.filter((x) => x.ok);
+		MSG("导入 " + good.length + " 支：" + good.map((x) => x.name + "（" + Math.round((x.bytes || 0) / 1048576) + " MB" + (x.dedup ? "·已有" : "") + "）").join("、"));
+	} else {
+		MSG("已导入 LoRA：" + d.name + "（" + Math.round((d.bytes || 0) / 1048576) + " MB）" + (d.dedup ? " · " + d.note : "") + (d.downloaded ? " · 下载 " + d.downloaded : ""));
+	}
+	return loraRefresh().then(() => d).catch(() => d);
+}
+
+function loraImport() {
+	const pickFile = () => new Promise((res) => {
+		let el = null;
+		try {
+			el = document.createElement("input");
+			el.type = "file";
+			el.accept = ".safetensors,.pt,.ckpt,.sft,.bin,.zip";
+			el.style.position = "fixed";
+			el.style.left = "-9999px";
+			document.body.appendChild(el);
+			el.onchange = () => res(el.files && el.files[0] ? el.files[0] : null);
+			el.click();
+			setTimeout(() => { if (!el.files || !el.files.length) res(null); }, 120000);
+		} catch (e) { res(null); }
+	});
+	const upload = (file) => {
+		if (/\.zip$/i.test(file.name)) { MSG("压缩包走本机路径那条（浏览器上传不支持解压）：把 " + file.name + " 的完整路径粘进来"); return Promise.resolve(null); }
+		MSG("正在上传 " + file.name + "（" + Math.round(file.size / 1048576) + " MB）…");
+		return fetch(EXPANDER + "/loras/import", {
+			method: "POST",
+			headers: Object.assign({ "Content-Type": "application/octet-stream", "X-Filename": encodeURIComponent(file.name) }, CONSOLE_HEADERS),
+			body: file,
+		}).then((r) => r.json());
+	};
+	const byUrl = (u) => {
+		// 允许「链接 + 空白 + token」，给 Civitai 这类要登录的直链用
+		const m = String(u).trim().match(/^(\S+)\s+(\S+)$/);
+		const url = m ? m[1] : String(u).trim();
+		const token = m ? m[2] : "";
+		MSG("正在从网站下载…（大模型要等，别关页面）");
+		return jpost(EXPANDER + "/loras/import", { url: url, token: token }, 3600000);
+	};
+	const byPath = (p) => jpost(EXPANDER + "/loras/import", { path: p }, 900000);
+	const scanDir = (dir) => jget(EXPANDER + "/loras/scan?dir=" + encodeURIComponent(dir), 30000).then((d) => {
+		if (!d || !d.ok) throw new Error(String((d && d.error) || "侧车没响应"));
+		if (!d.files || !d.files.length) { MSG("这个文件夹里没有 .safetensors / .pt / .ckpt / .zip：" + d.dir); return null; }
+		const lines = d.files.map((x, i) => (i + 1) + ". " + x.name + "  [" + Math.round(x.bytes / 1048576) + " MB" + (x.zip ? " · zip" : "") + "]");
+		const pick = window.prompt("下载文件夹里找到 " + d.count + " 个候选，输入序号导入（多个用逗号，如 1,3；留空取消）：\n\n" + lines.slice(0, 20).join("\n") + (lines.length > 20 ? "\n…还有 " + (lines.length - 20) + " 个" : ""), "");
+		if (!pick || !pick.trim()) return null;
+		const idx = pick.split(/[,，\s]+/).map((x) => parseInt(x, 10)).filter((n) => n >= 1 && n <= d.files.length);
+		if (!idx.length) { MSG("序号不对，已取消"); return null; }
+		MSG("开始导入 " + idx.length + " 个…");
+		return idx.reduce((chain, n) => chain.then((acc) => {
+			const f = d.files[n - 1];
+			return byPath(f.path).then((r) => acc.concat([{ name: f.name, r: r }])).catch((e) => acc.concat([{ name: f.name, r: { ok: false, error: String(e) } }]));
+		}), Promise.resolve([])).then((all) => {
+			const good = all.filter((x) => x.r && x.r.ok);
+			MSG("从文件夹导入 " + good.length + " / " + all.length + "：" + all.map((x) => x.name + (x.r && x.r.ok ? " ✓" : " ✗ " + String((x.r && x.r.error) || ""))).join(" · "));
+			return { ok: good.length > 0 };
+		});
+	});
+	return pickFile().then((file) => {
+		const p = window.prompt(
+			"导入 LoRA —— 下面四种填一个（留空 = 上传刚才选的文件）：\n" +
+			"  · 网站直链：https://civitai.com/api/download/models/123456   （要登录就在链接后面空一格再粘 token）\n" +
+			"  · 本机文件：D:\\下载\\xxx.safetensors\n" +
+			"  · 压缩包：  D:\\下载\\xxx.zip（自动挑出里面的权重）\n" +
+			"  · 文件夹：  C:\\Users\\你\\Downloads（列出候选让你挑序号）", "");
+		const v = String(p || "").trim();
+		if (!v) {
+			if (!file) { MSG("没填来源，也没选文件 —— 已取消"); return null; }
+			return upload(file);
+		}
+		if (/^https?:\/\//i.test(v)) return byUrl(v);
+		if (/\.zip$/i.test(v)) return byPath(v);
+		if (!/\.[a-z0-9]{1,6}$/i.test(v)) return scanDir(v);   // 没扩展名当文件夹
+		return byPath(v);
+	}).then(loraShowResult).catch((e) => { MSG("导入失败：" + String((e && e.message) || e)); return null; });
+}
+
+function loraDelete(name) {
+	const nm = String(name || "").trim();
+	if (!nm) { MSG("先在左边的下拉里选一支 LoRA，再点删除"); return Promise.resolve(null); }
+	if (!window.confirm("删除 LoRA：「" + nm + "」？\n\n文件会搬进 models\\loras\\_trash-<时间戳>\\（不硬删，想恢复搬回来），ComfyUI 里的列表要重启后才会少这一支。")) return Promise.resolve(null);
+	return jpost(EXPANDER + "/loras/del", { name: nm }, 60000).then((d) => {
+		if (!d || !d.ok) throw new Error(String((d && d.error) || "侧车没响应"));
+		MSG("已删除 " + d.name + "（剩 " + String(d.left) + " 支）→ " + String(d.trash || ""));
+		return loraRefresh().then(() => d).catch(() => d);
+	}).catch((e) => { MSG("删除失败：" + String((e && e.message) || e)); return null; });
+}
+
+function revealCardFile(kind, path) {
+	const body = { kind: String(kind || ""), path: String(path || "") };
+	fetch(EXPANDER + "/reveal", {
+		method: "POST",
+		headers: Object.assign({ "Content-Type": "application/json" }, CONSOLE_HEADERS),
+		body: JSON.stringify(body),
+	})
+		.then((r) => r.json())
+		.then((d) => MSG(d && d.ok ? ("已打开：" + String(d.path || "")) : ("打不开：" + String((d && (d.error || d.message)) || "侧车没响应"))))
+		.catch((e) => MSG("打不开：" + ((e && e.message) || e)));
+}
+
+const COVER_RESCUE = [];   // 0.7.87：磁盘卡缺封面时，待回写的 (file, cover)
+/** 把 /cards 的结果并进 USER.cards → {changed, added, updated, skipped, removed, msg} */
+function mergeDiskCards(list, dir) {
+	USER.cards = USER.cards || [];
+	const arr = Array.isArray(list) ? list : [];
+	// 0.7.65：目录为空 = 这一类就该是空的（面板 = 目录），把只在面板里的历史卡也清掉
+	if (!arr.length) {
+		// 正在落盘的卡先留着（写入成功后会从磁盘读回来；失败则下次同步清掉并报错）
+		const pending = USER.cards.filter((x) => x && x.pendingDisk);
+		const had = USER.cards.length - pending.length;
+		USER.cards = pending;
+		return { changed: had > 0, added: 0, updated: 0, skipped: 0, removed: had,
+			msg: "磁盘同步" + (dir ? "（" + dir + "）" : "") + "：目录为空 · 清空面板 " + had + " 张" };
+	}
+	const onDisk = {};
+	let added = 0, updated = 0, skipped = 0, removed = 0;
+	arr.forEach((c) => {
+		const nm = String((c && c.name) || "").trim();
+		if (!nm) { skipped++; return; }
+		const file = String((c && c.__file) || "");
+		const rec = Object.assign({}, c);
+		delete rec.__file;
+		rec.file = file;
+		rec.fromDisk = true;
+		if (dir) rec.diskDir = String(dir);
+		if (file) onDisk[cardFileKey(file)] = true;
+		const byId = rec.id ? USER.cards.findIndex((x) => x && x.id && String(x.id) === String(rec.id)) : -1;
+		const byName = USER.cards.findIndex((x) => String((x && x.name) || "").trim() === nm);
+		const at = byId >= 0 ? byId : byName;
+		if (at >= 0) {
+			const cur = USER.cards[at] || {};
+			// 0.7.87：磁盘卡里没封面、本地记录里有 → 保住本地封面并回写磁盘
+			//（老版本「设封面不落盘」留下的存量，进一次控制台就被这里整条替换掉，封面于是每次都掉）
+			if (!String(rec.cover || "") && String(cur.cover || "")) {
+				rec.cover = cur.cover;
+				if (rec.file) COVER_RESCUE.push({ id: rec.id, file: rec.file, cover: rec.cover });
+			}
+			if (cur.fromDisk || byId >= 0) { USER.cards[at] = rec; updated++; }
+			else skipped++;          // 界面手工卡：同名也留着
+		} else { USER.cards.push(rec); added++; }
+	});
+	for (let i = USER.cards.length - 1; i >= 0; i--) {
+		const c = USER.cards[i];
+		if (!c || !c.fromDisk) continue;
+		const f = cardFileKey(c.file);
+		if (!f || !onDisk[f]) { USER.cards.splice(i, 1); removed++; }
+	}
+	if (COVER_RESCUE.length) {
+		const todo = COVER_RESCUE.splice(0, COVER_RESCUE.length);
+		todo.forEach((x) => {
+			const hit = (USER.cards || []).filter((c) => c && c.file && String(c.file) === String(x.file))[0];
+			if (hit) { try { writeCardToDisk(hit); } catch (e) { } }
+		});
+	}
+	const changed = (added + updated + removed) > 0;
+	const msg = "磁盘同步" + (dir ? "（" + dir + "）" : "") + "：" + arr.length + " 张 · 新增 " + added
+		+ " · 更新 " + updated + " · 保护跳过 " + skipped + " · 移除 " + removed;
+	return { changed: changed, added: added, updated: updated, skipped: skipped, removed: removed, msg: msg };
+}
+
+/** 拉一次 /cards。force=true（手动按钮）一定提示结果；否则空结果安静重试 6 次 */
+function syncCardsFromDisk(opts) {
+	const o = opts || {};
+	if (CARD_DISK.busy) return Promise.resolve(null);
+	CARD_DISK.busy = true;
+	return fetch(EXPANDER + "/cards", { headers: Object.assign({}, CONSOLE_HEADERS) })
+		.then((r) => r.json())
+		.then((d) => {
+			CARD_DISK.busy = false; CARD_DISK.runs++;
+			if (!d || d.ok === false) throw new Error(String((d && d.error) || "侧车返回 ok=false"));
+			const list = Array.isArray(d.cards) ? d.cards : [];
+			// 0.7.78：目录空但面板里有「只在内存」的卡 → 先落盘再重扫（风格卡早就有这条兜底，角色卡以前没有）
+			if (!list.length && !o.force && !o.bootstrapped) {
+				const local = (USER.cards || []).filter((c) => c && !c.fromDisk && String(c.name || "").trim());
+				if (local.length) {
+					CARD_DISK.busy = false;
+					return persistCards(local, "cards")
+						.then(() => syncCardsFromDisk({ quiet: true, bootstrapped: true }))
+						.catch(() => d);
+				}
+			}
+			if (list.length) CARD_DISK.runs = 0;
+			if (!list.length && !o.force && CARD_DISK.runs < 6) {
+				setTimeout(() => syncCardsFromDisk({ quiet: true }), 2500);
+				if (o.quiet !== true) MSG("磁盘上没有角色卡：" + String(d.dir || "（config.json 没配 cardsDir）") + " · 放好卡后点「重扫磁盘」");
+				return d;
+			}
+			const res = mergeDiskCards(list, d.dir);
+			CARD_DISK.okAt = Date.now(); CARD_DISK.note = res.msg;
+			if (res.changed) { saveUser(); repaintAll(); }
+			MSG(res.msg);
+			return d;
+		})
+		.catch((e) => {
+			CARD_DISK.busy = false; CARD_DISK.runs++;
+			const m = "磁盘同步失败：" + String((e && e.message) || e);
+			CARD_DISK.note = m;
+			if (o.force || o.quiet !== true) MSG(m);
+			if (!o.force && CARD_DISK.runs < 6) setTimeout(() => syncCardsFromDisk({ quiet: true }), 2500);
+			return null;
+		});
+}
+
+/** 0.7.60：风格卡 / 词库也走「目录即真相」——同步以磁盘为准，目录里删了文件，面板上就消失。
+ *  反方向由 dirWrite 写回，所以两边不会漂。角色卡沿用 mergeDiskCards（0.7.47 起已是这个口径）。 */
+const DIR_SYNC = { style: { busy: false, runs: 0 }, dict: { busy: false, runs: 0 } };
+
+function dirList(kind) {
+	return fetch(EXPANDER + "/dir/list?kind=" + encodeURIComponent(String(kind)), { headers: Object.assign({}, CONSOLE_HEADERS) })
+		.then((r) => r.json());
+}
+function dirWrite(kind, card, path) {
+	return fetch(EXPANDER + "/dir/write", {
+		method: "POST",
+		headers: Object.assign({ "Content-Type": "application/json" }, CONSOLE_HEADERS),
+		body: JSON.stringify({ kind: String(kind || ""), card: card || {}, path: String(path || "") }),
+	}).then((r) => r.json());
+}
+/** 0.7.64：清空某一类卡目录——侧车整包搬进 _清空备份-<时间戳>，可逆；随后清空面板 */
+function dirClear(kind, label) {
+	const tip = "确定清空「" + label + "」？\n\n会把这些文件整包搬到 本地绘画\\_清空备份-<时间戳>\\" + kind + "\\（不硬删，想恢复搬回来就行），面板里对应的卡/词也一起清掉。";
+	if (!window.confirm(tip)) return Promise.resolve(null);
+	return fetch(EXPANDER + "/dir/clear", {
+		method: "POST",
+		headers: Object.assign({ "Content-Type": "application/json" }, CONSOLE_HEADERS),
+		body: JSON.stringify({ kind: String(kind || "") }),
+	})
+		.then((r) => r.json())
+		.then((d) => {
+			if (!d || !d.ok) throw new Error(String((d && d.error) || "侧车没响应"));
+			if (kind === "cards") USER.cards = [];
+			else if (kind === "style") USER.styleCards = [];
+			else if (kind === "dict") { USER.frags = {}; USER.dictFiles = {}; }
+			saveUser();
+			repaintAll();
+			MSG("已清空「" + label + "」：搬走 " + String(d.count || 0) + " 个文件 → " + String(d.backup || ""));
+			if (d.failed && d.failed.length) MSG("有 " + d.failed.length + " 个没搬动：" + d.failed[0]);
+			return d;
+		})
+		.catch((e) => { MSG("清空失败：" + String((e && e.message) || e)); return null; });
+}
+
+function dirDelete(kind, path, name, id) {
+	return fetch(EXPANDER + "/dir/del", {
+		method: "POST",
+		headers: Object.assign({ "Content-Type": "application/json" }, CONSOLE_HEADERS),
+		body: JSON.stringify({ kind: String(kind || ""), path: String(path || ""), name: String(name || ""), id: String(id || "") }),
+	}).then((r) => r.json());
+}
+
+/** 风格卡合并：磁盘为准；内置 3 张写在代码里（builtin），不参与文件比对 */
+function mergeDiskStyle(list, dir) {
+	USER.styleCards = USER.styleCards || [];
+	const arr = Array.isArray(list) ? list : [];
+	if (!arr.length) {
+		const had = USER.styleCards.length;
+		USER.styleCards = USER.styleCards.filter((c) => c && c.builtin);
+		return { changed: had !== USER.styleCards.length, added: 0, updated: 0, removed: had - USER.styleCards.length,
+			msg: "风格卡同步" + (dir ? "（" + dir + "）" : "") + "：目录为空 · 清空自建卡 " + (had - USER.styleCards.length) + " 张" };
+	}
+	const onDisk = {};
+	let added = 0, updated = 0, removed = 0;
+	arr.forEach((c) => {
+		const rec = Object.assign({}, c);
+		const file = String(rec.__file || "");
+		delete rec.__file; delete rec.__envkey;
+		rec.file = file; rec.fromDisk = true;
+		if (dir) rec.diskDir = String(dir);
+		const nm = String(rec.name || "").trim();
+		if (!nm) return;
+		onDisk[cardFileKey(file) + "|" + nm] = true;
+		const at = USER.styleCards.findIndex((x) => x && ((rec.id && String(x.id) === String(rec.id)) || String(x.name || "").trim() === nm));
+		if (at >= 0) {
+			const cur = USER.styleCards[at] || {};
+			// 0.7.87：同 mergeDiskCards —— 磁盘没封面、本地有，就保住并回写
+			if (!String(rec.cover || "") && String(cur.cover || "")) {
+				rec.cover = cur.cover;
+				if (rec.file) COVER_RESCUE.push({ kind: "style", file: rec.file, cover: rec.cover });
+			}
+			USER.styleCards[at] = rec; updated++;
+		} else { USER.styleCards.push(rec); added++; }
+	});
+	for (let i = USER.styleCards.length - 1; i >= 0; i--) {
+		const c = USER.styleCards[i];
+		if (!c || !c.fromDisk) continue;
+		if (!onDisk[cardFileKey(c.file) + "|" + String(c.name || "").trim()]) { USER.styleCards.splice(i, 1); removed++; }
+	}
+	if (COVER_RESCUE.length) {
+		const todo = COVER_RESCUE.splice(0, COVER_RESCUE.length).filter((x) => x.kind === "style");
+		todo.forEach((x) => {
+			const hit = (USER.styleCards || []).filter((c) => c && c.file && String(c.file) === String(x.file))[0];
+			if (hit) { try { dirWrite("style", hit, String(hit.file || "")).catch(() => { }); } catch (e) { } }
+		});
+	}
+	return {
+		changed: (added + updated + removed) > 0, added: added, updated: updated, removed: removed,
+		msg: "风格卡同步" + (dir ? "（" + dir + "）" : "") + "：磁盘 " + arr.length + " 张 · 新增 " + added + " · 更新 " + updated + " · 移除 " + removed,
+	};
+}
+
+/** 词库卡片里的词条：兼容 [[cn,en]] / [{cn,en}] / ["词"] */
+function dictPairsOf(c) {
+	const src = Array.isArray(c && c.pairs) ? c.pairs : (Array.isArray(c && c.cards) ? c.cards : []);
+	const out = [];
+	src.forEach((p) => {
+		if (Array.isArray(p)) {
+			const cn = String(p[0] || "").trim(), en = String(p[1] || "").trim();
+			if (cn || en) out.push([cn, en]);
+		} else if (p && typeof p === "object") {
+			const cn = String(p.cn || p.n || "").trim(), en = String(p.en || p.t || "").trim();
+			if (cn || en) out.push([cn, en]);
+		} else if (typeof p === "string" && p.trim()) out.push([p.trim(), ""]);
+	});
+	return out;
+}
+
+/** 词库合并：磁盘为准，但只删「上次在盘上、这次被删掉」的分类——本地新词绝不会被同步清空。
+ *  规则：
+ *    1) 盘上有的分类 → 用盘上的内容
+ *    2) 上次在盘上（USER.dictFiles 记着）、这次没了 → 真被删了，从面板去掉
+ *    3) 只在面板里、盘上还没有 → 保留，并立刻写进 词库\<分类>.json
+ */
+function mergeDiskDict(list, dir) {
+	const next = {}, files = {};
+	(Array.isArray(list) ? list : []).forEach((c) => {
+		const cat = String((c && (c.cat || c.category)) || (c && c.name) || "").trim();
+		const pairs = dictPairsOf(c);
+		if (!cat || !pairs.length) return;
+		next[cat] = pairs;
+		files[cat] = String((c && c.__file) || "");
+	});
+	const prevFiles = USER.dictFiles || {};
+	const out = Object.assign({}, USER.frags || {});
+	Object.keys(next).forEach((cat) => { out[cat] = next[cat]; });
+	let removed = 0, toWrite = [];
+	Object.keys(prevFiles).forEach((cat) => {
+		if (!next[cat] && out[cat]) { delete out[cat]; removed++; }
+	});
+	Object.keys(out).forEach((cat) => {
+		if (!next[cat] && !prevFiles[cat]) toWrite.push(cat);
+	});
+	const before = JSON.stringify(USER.frags || {});
+	USER.frags = out;
+	USER.dictFiles = files;
+	toWrite.forEach((cat) => { try { dirWrite("dict", { cat: cat, name: cat, pairs: out[cat] }, "").catch(() => { }); } catch (e) { } });
+	return {
+		changed: before !== JSON.stringify(out), count: Object.keys(next).length,
+		msg: "词库同步" + (dir ? "（" + dir + "）" : "") + "：磁盘 " + Object.keys(next).length + " 类 / "
+			+ (Array.isArray(list) ? list.length : 0) + " 张卡片 · 移除 " + removed + " 类"
+			+ (toWrite.length ? " · 本地 " + toWrite.length + " 类已落盘" : ""),
+	};
+}
+
+/** 词库反方向：把 USER.frags 全量写回 词库/<分类>.json（防抖，避免每敲一个字写一次） */
+let DICT_FLUSH_T = null;
+function dictFlush() {
+	const cats = USER.frags || {};
+	Object.keys(cats).forEach((cat) => {
+		const pairs = (cats[cat] || []).filter((p) => p && (String(p[0] || "").trim() || String(p[1] || "").trim()));
+		if (!pairs.length) return;
+		dirWrite("dict", { cat: cat, name: cat, pairs: pairs }, "").catch(() => { });
+	});
+}
+function dictFlushSoon() {
+	if (DICT_FLUSH_T) clearTimeout(DICT_FLUSH_T);
+	DICT_FLUSH_T = setTimeout(() => { DICT_FLUSH_T = null; try { dictFlush(); } catch (e) { /* ignore */ } }, 1200);
+}
+
+/** 目录为空、面板里有卡时：先把面板的卡落盘，再同步——否则「目录即真相」会把本地卡清空 */
+function bootstrapDir(kind, cards) {
+	const src = (cards || []).filter((c) => c && String(c.name || c.cat || "").trim());
+	if (!src.length) return Promise.resolve(0);
+	return src.reduce((p, c) => p.then(() => dirWrite(kind, c, c.file || "").catch(() => null)), Promise.resolve()).then(() => src.length);
+}
+
+function syncKindFromDisk(kind, opts) {
+	// 0.7.78：这个函数只处理风格卡/词库；角色卡有 mergeDiskCards + syncCardsFromDisk 那条线
+	if (kind !== "style" && kind !== "dict") return Promise.resolve(null);
+	const o = opts || {};
+	const st = DIR_SYNC[kind] || (DIR_SYNC[kind] = { busy: false, runs: 0 });
+	if (st.busy) return Promise.resolve(null);
+	st.busy = true;
+	return dirList(kind)
+		.then((d) => {
+			st.busy = false; st.runs++;
+			if (!d || d.ok === false) throw new Error(String((d && d.error) || "侧车返回 ok=false"));
+			const list = Array.isArray(d.cards) ? d.cards : [];
+			if (!list.length && kind === "style") {
+				const local = (USER.styleCards || []).filter((c) => c && !c.fromDisk && !c.builtin);
+				if (local.length) return bootstrapDir("style", local).then(() => dirList(kind)).then((d2) => ({ d: d2 || d, list: (d2 && d2.cards) || [] }));
+			}
+			// 词库同理：目录还空、面板里已经有词 → 先把面板的写进 词库\*.json，再按磁盘重建
+			if (!list.length && kind === "dict" && Object.keys(USER.frags || {}).length) {
+				try { dictFlush(); } catch (e) { /* ignore */ }
+				return new Promise((res) => setTimeout(res, 900)).then(() => dirList(kind)).then((d2) => ({ d: d2 || d, list: (d2 && d2.cards) || [] }));
+			}
+			return { d: d, list: list };
+		})
+		.then((r) => {
+			if (!r) return null;
+			const d = r.d || {};
+			const res = kind === "style" ? mergeDiskStyle(r.list, d.dir) : mergeDiskDict(r.list, d.dir);
+			if (res && res.changed) { saveUser(); repaintAll(); }
+			if (o.force || (res && res.changed)) MSG(res.msg);
+			return d;
+		})
+		.catch((e) => {
+			st.busy = false; st.runs++;
+			if (o.force) MSG("同步失败：" + String((e && e.message) || e));
+			return null;
+		});
+}
+
+function syncAllDirs(opts) {
+	try { syncCardsFromDisk(opts || { quiet: true }); } catch (e) { /* ignore */ }
+	syncKindFromDisk("style", opts || {});
+	syncKindFromDisk("dict", opts || {});
 }
 
 /** 内置风格卡：把官方预设的 EMBBED 段单独做成卡片，方便一键换画风（2026-10-18） */
@@ -858,13 +1467,15 @@ function buildGraph(o) {
  *   auto   跟随系统（prefers-color-scheme）
  *   light  浅色
  *   dark   深色
+ *   white  纯白（白底黑字，单色）
+ *   black  纯黑（黑底白字，单色）
  *   custom 自定义背景色 / 文字色
  *
  * 只有根节点 S.wrap 带硬编码颜色，其余控件都是 rgba(127,127,127,…) + inherit，
  * 会自动跟着变，所以这里只需要返回根节点的覆盖样式。
  */
 const THEME_DEFAULTS = { mode: 'auto', bg: '#ffffff', fg: '#111827' };
-const THEME_MODES = [['auto', '跟随系统'], ['light', '浅色'], ['dark', '深色'], ['custom', '自定义']];
+const THEME_MODES = [['auto', '跟随系统'], ['light', '浅色'], ['dark', '深色'], ['white', '纯白'], ['black', '纯黑'], ['custom', '自定义']];
 
 /** 系统是不是深色；拿不到就当浅色 */
 function systemPrefersDark() {
@@ -882,9 +1493,24 @@ function isDarkColor(hex) {
 	return (0.2126 * r + 0.7152 * g + 0.0722 * b) < 128;
 }
 
+/** 面板内原生控件（<select> 弹层、颜色选择器）跟着主题走。
+ *  <option> 弹层由系统画，只认 select 自身的实色与 color-scheme，继承不了半透明背景。 */
+const PANEL_CSS = [
+	'.dcomfy-panel select, .dcomfy-panel input, .dcomfy-panel textarea { color-scheme: var(--c-scheme, normal); }',
+	'.dcomfy-panel select { background: var(--c-panel2); color: var(--c-fg); border-color: var(--c-line); }',
+	'.dcomfy-panel select option, .dcomfy-panel select optgroup { background: var(--c-panel2); color: var(--c-fg); }',
+	'.dcomfy-panel select option:checked { background: var(--c-accent); color: var(--c-accent-on); }',
+	'.dcomfy-panel select:disabled, .dcomfy-panel option:disabled { color: var(--c-fg5); }',
+].join('\n');
+
 /** 主题调色板 */
-const THEME_LIGHT = {"--c-fg": "#111827", "--c-fg2": "#374151", "--c-fg3": "#4b5563", "--c-fg4": "#6b7280", "--c-fg5": "#9ca3af", "--c-card": "#ffffff", "--c-panel": "#f8fafc", "--c-panel2": "#f3f4f6", "--c-line": "#e5e7eb", "--c-ink-rgb": "17,24,39", "--c-accent": "#1d4ed8", "--c-accent-bg": "#dbeafe", "--c-accent-bg2": "#eff6ff", "--c-accent-fg": "#1e3a8a", "--c-bad": "#b91c1c", "--c-bad2": "#fca5a5", "--c-bad-bg": "#fee2e2", "--c-warn": "#b45309", "--c-warn2": "#92400e", "--c-warn-bg": "#fffbeb", "--c-ok": "#047857"};
-const THEME_DARK = {"--c-fg": "#e8e8ee", "--c-fg2": "#cfd0d8", "--c-fg3": "#b6b7c1", "--c-fg4": "#9a9ba6", "--c-fg5": "#7c7d88", "--c-card": "#24242a", "--c-panel": "#1b1b20", "--c-panel2": "#2d2d34", "--c-line": "#3b3b44", "--c-ink-rgb": "232,232,238", "--c-accent": "#7fb2ff", "--c-accent-bg": "#1d3a5c", "--c-accent-bg2": "#182a3d", "--c-accent-fg": "#aecfff", "--c-bad": "#ff9a9a", "--c-bad2": "#ffb3b3", "--c-bad-bg": "#3d2020", "--c-warn": "#f0b463", "--c-warn2": "#ffc97e", "--c-warn-bg": "#3b2d15", "--c-ok": "#5fd39a"};
+const THEME_LIGHT = {"--c-fg": "#111827", "--c-fg2": "#374151", "--c-fg3": "#4b5563", "--c-fg4": "#6b7280", "--c-fg5": "#9ca3af", "--c-card": "#ffffff", "--c-panel": "#f8fafc", "--c-panel2": "#f3f4f6", "--c-line": "#e5e7eb", "--c-ink-rgb": "17,24,39", "--c-accent": "#1d4ed8", "--c-accent-bg": "#dbeafe", "--c-accent-bg2": "#eff6ff", "--c-accent-fg": "#1e3a8a", "--c-bad": "#b91c1c", "--c-bad2": "#fca5a5", "--c-bad-bg": "#fee2e2", "--c-warn": "#b45309", "--c-warn2": "#92400e", "--c-warn-bg": "#fffbeb", "--c-ok": "#047857", "--c-accent-on": "#ffffff", "--c-scheme": "light"};
+const THEME_DARK = {"--c-fg": "#e8e8ee", "--c-fg2": "#cfd0d8", "--c-fg3": "#b6b7c1", "--c-fg4": "#9a9ba6", "--c-fg5": "#7c7d88", "--c-card": "#24242a", "--c-panel": "#1b1b20", "--c-panel2": "#2d2d34", "--c-line": "#3b3b44", "--c-ink-rgb": "232,232,238", "--c-accent": "#7fb2ff", "--c-accent-bg": "#1d3a5c", "--c-accent-bg2": "#182a3d", "--c-accent-fg": "#aecfff", "--c-bad": "#ff9a9a", "--c-bad2": "#ffb3b3", "--c-bad-bg": "#3d2020", "--c-warn": "#f0b463", "--c-warn2": "#ffc97e", "--c-warn-bg": "#3b2d15", "--c-ok": "#5fd39a", "--c-accent-on": "#10233a", "--c-scheme": "dark"};
+/** 纯白：白底黑字，强调色也是黑（单色，不带蓝） */
+const THEME_WHITE = {"--c-fg": "#000000", "--c-fg2": "#1a1a1a", "--c-fg3": "#333333", "--c-fg4": "#555555", "--c-fg5": "#808080", "--c-card": "#ffffff", "--c-panel": "#f7f7f7", "--c-panel2": "#efefef", "--c-line": "#e2e2e2", "--c-ink-rgb": "0,0,0", "--c-accent": "#000000", "--c-accent-bg": "#ececec", "--c-accent-bg2": "#f5f5f5", "--c-accent-fg": "#111111", "--c-bad": "#8a1f1f", "--c-bad2": "#c96a6a", "--c-bad-bg": "#f7e8e8", "--c-warn": "#7a5200", "--c-warn2": "#5c3d00", "--c-warn-bg": "#fbf3e0", "--c-ok": "#12653c", "--c-accent-on": "#ffffff", "--c-scheme": "light"};
+/** 纯黑：黑底白字，强调色也是白（单色，不带蓝） */
+const THEME_BLACK = {"--c-fg": "#ffffff", "--c-fg2": "#e6e6e6", "--c-fg3": "#c8c8c8", "--c-fg4": "#a0a0a0", "--c-fg5": "#7a7a7a", "--c-card": "#000000", "--c-panel": "#0a0a0a", "--c-panel2": "#161616", "--c-line": "#2a2a2a", "--c-ink-rgb": "255,255,255", "--c-accent": "#ffffff", "--c-accent-bg": "#2a2a2a", "--c-accent-bg2": "#1c1c1c", "--c-accent-fg": "#ffffff", "--c-bad": "#ff8f8f", "--c-bad2": "#ffb3b3", "--c-bad-bg": "#2a1414", "--c-warn": "#e3b062", "--c-warn2": "#f2c887", "--c-warn-bg": "#2a2210", "--c-ok": "#6ddc9e", "--c-accent-on": "#000000", "--c-scheme": "dark"};
+
 
 /** #rrggbb -> "r,g,b" */
 function hexToRgbTriplet(hex) {
@@ -899,16 +1525,19 @@ function hexToRgbTriplet(hex) {
  *   auto   跟随系统（prefers-color-scheme）
  *   light  浅色
  *   dark   深色
+ *   white / black 单色两套（强烈对比）
  *   custom 自定义背景 / 文字；其余语义色按背景明暗就近取一套
  */
 function resolveTheme(th, systemDark) {
 	const t = Object.assign({}, THEME_DEFAULTS, th || {});
 	const mode = t.mode || 'auto';
-	let dark = mode === 'dark';
+	let dark = mode === 'dark' || mode === 'black';
 	if (mode === 'auto') {
 		dark = (typeof systemDark === 'boolean') ? systemDark : systemPrefersDark();
 	}
-	const base = dark ? THEME_DARK : THEME_LIGHT;
+	const base = mode === 'white' ? THEME_WHITE
+		: mode === 'black' ? THEME_BLACK
+			: (dark ? THEME_DARK : THEME_LIGHT);
 	const out = Object.assign({}, base);
 	if (mode === 'custom') {
 		const bg = t.bg || THEME_DEFAULTS.bg;
@@ -916,6 +1545,7 @@ function resolveTheme(th, systemDark) {
 		out['--c-card'] = bg;
 		out['--c-fg'] = fg;
 		out['--c-ink-rgb'] = hexToRgbTriplet(fg);
+		out['--c-scheme'] = isDarkColor(bg) ? 'dark' : 'light';
 		return Object.assign({}, out, {
 			background: bg, color: fg, colorScheme: isDarkColor(bg) ? 'dark' : 'light',
 		});
@@ -949,7 +1579,7 @@ const S = {
 	row: { display: "flex", gap: "10px", flexWrap: "wrap", alignItems: "flex-end" },
 	field: { display: "flex", flexDirection: "column", gap: "4px" },
 	label: { fontSize: "12px", opacity: 0.72 },
-	sel: { background: "rgba(127,127,127,.14)", color: "inherit", border: "1px solid rgba(127,127,127,.3)", borderRadius: "6px", padding: "5px 8px", fontSize: "13px", minWidth: "140px" },
+	sel: { background: "var(--c-panel2)", color: "var(--c-fg)", border: "1px solid var(--c-line)", borderRadius: "6px", padding: "5px 8px", fontSize: "13px", minWidth: "140px", colorScheme: "var(--c-scheme, normal)" },
 	inp: { background: "rgba(127,127,127,.14)", color: "inherit", border: "1px solid rgba(127,127,127,.3)", borderRadius: "6px", padding: "5px 8px", fontSize: "13px", width: "88px" },
 	ta: { background: "rgba(127,127,127,.12)", color: "inherit", border: "1px solid rgba(127,127,127,.3)", borderRadius: "6px", padding: "8px", fontSize: "12.5px", fontFamily: "ui-monospace,Consolas,monospace", lineHeight: 1.5, resize: "vertical", width: "100%", boxSizing: "border-box" },
 	btn: { background: "rgba(90,160,235,.22)", color: "inherit", border: "1px solid rgba(90,160,235,.5)", borderRadius: "6px", padding: "6px 14px", fontSize: "13px", cursor: "pointer" },
@@ -958,7 +1588,7 @@ const S = {
 	seg: { display: "inline-flex", border: "1px solid var(--c-line)", borderRadius: "7px", overflow: "hidden", flexShrink: 0 },
 	segItem: { padding: "4px 13px", fontSize: "12.5px", cursor: "pointer", border: "none",
 	           borderRight: "1px solid var(--c-line)", background: "var(--c-panel2)", color: "var(--c-fg2)" },
-	segOn: { background: "var(--c-accent)", color: "#ffffff", fontWeight: 600 },
+	segOn: { background: "var(--c-accent)", color: "var(--c-accent-on)", fontWeight: 600 },
 	chip: { background: "rgba(127,127,127,.14)", border: "1px solid rgba(127,127,127,.28)", borderRadius: "999px", padding: "2px 9px", fontSize: "12px", cursor: "pointer" },
 	card: { border: "1px solid rgba(127,127,127,.25)", borderRadius: "8px", padding: "10px 12px", display: "flex", flexDirection: "column", gap: "8px" },
 	ok: { color: "var(--c-ok)" }, bad: { color: "var(--c-bad)" }, warn: { color: "var(--c-warn)" },
@@ -1115,7 +1745,7 @@ function Console() {
 	const [scheduler, setScheduler] = React.useState(L.scheduler || "normal");
 	const [prefix, setPrefix] = React.useState(L.prefix || "dsh_comfy");
 	// 视角三档 + 种子（1.0 功能）
-	const [viewKey, setViewKey] = React.useState(() => (typeof detectView === 'function' ? detectView(L.pos || '') : 'high'));
+	const [viewKey, setViewKey] = React.useState("");   // 默认不高亮；只有显式点过某一档才亮
 	const [seed, setSeed] = React.useState(L.seed || 0);
 	const [lockSeed, setLockSeed] = React.useState(!!L.lockSeed);
 	// 出图后放大（0.6.0 从 0.1.0 移植）
@@ -1123,7 +1753,7 @@ function Console() {
 	const [upscaleModel, setUpscaleModel] = React.useState(L.upscaleModel || "");
 	const [upscaleFactor, setUpscaleFactor] = React.useState(Number(L.upscaleFactor) || 4);
 	const [upscalers, setUpscalers] = React.useState([]);
-	// 主题：跟随系统 / 浅色 / 深色 / 自定义（存进 USER.last，下次打开还是这个）
+	// 主题：跟随系统 / 浅色 / 深色 / 纯白 / 纯黑 / 自定义（存进 USER.last，下次打开还是这个）
 	const [theme, setTheme] = React.useState(Object.assign({}, THEME_DEFAULTS, L.theme || {}));
 	// auto 模式下系统换主题要能跟着变，用一个 tick 触发重渲染
 	// 系统是不是深色。resolveTheme 在 auto 模式下直接吃这个值，
@@ -1149,6 +1779,9 @@ function Console() {
 	// 插件版本探针：loaded = 本进程装载的版本，disk = 磁盘版本；不一致=包换了但没重启
 	const [ver, setVer] = React.useState(null);
 	MSG_SINK = setMsg;   // 让模块级 MSG() 走同一个提示位
+	REPAINT_SINK = () => setRegTick((t) => t + 1);   // 模块级同步完让面板重画
+	// 面板挂载后自动拉一次磁盘卡（0.7.47）；失败/空由 syncCardsFromDisk 自己重试
+	React.useEffect(() => { const tm = setTimeout(() => { try { syncAllDirs({ quiet: true }); } catch (e) { } }, 1200); return () => clearTimeout(tm); }, []);
 	const [cnIn, setCnIn] = React.useState("");
 	const [cnResult, setCnResult] = React.useState(null);
 	const [activeCat, setActiveCat] = React.useState(Object.keys(LIB)[0]);
@@ -1157,6 +1790,9 @@ function Console() {
 	const [dragFrom, setDragFrom] = React.useState("");
 	const [cardEdit, setCardEdit] = React.useState(null);
 	const [cardChk, setCardChk] = React.useState(null);
+	/** 0.7.47：粘贴 JSON 兜底（Electron 里文件对话框 / 拖拽都可能不给文件） */
+	const [pasteOpen, setPasteOpen] = React.useState(false);
+	const [pasteText, setPasteText] = React.useState("");
 	const [regTick, setRegTick] = React.useState(0);
 	const [styChk, setStyChk] = React.useState(null);
 	React.useEffect(() => REG.subscribe(() => setRegTick((t) => t + 1)), []);
@@ -1229,6 +1865,20 @@ function Console() {
 	const [outDir, setOutDir] = React.useState("");
 	const [loraOpen, setLoraOpen] = React.useState(false);
 	const [promptOpen, setPromptOpen] = React.useState("");
+	// "prompt"=白话+正负两块 / "custom"=新面板（功能待定）；选择记在 localStorage，刷新后保持
+	const [zoneModeRaw, setZoneModeRaw] = React.useState(() => {
+		try { return localStorage.getItem("comfyui.zoneMode") === "custom" ? "custom" : "prompt"; } catch (e) { return "prompt"; }
+	});
+	const [tagEdit, setTagEdit] = React.useState(null);
+	const [capOpen, setCapOpen] = React.useState(false);   // 胶囊二级菜单（展开）
+	const viewPrev = React.useRef(null);   // 切视角前的 pos/neg，用于「再点一次取消」
+	const sizePrev = React.useRef(null);   // 套用常用尺寸前的宽高，用于「再点一次取消」
+	const [sizePick, setSizePick] = React.useState("");   // 显式点过的尺寸档；空 = 不高亮任何一档
+	const [prTarget, setPrTarget] = React.useState("pos");   // 顶部加词条落到哪一栏
+	const [prCat, setPrCat] = React.useState("");   // 加词时存进词库哪个分类（空＝自动用「自加词」）
+	const [prSaveDict, setPrSaveDict] = React.useState(false);   // 加词时是否写进词库（默认关，不自动存）   // 胶囊右键编辑：{side, tag, cat, cn0, cn, en}
+	const zoneMode = zoneModeRaw;
+	const setZoneMode = (v) => { setZoneModeRaw(v); try { localStorage.setItem("comfyui.zoneMode", v); } catch (e) { } };
 /** 白话 → 提示词（2026-10-18）：输入、模型选择、状态 */
 const [nlText, setNlText] = React.useState("");
 const [nlBusy, setNlBusy] = React.useState(false);
@@ -1809,13 +2459,25 @@ function applyExpand(which) {
 	 * 切视角是一条**显式动作**，改了立刻能看见。
 	 */
 	function switchView(key) {
+		const v = (typeof VIEWS !== 'undefined' ? VIEWS : []).filter((x) => x.key === key)[0];
+		const label = v ? v.label : key;
+		// 再点一次同一档 = 取消：还原切换前的提示词并清掉高亮
+		const prev = viewPrev.current;
+		if (prev && prev.key === key && prev.afterPos === pos && prev.afterNeg === neg) {
+			setPos(prev.pos);
+			setNeg(prev.neg);
+			setViewKey("");
+			viewPrev.current = null;
+			setMsg("已取消视角「" + label + "」—— 提示词还原为切换前");
+			return;
+		}
 		const r = (typeof applyView === 'function') ? applyView(pos, neg, key) : null;
 		if (!r || !r.changed) { setMsg("切视角失败：找不到视角定义"); return; }
+		viewPrev.current = { key: key, pos: pos, neg: neg, afterPos: r.pos, afterNeg: r.neg };
 		setPos(r.pos);
 		setNeg(r.neg);
 		setViewKey(key);
-		const v = (typeof VIEWS !== 'undefined' ? VIEWS : []).filter((x) => x.key === key)[0];
-		setMsg("已切到「" + (v ? v.label : key) + "」—— 姿势与构图都已替换（改了 " + r.moved + " 段）");
+		setMsg("已切到「" + label + "」—— 姿势与构图都已替换（改了 " + r.moved + " 段）；再点同一档可取消");
 	}
 
 	function loadPreset(p) {
@@ -1828,8 +2490,8 @@ function applyExpand(which) {
 		if (p.scheduler) setScheduler(p.scheduler);
 		if (p.ckpt) setCkpt(p.ckpt);
 		if (p.loras) setSelLoras(p.loras);
-		// 套用的提示词可能很久以前存的，反推视角让按钮高亮跟实际一致
-		if (typeof detectView === 'function') setViewKey(detectView(p.pos || ''));
+		// 默认不自动高亮视角：只有用户显式点过才亮，避免一开页面就「看起来已选中」
+		setViewKey("");
 		setMsg("已套用预设「" + p.cat + " / " + p.name + "」");
 		setTab("gen");
 	}
@@ -1963,13 +2625,297 @@ function applyExpand(which) {
 		const box = { display: "flex", flexDirection: "column", gap: "6px", minWidth: 0, overflow: "visible", border: "1px solid rgba(127,127,127,.28)", borderRadius: "10px", padding: "8px 10px" };
 		// 画布占 ~73%（2.7fr:1fr）；行用 minmax 下限，窗口再矮也不会把内容挤扁 ⇒ 整页可滚动
 	const narrow = rW > 0 ? rW < 640 : false;   // 用面板宽度（pW 是参数卡内网格宽度，别混用）  // 窄屏：单列堆叠（手机/平板竖屏，2026-10-18）
-				const gpos = (c, r) => (narrow ? { gridColumn: "1 / -1", gridRow: "auto" } : { gridColumn: c, gridRow: r });
-				const grid = { display: "grid", gap: "10px", gridTemplateColumns: narrow ? "minmax(0,1fr)" : "minmax(0,1fr) clamp(260px, 30%, 460px)", gridTemplateRows: narrow ? "none" : "auto auto auto auto auto", gridAutoRows: "max-content", alignContent: "start", flex: "0 0 auto"  /* 网格不再压缩，超出由外层 S.wrap 滚动 */  /* 第一行固定 = 「底模」卡片高度；出图再大也不撑高画布 */  /* 第一行 = 「底模」卡片的内容高度，画布与它等高（2026-10-18 用户要求） */, gap: "10px", width: "100%", minHeight: 0, boxSizing: "border-box", overflow: "visible", flex: "0 1 auto", minHeight: "100%" };
+				const tiny = rW > 0 ? rW < 460 : false;    // 手机竖屏：再压一档
+				const mid = rW > 0 && rW < 980;             // 中等宽：右栏收窄，别把左栏挤扁
+				const gpos = () => ({});   // 布局改成左右两列 flex 后不再需要行列定位（保留调用点）
+				const grid = { display: "grid", gridTemplateColumns: narrow ? "minmax(0,1fr)" : "minmax(0,1fr) clamp(210px, 32%, 420px)", alignItems: "stretch", gridAutoRows: "max-content", gap: "10px", width: "100%", minWidth: 0, boxSizing: "border-box", flex: "0 0 auto", minHeight: 0 };
 				/** 提示词框行数：按内容自适应，2~5 行（2026-10-18 用户要求「竖向长度按需缩短」） */
-		const taRows = (t) => Math.min(5, Math.max(2, Math.ceil(String(t || "").length / 52)));
+		const taRows = (t) => Math.min(5, Math.max(2, Math.ceil(String(t || "").length / (tiny ? 34 : (narrow ? 44 : 52)))));
 const hd = { fontWeight: 700, fontSize: "13px", color: "var(--c-fg)" };
 		const pCols = pW > 0 ? (pW < 200 ? 1 : (pW < 470 ? 2 : 4)) : 4;  // 参数卡每行几个：窄了先降到 2
 		const pCols2 = pW > 0 && pW < 520 ? 1 : 2;
+		// ===== 胶囊提示词（新面板用）：把 pos / neg 按逗号切成小胶囊 =====
+			const TAG_IDX = tagIndex();   // 英文标签 → {cat, cn, en}，右键编辑用
+
+		/** 把某一栏里的旧标签换成新标签（newTag 为空＝删掉）。
+		 *  oldTags 可以是数组：同一张词库卡的多段标签一次全换，不会留下半截残词。 */
+		const prRewrite = (key, oldTags, newTag) => {
+			const setter = key === "pos" ? setPos : setNeg;
+			const olds = (Array.isArray(oldTags) ? oldTags : [oldTags])
+				.map((x) => String(x || "").trim().toLowerCase()).filter(Boolean);
+			const add = newTag ? String(newTag).split(",").map((s) => s.trim()).filter(Boolean) : [];
+			setter((cur) => {
+				const out = [];
+				let placed = false;
+				String(cur || "").split(",").map((s) => s.trim()).filter(Boolean).forEach((tk) => {
+					if (olds.indexOf(tk.toLowerCase()) >= 0) {
+						if (!placed) { add.forEach((a) => out.push(a)); placed = true; }
+						return;
+					}
+					out.push(tk);
+				});
+				return mergeCsvTags(out.join(", "), "");
+			});
+		};
+
+		/** 右键胶囊：能对上词库卡片就连中文一起改，对不上就只改提示词本体 */
+		const openTagEdit = (side, tk) => {
+			const hit = TAG_IDX[String(tk || "").trim().toLowerCase()] || null;
+			setTagEdit({
+				side: side, tag: tk,
+				cat: hit ? hit.cat : "", cn0: hit ? hit.cn : "",
+				cn: hit ? hit.cn : "", en: tk,
+				// 同一张卡在提示词里可能占好几段（en = "sitting, seated"）：一起换
+				sibs: hit ? String(hit.en || "").split(",").map((x) => x.trim()).filter(Boolean) : [tk],
+			});
+		};
+		const saveTagEdit = () => {
+			const e0 = tagEdit;
+			if (!e0) return;
+			const en = String(e0.en || "").trim();
+			if (!en) { setMsg("提示词本体不能为空；要删就点「删除这个胶囊」"); return; }
+			const cn = String(e0.cn || "").trim();
+			const notes = [];
+			if (e0.cat) {
+				if (!dictRenameEntry(e0.cat, e0.cn0, cn || e0.cn0, en)) notes.push("词库里没找到「" + e0.cn0 + "」，只改了提示词");
+			}
+			const olds = (e0.sibs && e0.sibs.length ? e0.sibs : [e0.tag]);
+			if (en !== e0.tag || olds.length > 1) prRewrite(e0.side, olds, en);
+			setTagEdit(null);
+			setMsg("已改：" + (cn || e0.cn0 || e0.tag) + " → " + en + (notes.length ? "（" + notes.join("；") + "）" : ""));
+		};
+		const dropTagEdit = () => {
+			const e0 = tagEdit;
+			if (!e0) return;
+			prRewrite(e0.side, (e0.sibs && e0.sibs.length ? e0.sibs : [e0.tag]), "");
+			setTagEdit(null);
+			setMsg("已删掉「" + (e0.cn || e0.tag) + "」");
+		};
+		const prTokens = (key) => {
+			const seen = {};
+			return String((key === "pos" ? pos : neg) || "").split(",").map((s) => s.trim()).filter(Boolean)
+				.filter((s) => { const k = s.toLowerCase(); if (seen[k]) return false; seen[k] = 1; return true; });
+		};
+		const prWrite = (key, arr) => (key === "pos" ? setPos(arr.join(", ")) : setNeg(arr.join(", ")));
+		const prDel = (key, tk) => prWrite(key, prTokens(key).filter((s) => s !== tk));
+		const prMove = (key, tk) => {
+			const other = key === "pos" ? "neg" : "pos";
+			prWrite(key, prTokens(key).filter((s) => s !== tk));
+			prWrite(other, prTokens(other).concat([tk]));
+		};
+		/** 加一颗胶囊：中文备注 + 提示词本体。
+		 *  带中文 → 先落词库「自加词」分类（已存在同 en 的卡片就改它的中文），再进提示词；
+		 *  不带中文 → 只写提示词。这样胶囊显示中文、右键改名的口径和词库完全一致。 */
+		const prAddPair = (cnRaw, enRaw, catRaw, side, saveDict) => {
+			const cnT = String(cnRaw || "").trim();
+			const enT = String(enRaw || "").trim();
+			const sideK = side === "neg" ? "neg" : "pos";
+			const writeDict = !!saveDict;   // 开关没开就一律不碰词库
+			if (!enT) { setMsg("提示词本体不能空（中文备注可以空）"); return false; }
+			const catPick = String(catRaw || "").trim() || PR_HOME_CAT;
+			let existed = null;
+			if (cnT && writeDict) {
+				const lib = allLib();
+				Object.keys(lib).forEach((cat) => {
+					(lib[cat] || []).forEach((p) => {
+						if (String((p && p[1]) || "").trim().toLowerCase() === enT.toLowerCase()) existed = { cat: cat, cn: String((p && p[0]) || "") };
+					});
+				});
+				if (existed) {
+					if (existed.cn !== cnT) dictRenameEntry(existed.cat, existed.cn, cnT, enT);
+				} else {
+					USER.cats = USER.cats || [];
+					if (!allLib()[catPick] && USER.cats.indexOf(catPick) < 0) USER.cats.push(catPick);
+					USER.frags = USER.frags || {};
+					USER.frags[catPick] = USER.frags[catPick] || [];
+					USER.frags[catPick].push([cnT, enT]);
+					saveUser();
+				}
+			}
+			const setter2 = sideK === "pos" ? setPos : setNeg;
+			setter2((cur) => mergeCsvTags(cur, enT));
+			setPrTarget(sideK);
+			const dictNote = !cnT ? "" : (writeDict ? "（存进词库「" + (existed ? existed.cat : catPick) + "」）" : "（没存词库，胶囊按本体显示）");
+			setMsg("已写进" + (sideK === "pos" ? "正向" : "负面") + "提示词框：" + (cnT ? cnT + " / " : "") + enT + dictNote);
+			return true;
+		};
+
+		/** 顶部加词行：单独一条，回车写进 prTarget 指定的那一栏 */
+		/** 提交加词：读同一行里的两格输入，直接写进 side 指定的那一栏 */
+		const prSubmit = (side, el) => {
+			const box = el && el.closest ? el.closest("[data-pradder]") : null;
+			const ins = box ? box.querySelectorAll("input") : [];
+			const cnV = ins[0] ? ins[0].value : "";
+			const enV = ins[1] ? ins[1].value : "";
+			if (!prAddPair(cnV, enV, prCat, side, prSaveDict)) return;
+			if (ins[0]) ins[0].value = "";
+			if (ins[1]) { ins[1].value = ""; ins[1].focus(); }
+		};
+
+		const prCatOptions = [{ k: "", n: "自动（自加词）" }].concat(dictGroups().map((g) => ({ k: g.name, n: g.name })));
+
+		const prAdderRow = h("div", {
+			"data-pradder": "1",
+			style: { display: "flex", flexDirection: narrow ? "column" : "row", alignItems: narrow ? "stretch" : "center", gap: narrow ? "5px" : "6px", flexWrap: "wrap" },
+		},
+			h("span", { style: { fontSize: "12px", color: "var(--c-fg3)", fontWeight: 600 } }, "新胶囊"),
+			h("input", {
+				title: "显示在胶囊上的中文名；留空则按提示词本体显示",
+				placeholder: "中文备注（可空）",
+				style: Object.assign({}, S.inp, { fontSize: "12px", padding: "3px 8px", width: narrow ? "100%" : "126px", minWidth: "0", boxSizing: "border-box" }),
+				onKeyDown: (e) => { if (e.key === "Enter") { e.preventDefault(); prSubmit(prTarget, e.target); } },
+			}),
+			h("input", {
+				title: "写进提示词的英文本体；逗号分隔可一次加多段",
+				placeholder: "提示词本体，逗号分隔",
+				style: Object.assign({}, S.inp, { fontSize: "12px", padding: "3px 8px", width: narrow ? "100%" : "220px", maxWidth: narrow ? "100%" : "44vw", minWidth: "0", boxSizing: "border-box" }),
+				onKeyDown: (e) => { if (e.key === "Enter") { e.preventDefault(); prSubmit(prTarget, e.target); } },
+			}),
+			h("label", {
+				title: "勾上才把这条词写进词库；不勾就只加进提示词，词库一点不动",
+				style: { display: "flex", alignItems: "center", gap: "4px", fontSize: "11.5px", color: prSaveDict ? "var(--c-fg2)" : "var(--c-fg4)", cursor: "pointer", flex: narrow ? "1 1 auto" : "0 0 auto" },
+			},
+				h("input", {
+					type: "checkbox", checked: prSaveDict,
+					onChange: (e) => setPrSaveDict(e.target.checked),
+				}), "存到词库"),
+			h("select", {
+				style: Object.assign({}, S.inp, { fontSize: "12px", padding: "2px 6px", width: "auto", minWidth: narrow ? "0" : "96px", maxWidth: narrow ? "none" : "150px", flex: narrow ? "1 1 auto" : "0 0 auto", opacity: prSaveDict ? 1 : 0.5 }),
+				value: prCat,
+				disabled: !prSaveDict,
+				title: prSaveDict ? "存进这个分类（选了不存在的名字会自动新建自建分类）" : "先勾上「存到词库」才能选分类",
+				onChange: (e) => setPrCat(e.target.value),
+			}, prCatOptions.map((o) => h("option", { key: o.k || "auto", value: o.k }, o.n))),
+			h("button", {
+				style: Object.assign({}, S.btn, { fontSize: tiny ? "11.5px" : "12px", padding: "3px 10px", flex: tiny ? "1 1 100%" : (narrow ? "1 1 46%" : "0 0 auto") }),
+				title: "写进生成页的「正向提示词」框（追加到末尾，重复的自动跳过）",
+				onClick: (e) => prSubmit("pos", e.currentTarget),
+			}, "加到正向"),
+			h("button", {
+				style: Object.assign({}, S.btn2, { fontSize: tiny ? "11.5px" : "12px", padding: "3px 10px", borderColor: "var(--c-bad)", color: "var(--c-bad)", flex: tiny ? "1 1 100%" : (narrow ? "1 1 46%" : "0 0 auto") }),
+				title: "写进生成页的「负面提示词」框（追加到末尾，重复的自动跳过）",
+				onClick: (e) => prSubmit("neg", e.currentTarget),
+			}, "加到负面"));
+
+		/** 胶囊右键编辑器：中文名（能对上词库卡片才可改）+ 提示词本体 */
+		const tagEditPanel = tagEdit
+			? h("div", {
+				style: { position: "fixed", inset: 0, background: "rgba(15,23,42,.35)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 60 },
+				onMouseDown: (e) => { if (e.target === e.currentTarget) setTagEdit(null); },
+			},
+				h("div", {
+					style: {
+						display: "flex", flexDirection: "column", gap: "10px", width: "min(460px,92vw)",
+						background: "var(--c-panel)", border: "1px solid var(--c-line)", borderRadius: "10px", padding: "14px 16px",
+						boxShadow: "0 12px 40px rgba(0,0,0,.28)", color: "var(--c-fg)",
+					},
+				},
+					h("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: "8px" } },
+						h("span", { style: hd }, "改这条词条"),
+						h("span", { style: { fontSize: "11.5px", color: "var(--c-fg5)" } }, tagEdit.side === "pos" ? "来自正向" : "来自负面")),
+					h("label", { style: { display: "flex", flexDirection: "column", gap: "3px", fontSize: "12px", color: "var(--c-fg3)" } },
+						"中文名",
+						h("input", {
+							style: Object.assign({}, S.inp, tagEdit.cat ? {} : { opacity: 0.6 }),
+							value: tagEdit.cn,
+							disabled: !tagEdit.cat,
+							placeholder: tagEdit.cat ? "显示在胶囊上的中文" : "不在词库里，改不了中文",
+							onChange: (e) => setTagEdit(Object.assign({}, tagEdit, { cn: e.target.value })),
+						})),
+					h("label", { style: { display: "flex", flexDirection: "column", gap: "3px", fontSize: "12px", color: "var(--c-fg3)" } },
+						"提示词本体（英文，逗号分隔可加多段）",
+						h("input", {
+							style: S.inp,
+							value: tagEdit.en,
+							onChange: (e) => setTagEdit(Object.assign({}, tagEdit, { en: e.target.value })),
+							onKeyDown: (e) => { if (e.key === "Enter") { e.preventDefault(); saveTagEdit(); } if (e.key === "Escape") setTagEdit(null); },
+						})),
+					h("div", { style: { fontSize: "11.5px", color: "var(--c-fg5)", lineHeight: 1.6 } },
+						tagEdit.cat
+							? "改中文会写回词库「" + tagEdit.cat + "」那张卡片；改英文只换这一栏提示词里的写法。"
+							: "这个词条不在词库里（比如手写的 1girl）：只能改提示词本体，中文名没地方存。"),
+					h("div", { style: { display: "flex", justifyContent: "space-between", gap: "8px", flexWrap: "wrap" } },
+						h("button", { style: Object.assign({}, S.btn2, { borderColor: "var(--c-bad)", color: "var(--c-bad)" }), onClick: dropTagEdit }, "删除这个胶囊"),
+						h("span", { style: { display: "flex", gap: "8px" } },
+							h("button", { style: S.btn2, onClick: () => setTagEdit(null) }, "取消"),
+							h("button", { style: S.btn, onClick: saveTagEdit }, "保存")))))
+			: null;
+
+		const prCopy = (key) => {
+			const txt = prTokens(key).join(", ");
+			try {
+				window.navigator.clipboard.writeText(txt).then(
+					() => setMsg("已复制" + (key === "pos" ? "正向" : "负面") + "：" + txt.slice(0, 60)),
+					() => setMsg("复制失败：浏览器拦了剪贴板"));
+			} catch (e) { setMsg("复制失败：" + e); }
+		};
+		/** 往某一栏直接加词（逗号可一次加多个）；和文本框写的是同一个 state */
+		const prAdd = (key, raw) => {
+			const add = String(raw || "").split(",").map((s) => s.trim()).filter(Boolean);
+			if (!add.length) return;
+			const setter = key === "pos" ? setPos : setNeg;
+			setter((cur) => mergeCsvTags(cur, add.join(", ")));
+			setMsg("已加入" + (key === "pos" ? "正向" : "负面") + "：" + add.join(", "));
+		};
+
+		/** 一栏胶囊（label + 计数 + 复制/清空 + 胶囊列表） */
+		const prRow = (key, label, tint) => {
+			const list = prTokens(key);
+			const chips = list.length ? list.map((tk) => {
+				const x = h("span", {
+					title: "删掉这个胶囊",
+					style: { opacity: 0.7, fontSize: "12px", lineHeight: 1, padding: "0 1px", borderRadius: "50%" },
+					onClick: (e) => { e.stopPropagation(); prDel(key, tk); setMsg("已删掉「" + (capNoteOf(tk) || tk) + "」"); },
+					onMouseEnter: (e) => { e.currentTarget.style.opacity = 1; e.currentTarget.style.background = "rgba(var(--c-ink-rgb),.12)"; },
+					onMouseLeave: (e) => { e.currentTarget.style.opacity = 0.7; e.currentTarget.style.background = "transparent"; },
+				}, "\u00D7");
+				const zh = capNoteOf(tk) || "";
+				return h("span", {
+					key: key + "-" + tk,
+					title: (zh ? zh + "\u000A" : "") + tk + "\u000A左键：搬到" + (key === "pos" ? "负面" : "正向") + " · 右键：改中文 / 提示词本体 · ×：删掉",
+					style: Object.assign({}, S.chip, {
+						fontSize: narrow ? "11.5px" : "12px", padding: narrow ? "2px 5px 2px 8px" : "2px 6px 2px 9px", display: "inline-flex", alignItems: "center", gap: "4px",
+						background: tint, borderColor: "var(--c-line)", cursor: "pointer", borderRadius: "999px",
+						maxWidth: tiny ? "80vw" : (narrow ? "62vw" : "240px"), minWidth: "0",
+					}),
+					onClick: () => prMove(key, tk),
+					onContextMenu: (e) => { e.preventDefault(); e.stopPropagation(); openTagEdit(key, tk); },
+				}, h("span", { style: { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: "0" } }, zh || tk), x);
+			}) : [h("span", { key: "empty", style: { fontSize: "11.5px", color: "var(--c-fg5)", paddingTop: "3px" } }, "（空）")];
+			const head = h("div", { style: { display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" } },
+				h("span", { style: { fontSize: "12px", fontWeight: 600, color: "var(--c-fg3)" } }, label + " " + list.length),
+				h("button", { style: Object.assign({}, S.btn2, { padding: "1px 8px", fontSize: "11.5px" }), onClick: () => prCopy(key) }, "复制"),
+				list.length ? h("button", {
+					style: Object.assign({}, S.btn2, { padding: "1px 8px", fontSize: "11.5px" }),
+					title: "清空这一栏",
+					onClick: () => { prWrite(key, []); setMsg("已清空" + label); },
+				}, "清空") : null);
+			return h("div", { style: { display: "flex", flexDirection: "column", gap: "5px" } },
+				head,
+				h("div", { style: { display: "flex", flexWrap: "wrap", gap: "5px", minHeight: "24px", alignItems: "flex-start" } }, chips));
+		};
+
+		// 胶囊二级菜单（展开）：和面板同一份 pos/neg，增删改立刻同步
+		const capExpand = capOpen
+			? h("div", {
+				style: { position: "fixed", inset: 0, background: "rgba(15,23,42,.35)", display: "flex", alignItems: "center", justifyContent: "center", padding: "16px", zIndex: 99998 },
+				onMouseDown: (e) => { if (e.target === e.currentTarget) setCapOpen(false); },
+			},
+				h("div", {
+					style: { display: "flex", flexDirection: "column", gap: "8px", width: "min(980px,94vw)", height: "min(78vh,720px)", background: "var(--c-card)", border: "1px solid var(--c-line)", borderRadius: "12px", padding: "12px 14px", overflow: "hidden" },
+				},
+					h("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", gap: "10px", flexWrap: "wrap" } },
+						h("span", { style: { fontWeight: 700, fontSize: "14px", color: "var(--c-fg)" } }, "胶囊提示词 · 展开"),
+						h("span", { style: { display: "flex", alignItems: "center", gap: "8px" } },
+							h("span", { style: { fontSize: "11.5px", color: "var(--c-fg5)" } }, "正向 " + prTokens("pos").length + " · 负面 " + prTokens("neg").length),
+							h("button", { style: Object.assign({}, S.btn2, { padding: "2px 10px" }), onClick: () => setCapOpen(false) }, "关闭"))),
+					prAdderRow,
+					h("div", { style: { display: "flex", flexDirection: "column", gap: "8px", flex: "1 1 auto", minHeight: "0", overflowY: "auto", overflowX: "hidden" } },
+						prRow("pos", "正向", "var(--c-accent-bg2)"),
+						prRow("neg", "负面", "var(--c-bad-bg)")),
+					h("div", { style: { fontSize: "11.5px", color: "var(--c-fg5)" } }, "同一份数据：这里删掉的胶囊，生成页提示词框里同步消失；右键胶囊改中文 / 本体。")))
+			: null;
+
 		const loraModal = loraOpen
 		  ? h("div", { style: { position: "fixed", inset: 0, background: "rgba(15,23,42,.35)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 99999 }, onClick: () => setLoraOpen(false) },
 		      h("div", { style: { display: "flex", flexDirection: "column", gap: "10px", width: "min(720px,92vw)", maxHeight: "86vh", overflow: "auto", background: "var(--c-card)", border: "1px solid rgba(127,127,127,.45)", borderRadius: "12px", padding: "14px 16px", boxShadow: "0 16px 48px rgba(15,23,42,.35)" }, onClick: (e) => e.stopPropagation() },
@@ -2073,7 +3019,8 @@ expRoutes.filter((r) => r.kind === "local").length === 0
 		  h("div", { className: "cfy-grid", style: grid },
 		  // ① 左上：画布出图展示
 
-		  	h("div", { className: "cfy-canvas", style: Object.assign({}, box, gpos("1", "1"), { position: "relative", height: narrow ? "38vh" : "42vh", flex: "0 0 auto", alignItems: "stretch", justifyContent: "flex-start", gap: "8px", minHeight: 0, overflow: "hidden", background: "repeating-conic-gradient(rgba(127,127,127,.07) 0% 25%, rgba(0,0,0,0) 0% 50%) 50% / 24px 24px" }) },
+		  			  h("div", { className: "cfy-left", style: { display: "flex", flexDirection: "column", gap: "10px", minWidth: 0, minHeight: 0 } },
+h("div", { className: "cfy-canvas", style: Object.assign({}, box, gpos("1", "1"), { position: "relative", height: tiny ? "32vh" : (narrow ? "36vh" : "42vh"), flex: "0 0 auto", alignItems: "stretch", justifyContent: "flex-start", gap: "8px", minHeight: 0, overflow: "hidden", background: "repeating-conic-gradient(rgba(127,127,127,.07) 0% 25%, rgba(0,0,0,0) 0% 50%) 50% / 24px 24px" }) },
 		  	h("div", { style: { position: "relative", flex: "1 1 auto", minHeight: 0, maxHeight: "100%", overflow: "hidden", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "8px", overflow: "hidden", position: "relative" } },
 			  	h("span", { style: { position: "absolute", top: "6px", left: "8px", fontSize: "11.5px", color: "var(--c-fg4)", background: "rgba(255,255,255,.86)", border: "1px solid rgba(var(--c-ink-rgb),.10)", borderRadius: "4px", padding: "1px 6px", pointerEvents: "none", zIndex: 2, whiteSpace: "nowrap" } }, timeHintText()),
 		  		(job && job.image)
@@ -2081,7 +3028,7 @@ expRoutes.filter((r) => r.kind === "local").length === 0
 		  			: h("span", { style: S.dim }, (job && job.status === "running") ? "正在出图…" : "画布出图展示 —— 点右下「生成」"),
 		  		(job && job.status === "running") ? h("span", { style: S.warn }, "生成中：" + (job.message || job.progress || job.status || "")) : null,
 		  		)),
-		  	h("div", { style: Object.assign({}, gpos("1", "2"), { alignSelf: "start", display: "flex", alignItems: "center", justifyContent: "flex-end", gap: "8px", flexWrap: "wrap", flexShrink: 0, minWidth: 0 }) },
+		  	h("div", { style: Object.assign({}, gpos("1", "2"), { alignSelf: "stretch", width: "100%", display: "flex", alignItems: "center", justifyContent: "flex-end", gap: "8px", flexWrap: "wrap", flexShrink: 0, minWidth: 0 }) },
 		  		h("label", { style: { display: "flex", alignItems: "center", gap: "6px", minWidth: 0, flex: "0 1 auto" } },
 		  			h("span", { style: Object.assign({}, S.label, { whiteSpace: "nowrap" }) }, "文件名前缀"),
 		  			h("input", { style: Object.assign({}, S.inp, { width: "104px", minWidth: 0, flex: "0 1 auto" }), value: prefix, onChange: (e) => setPrefix(e.target.value) })),
@@ -2097,7 +3044,7 @@ expRoutes.filter((r) => r.kind === "local").length === 0
 		  			: null),
 
 		  // ②b 白话 → 提示词（画布与正负提示词之间；DOM 放在底模卡前，窄屏顺序更顺）
-          h("div", { style: Object.assign({}, box, gpos("1", "3"), { gap: "6px", alignSelf: "start" }) },
+          h("div", { style: Object.assign({}, box, gpos("1", "3"), { gap: "6px", alignSelf: "stretch", width: "100%", display: zoneMode === "custom" ? "none" : undefined }) },
             h("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", gap: "8px", flexWrap: "wrap" } },
               h("span", { style: hd }, "白话 → 提示词"),
               h("span", { style: { display: "flex", gap: "6px", alignItems: "center", flexWrap: "wrap" } },
@@ -2130,9 +3077,71 @@ expRoutes.filter((r) => r.kind === "local").length === 0
               nlInfo ? h("span", { style: S.dim }, nlInfo) : null,
               nlMsg ? h("span", { style: { fontSize: "12px", color: "var(--c-warn)", wordBreak: "break-all" } }, nlMsg) : null)),
 		  // ② 右上：底模 / 编码器 / LoRA
-		  		  h("div", { style: narrow
+		  		  		  // ③b 胶囊提示词面板：切换后取代「白话 → 提示词」+「正负提示词」两块
+		  zoneMode === "custom"
+		    ? h("div", { style: Object.assign({}, box, gpos("1", "3 / 6"), { gap: narrow ? "6px" : "8px", flex: narrow ? "0 0 auto" : "1 1 auto", alignSelf: "stretch", width: "100%", minHeight: narrow ? "0px" : "260px", overflow: "hidden" }) },
+		        h("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", gap: "8px", flexWrap: "wrap" } },
+		          h("span", { style: hd, title: "面板宽 " + rW + "px · " + (tiny ? "tiny<460" : (narrow ? "narrow<640" : (mid ? "mid<980" : "wide≥980"))) }, "胶囊提示词"),
+		          h("span", { style: { display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" } },
+		            h("button", {
+		              style: Object.assign({}, S.btn2, { borderStyle: "dashed" }),
+		              title: "回到文本框视图（内容和这里完全一致）",
+		              onClick: () => setZoneMode("prompt"),
+		            }, "◂ 文本框视图"),
+		            h("button", {
+		              style: Object.assign({}, S.btn2, { borderStyle: "dashed" }),
+		              title: "在大窗口里看全部胶囊（同一份数据，增删改立刻同步）",
+		              onClick: () => setCapOpen(true),
+		            }, "展开 ▸"))),
+		        h("div", { style: { fontSize: "11.5px", color: "var(--c-fg5)", lineHeight: 1.6 } },
+		          "同一份提示词的另一种看法：这里加的词直接写进生成页的正/负提示词框，切回文本框看到的就是它。"),
+		        prAdderRow,
+		        h("div", { style: { display: "flex", flexDirection: "column", gap: "6px", flex: "1 1 auto", minHeight: "0", maxHeight: narrow ? "none" : "clamp(190px, 34vh, 420px)", overflowY: "auto", overflowX: "hidden" } },
+		          prRow("pos", "正向", "var(--c-accent-bg2)"),
+		          prRow("neg", "负面", "var(--c-bad-bg)")),
+		        h("div", { style: { fontSize: "11.5px", color: "var(--c-fg5)", marginTop: "auto" } },
+		          "两栏都空的时候，先切回提示词写几个词，再切过来看胶囊。"))
+		    : null,
+h("div", { style: Object.assign({}, box, gpos("1", "4"), { alignSelf: "stretch", width: "100%", display: zoneMode === "custom" ? "none" : undefined }) },
+				    h("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center" } },
+				      h("span", { style: hd }, "正负提示词"),
+		      h("span", { style: { display: "flex", gap: "6px", alignItems: "center" } },
+		          h("button", { style: S.btn2, onClick: doExpand }, "AI 扩写"),
+		          h("button", { style: S.btn2, onClick: () => { setPos(""); setNeg(""); lockCards = []; } }, "清空"),
+		          h("button", {
+		            style: Object.assign({}, S.btn2, { borderStyle: "dashed" }),
+		            title: "同一份提示词，换成胶囊视图（内容实时同步，不是另一份数据）",
+		            onClick: () => setZoneMode("custom"),
+		          }, "胶囊视图 ▸"))),
+		      h("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center" } },
+		          h("span", { style: S.label }, "正向"),
+		          h("button", { style: Object.assign({}, S.btn2, { padding: "1px 8px", fontSize: "11.5px" }), title: "单独展开正向提示词", onClick: () => setPromptOpen("pos") }, "展开")),
+		      h("textarea", { rows: taRows(pos), style: Object.assign({}, S.ta, { flex: "0 0 auto", minHeight: "0", resize: "vertical", overflowY: "scroll", overflowX: "hidden", whiteSpace: "pre-wrap", overflowWrap: "anywhere" }), value: pos, onChange: (e) => setPos(e.target.value) }),
+		      h("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center" } },
+		          h("span", { style: S.label }, "负向"),
+		          h("button", { style: Object.assign({}, S.btn2, { padding: "1px 8px", fontSize: "11.5px" }), title: "单独展开负向提示词", onClick: () => setPromptOpen("neg") }, "展开")),
+		      h("textarea", { rows: taRows(neg), style: Object.assign({}, S.ta, { flex: "0 0 auto", minHeight: "0", resize: "vertical", overflowY: "scroll", overflowX: "hidden", whiteSpace: "pre-wrap", overflowWrap: "anywhere" }), value: neg, onChange: (e) => setNeg(e.target.value) })),
+
+
+
+		  // ⑤ 底部横跨：出图存放（落地位置 + 可选复制）
+		  h("div", { style: Object.assign({}, box, gpos("1 / -1", zoneMode === "custom" && !narrow ? "6" : "5"), { gap: "6px" }) },
+		    h("div", { style: S.row },
+		      h("span", { style: Object.assign({}, S.label, { alignSelf: "center", minWidth: "88px" }) }, "出图落地位置"),
+		      h("input", { style: Object.assign({}, S.inp, { flex: "1 1 300px" }), value: outDraft, placeholder: "例如 D:\\出图\\我的项目", onChange: (e) => setOutDraft(e.target.value), onKeyDown: (e) => { if (e.key === "Enter") applyOutDir(); } }),
+		      h("button", { style: S.btn, onClick: applyOutDir, title: "设为 ComfyUI 的实际输出目录（--output-directory）" }, "设为落地位置"),
+		      h("button", { style: S.btn2, onClick: restartComfy, title: "停掉再拉起 ComfyUI，约 20~60 秒" }, "重启 ComfyUI")),
+		    h("span", { style: S.dim }, "新图直接写到：" + (outDir || "未设置") + "（改完要点「重启 ComfyUI」才生效）"),
+		    h("div", { style: S.row },
+		      h("span", { style: Object.assign({}, S.label, { alignSelf: "center", minWidth: "88px" }) }, "另外复制一份"),
+		      h("input", { style: Object.assign({}, S.inp, { flex: "1 1 300px" }), value: saveDraft, placeholder: "可选：另存一份的文件夹", onChange: (e) => setSaveDraft(e.target.value), onKeyDown: (e) => { if (e.key === "Enter") applySaveDir(); } }),
+		      h("button", { style: S.btn, onClick: applySaveDir, title: "记住这个文件夹（写进 config.json）" }, "设为复制位置"),
+		      saveDir ? h("button", { style: S.btn2, onClick: () => saveCurrent(false) }, "把当前图存过去") : null),
+		    h("span", { style: S.dim }, saveDir ? ("复制到：" + saveDir + " · 每出一张图自动复制一份，原图仍留在落地位置") : "未设置。可选：每出一张图再复制一份到别处")),
+	  		  ),
+h("div", { style: narrow
 		      ? { display: "flex", flexDirection: "column", gap: "8px", minWidth: 0 }
-		      : { gridColumn: "2", gridRow: "1 / span 5", alignSelf: "start", position: "sticky", top: 0, zIndex: 2, display: "flex", flexDirection: "column", gap: "8px", minHeight: "calc(100vh - 200px)", minWidth: 0, background: "var(--c-card)" } },
+		      : { alignSelf: "stretch", alignContent: "flex-start", position: "sticky", top: 0, zIndex: 2, display: "flex", flexDirection: "column", gap: "8px", minHeight: 0, minWidth: 0, background: "var(--c-card)" } },
 		    h("div", { style: Object.assign({}, box, { minWidth: 0, flex: "1 1 auto" }) },
 		    		    h("span", { style: hd }, "底模 / 编码器 / LoRA"),
 		    		    h("label", { style: S.field },
@@ -2160,20 +3169,32 @@ expRoutes.filter((r) => r.kind === "local").length === 0
 		    		    	h("button", { style: Object.assign({}, S.btn2, { padding: "4px 10px", fontSize: "12.5px" }), onClick: () => setLoraOpen(true), title: "打开 LoRA 二级菜单" }, "选择（" + selLoras.length + "/" + loras.length + "）"))),
 		    h("div", { style: Object.assign({}, box, { minWidth: 0, flex: "0 0 auto" }) },
 		    		    h("span", { style: Object.assign({}, hd, { flexShrink: 0 }) }, "图片的高宽 / 参数"),
-		    		    h("div", { ref: pRef, style: { display: "grid", gridTemplateColumns: "repeat(2, minmax(0,1fr))", gap: "8px", alignItems: "start", flexShrink: 0, minHeight: 0 } }, num("宽", w, setW, 8), num("高", hh, setHh, 8), num("步数", steps, setSteps), num("CFG", cfg, setCfg, 0.1)),
+		    		    h("div", { ref: pRef, style: { display: "grid", gridTemplateColumns: pCols2 === 1 ? "minmax(0,1fr)" : "repeat(2, minmax(0,1fr))", gap: "8px", alignItems: "start", flexShrink: 0, minHeight: 0 } }, num("宽", w, (v) => { setSizePick(""); setW(v); }, 8), num("高", hh, (v) => { setSizePick(""); setHh(v); }, 8), num("步数", steps, setSteps), num("CFG", cfg, setCfg, 0.1)),
 		    		    // 常用尺寸一键套用（不影响档位；点一下直接改宽高）
 		    		    h("div", { style: { display: "flex", flexWrap: "wrap", alignItems: "center", gap: "4px", marginTop: "2px" } },
 		    		      h("span", { style: Object.assign({}, S.label, { minWidth: "auto", marginRight: "2px" }) }, "常用尺寸"),
 		    		      RES_PRESETS.map((r) => {
-		    		        const on = (Number(w) === r[1] && Number(hh) === r[2]);
+		    		        const on = (sizePick === r[0]);
 		    		        return h("button", {
 		    		          key: r[0],
 		    		          style: Object.assign({}, S.btn2, { padding: "1px 7px", fontSize: "11.5px" }, on ? { borderColor: "var(--c-accent)", background: "var(--c-accent-bg)", color: "var(--c-accent-fg)" } : null),
-		    		          title: r[0] + " · " + r[1] + "×" + r[2] + (on ? "（当前）" : "点一下套用"),
-		    		          onClick: () => { setW(r[1]); setHh(r[2]); },
+		    		          title: r[0] + " · " + r[1] + "×" + r[2] + (on ? "（当前，再点一次取消）" : "点一下套用"),
+		    		          onClick: () => {
+		    		            if (on) {
+		    		              const p0 = sizePrev.current;
+		    		              sizePrev.current = null;
+		    		              setSizePick("");
+		    		              if (p0) { setW(p0.w); setHh(p0.h); setMsg("已取消「" + r[0] + "」，宽高还原 " + p0.w + "×" + p0.h); }
+		    		              else setMsg("已取消「" + r[0] + "」（宽高不变，只是不再高亮）");
+		    		              return;
+		    		            }
+		    		            sizePrev.current = { w: w, hh: hh };
+		    		            setSizePick(r[0]);
+		    		            setW(r[1]); setHh(r[2]);
+		    		          },
 		    		        }, r[0]);
 		    		      })),
-		    		    h("div", { style: { display: "grid", gridTemplateColumns: "repeat(2, minmax(0,1fr))", gap: "8px", alignItems: "start", flexShrink: 0, minHeight: 0 } },
+		    		    h("div", { style: { display: "grid", gridTemplateColumns: pCols2 === 1 ? "minmax(0,1fr)" : "repeat(2, minmax(0,1fr))", gap: "8px", alignItems: "start", flexShrink: 0, minHeight: 0 } },
 		    		      h("label", { style: S.field }, h("span", { style: S.label }, "采样器"), h("select", { style: Object.assign({}, S.sel, { width: "100%", minWidth: 0 }), value: sampler, onChange: (e) => setSampler(e.target.value) }, opt(samplers, sampler))),
 		    		      h("label", { style: S.field }, h("span", { style: S.label }, "调度器"), h("select", { style: Object.assign({}, S.sel, { width: "100%", minWidth: 0 }), value: scheduler, onChange: (e) => setScheduler(e.target.value) }, opt(schedulers, scheduler)))),
 		    		    // 出图后放大：低分辨率出图 + 4x 放大，比 4K 直出快 20 倍且不出多头
@@ -2205,7 +3226,7 @@ expRoutes.filter((r) => r.kind === "local").length === 0
 		    		      h("div", { style: S.seg },
 		    		        (typeof VIEWS !== 'undefined' ? VIEWS : []).map((v, i, arr) => h("button", {
 		    		          key: v.key,
-		    		          title: v.hint || "",
+		    		          title: (v.hint || "") + (viewKey === v.key ? "（再点一次取消视角）" : "（点一下切换视角）"),
 		    		          style: Object.assign({}, S.segItem, viewKey === v.key ? S.segOn : null,
 		    		            i === arr.length - 1 ? { borderRight: "none" } : null),
 		    		          onClick: () => switchView(v.key),
@@ -2238,55 +3259,719 @@ expRoutes.filter((r) => r.kind === "local").length === 0
 		    		      : null)),
 
 
-		  // ③ 左下：正负提示词
-		  h("div", { style: Object.assign({}, box, gpos("1", "4"), { alignSelf: "start" }) },
-				    h("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center" } },
-				      h("span", { style: hd }, "正负提示词"),
-		      h("span", { style: { display: "flex", gap: "6px", alignItems: "center" } },
-		          h("button", { style: S.btn2, onClick: doExpand }, "AI 扩写"),
-		          h("button", { style: S.btn2, onClick: () => { setPos(""); setNeg(""); lockCards = []; } }, "清空"))),
-		      h("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center" } },
-		          h("span", { style: S.label }, "正向"),
-		          h("button", { style: Object.assign({}, S.btn2, { padding: "1px 8px", fontSize: "11.5px" }), title: "单独展开正向提示词", onClick: () => setPromptOpen("pos") }, "展开")),
-		      h("textarea", { rows: taRows(pos), style: Object.assign({}, S.ta, { flex: "0 0 auto", minHeight: "0", resize: "vertical", overflowY: "scroll", overflowX: "hidden", whiteSpace: "pre-wrap", overflowWrap: "anywhere" }), value: pos, onChange: (e) => setPos(e.target.value) }),
-		      h("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center" } },
-		          h("span", { style: S.label }, "负向"),
-		          h("button", { style: Object.assign({}, S.btn2, { padding: "1px 8px", fontSize: "11.5px" }), title: "单独展开负向提示词", onClick: () => setPromptOpen("neg") }, "展开")),
-		      h("textarea", { rows: taRows(neg), style: Object.assign({}, S.ta, { flex: "0 0 auto", minHeight: "0", resize: "vertical", overflowY: "scroll", overflowX: "hidden", whiteSpace: "pre-wrap", overflowWrap: "anywhere" }), value: neg, onChange: (e) => setNeg(e.target.value) })),
-
-
-		  // ⑤ 底部横跨：出图存放（落地位置 + 可选复制）
-		  h("div", { style: Object.assign({}, box, gpos("1 / -1", "5"), { gap: "6px" }) },
-		    h("div", { style: S.row },
-		      h("span", { style: Object.assign({}, S.label, { alignSelf: "center", minWidth: "88px" }) }, "出图落地位置"),
-		      h("input", { style: Object.assign({}, S.inp, { flex: "1 1 300px" }), value: outDraft, placeholder: "例如 D:\\出图\\我的项目", onChange: (e) => setOutDraft(e.target.value), onKeyDown: (e) => { if (e.key === "Enter") applyOutDir(); } }),
-		      h("button", { style: S.btn, onClick: applyOutDir, title: "设为 ComfyUI 的实际输出目录（--output-directory）" }, "设为落地位置"),
-		      h("button", { style: S.btn2, onClick: restartComfy, title: "停掉再拉起 ComfyUI，约 20~60 秒" }, "重启 ComfyUI")),
-		    h("span", { style: S.dim }, "新图直接写到：" + (outDir || "未设置") + "（改完要点「重启 ComfyUI」才生效）"),
-		    h("div", { style: S.row },
-		      h("span", { style: Object.assign({}, S.label, { alignSelf: "center", minWidth: "88px" }) }, "另外复制一份"),
-		      h("input", { style: Object.assign({}, S.inp, { flex: "1 1 300px" }), value: saveDraft, placeholder: "可选：另存一份的文件夹", onChange: (e) => setSaveDraft(e.target.value), onKeyDown: (e) => { if (e.key === "Enter") applySaveDir(); } }),
-		      h("button", { style: S.btn, onClick: applySaveDir, title: "记住这个文件夹（写进 config.json）" }, "设为复制位置"),
-		      saveDir ? h("button", { style: S.btn2, onClick: () => saveCurrent(false) }, "把当前图存过去") : null),
-		    h("span", { style: S.dim }, saveDir ? ("复制到：" + saveDir + " · 每出一张图自动复制一份，原图仍留在落地位置") : "未设置。可选：每出一张图再复制一份到别处")),
-	  ),
-	  loraModal, promptModal, expandModal);
+		  // ③ 左下：正负提示词,
+			  capExpand
+		  
+),
+	  loraModal, promptModal, expandModal, tagEditPanel);
 	}
+
 	// ==================== 词库页 ====================
-		/** 包一层：某个标签页渲染出错时显示错误文字，而不是整块白屏 */
-	function safeTab(fn, label) {
-		try {
-			const node = fn();
-			LAST_TAB_INFO = label + " " + tabTextLen(node) + " 字";
-			return h("div", { style: { display: "contents" } }, node);
-		} catch (e) {
-			LAST_TAB_INFO = label + " 出错";
-			__noteCrash("safeTab/" + label, e);
-					LAST_ERR = String((e && e.message) || e);
-			return h("div", { style: Object.assign({}, S.bad, { minHeight: "120px" }) }, "「" + label + "」页出错了：" + String((e && e.message) || e) + "（这行字本身就是线索，发给我）");
+/** ===== 词库（新版）：方形小卡片 + 提示词胶囊 =====
+ *  全分类实装：八大内置分类 + 自建分类都用卡片界面；「旧版」按钮仍保留，随时可切回树状。
+ *  分类骨架（五个主分类 + 三组额外 + 自建），src 是 dict.js 里的原始分类名。
+ */
+/** 内置大分类骨架。key 稳定（存 USER.groupHide 用），src 是 dict.js 里的原始分类名。
+ *  新卡片页只看 dictGroups() 的结果：内置组可隐藏/恢复，自建组可增删。 */
+const BUILTIN_GROUPS = [
+	{ key: "pose", name: "姿势", src: ["姿态-站", "姿态-坐", "姿态-其他", "动作", "姿势"] },
+	{ key: "face", name: "表情", src: ["表情"] },
+	{ key: "cloth", name: "服饰", src: ["衣服-军礼服", "衣服-驾驶员服", "服饰"] },
+	{ key: "comp", name: "构图", src: ["镜头", "构图"] },
+	{ key: "scene", name: "场景", src: ["背景", "场景"] },
+	{ key: "quality", name: "质量", src: ["质量"] },
+	{ key: "style", name: "风格", src: ["风格"] },
+	{ key: "negative", name: "负面", src: ["负面"] },
+];
+
+/** 大分类的隐藏名单（内置组记 key，自建组记名称）。 */
+function dictHiddenCats() {
+	return (USER.groupHide || []).slice();
+}
+
+/** 当前应该显示的大分类：内置组（去掉被隐藏的）+ 自建组（dict 里多出来的分类名）。 */
+function dictGroups() {
+	const hide = dictHiddenCats();
+	const rn = USER.groupRename || {};
+	const out = [{ key: "all", name: "全部", src: [], custom: false, all: true }];
+	const claimed = new Set();
+	BUILTIN_GROUPS.forEach((g) => {
+		g.src.forEach((s) => claimed.add(s));
+		if (hide.indexOf(g.key) < 0) out.push(Object.assign({}, g, { custom: false, name: rn[g.key] || g.name }));
+	});
+	const lib = allLib();
+	const userNames = [];
+	Object.keys(lib).forEach((k) => { if (!claimed.has(k) && userNames.indexOf(k) < 0) userNames.push(k); });
+	(USER.cats || []).forEach((k) => { if (!claimed.has(k) && userNames.indexOf(k) < 0) userNames.push(k); });
+	userNames.forEach((nm) => {
+		if (hide.indexOf("cat:" + nm) >= 0) return;
+		out.push({ key: "cat:" + nm, name: rn["cat:" + nm] || nm, src: [nm], ready: true, custom: true });
+	});
+	return out;
+}
+
+/** 新建大分类：先建空分类，词条随后用「＋ 词条」往里加。返回名字，失败返回空串。 */
+function dictNewGroup() {
+	const nm = String(window.prompt("新分类名字（例如：手部 / 光影 / 道具）", "") || "").trim().replace(/[\\/:*?"<>|]/g, "-").slice(0, 24);
+	if (!nm) return "";
+	if (dictGroups().some((g) => g.name === nm)) { LAST_ERR = "已有同名分类：" + nm; return ""; }
+	USER.cats = (USER.cats || []).slice();
+	USER.cats.push(nm);
+	USER.frags = USER.frags || {};
+	USER.frags[nm] = USER.frags[nm] || [];
+	// 之前若把这个名字隐藏过，取消隐藏
+	USER.groupHide = dictHiddenCats().filter((k) => k !== "cat:" + nm);
+	saveUser();
+	return nm;
+}
+
+/** 删分类。内置组=隐藏（词条还在 dict.js，可恢复）；自建组=连词条一起删。 */
+function dictDeleteGroup(g) {
+	if (!g) return false;
+	if (g.all) return false;   // 「全部」是固定分类，不参与删除 / 隐藏
+	if (g.custom) {
+		const n = (allLib()[g.name] || []).length;
+		if (!window.confirm("删除自建分类「" + g.name + "」和它下面的 " + n + " 条词条？\n删掉就找不回来了。")) return false;
+		if (USER.frags) delete USER.frags[g.name];
+		if (USER.hidden) delete USER.hidden[g.name];
+		if (USER.ov) USER.ov[g.name] = undefined;
+		USER.cats = (USER.cats || []).filter((x) => x !== g.name);
+		saveUser();
+		return true;
+	}
+	if (!window.confirm("隐藏内置分类「" + g.name + "」？\n词条还在 lib/dict.js 里，点「恢复分类」能找回来。")) return false;
+	USER.groupHide = dictHiddenCats().concat([g.key]);
+	saveUser();
+	return true;
+}
+
+/** 把隐藏掉的内置分类全部恢复。返回恢复个数。 */
+function dictRestoreGroups() {
+	const hidden = dictHiddenCats().filter((k) => k.indexOf("cat:") !== 0);
+	if (!hidden.length) return 0;
+	USER.groupHide = dictHiddenCats().filter((k) => k.indexOf("cat:") === 0);
+	saveUser();
+	return hidden.length;
+}
+
+/** 一组里的全部词条：{cat, cn, en}，去重、保序 */
+function dictGroupItems(g) {
+	const lib = allLib();
+	const seen = new Set();
+	const out = [];
+	const cats = (g && g.all) ? Object.keys(lib) : (g.src || []);
+	for (const c of cats) {
+		for (const p of (lib[c] || [])) {
+			const cn = String(p[0] || "").trim();
+			const en = String(p[1] || "").trim();
+			if (!cn || !en) continue;
+			const k = cn + "\u0000" + en;
+			if (seen.has(k)) continue;
+			seen.add(k);
+			out.push({ cat: c, cn: cn, en: en });
 		}
 	}
+	return dictOrdered(out);
+}
+
+/** 用户拖出来的顺序：USER.order[分类] = [中文名…]，没列到的按原顺序排后面 */
+function dictOrdered(items) {
+	const ord = USER.order || {};
+	const k = (it) => {
+		const arr = ord[it.cat] || [];
+		const i2 = arr.indexOf(it.cn);
+		return i2 < 0 ? 1e9 : i2;
+	};
+	return items.map((it, i2) => ({ it: it, i2: i2, k: k(it) }))
+		.sort((a, b) => (a.k - b.k) || (a.i2 - b.i2))
+		.map((x) => x.it);
+}
+
+/** 搬分类：自建的真搬；内置的转成目标分类下的自建卡并在原分类隐藏（dict.js 不动） */
+function dictMoveEntry(srcCat, cn, en, dstCat) {
+	if (!srcCat || !dstCat || srcCat === dstCat) return false;
+	USER.frags = USER.frags || {};
+	const src = USER.frags[srcCat] || [];
+	const i2 = src.findIndex((x) => String(x[0]).trim() === cn);
+	if (i2 >= 0) {
+		const ent = src.splice(i2, 1)[0];
+		if (!src.length) delete USER.frags[srcCat];
+		(USER.frags[dstCat] = USER.frags[dstCat] || []).push([String(ent[0]), String(ent[1])]);
+	} else {
+		if (!en) return false;
+		(USER.frags[dstCat] = USER.frags[dstCat] || []).push([cn, en]);
+		const key = builtinKey(srcCat) || srcCat;
+		USER.hidden = USER.hidden || {};
+		USER.hidden[key] = (USER.hidden[key] || []).concat([dictOrigCn(srcCat, cn)]);
+	}
+	// 旧顺序里的这个名字清掉，避免串位
+	["", srcCat].forEach((c) => { if (USER.order && USER.order[c]) USER.order[c] = USER.order[c].filter((n) => n !== cn); });
+	saveUser();
+	return true;
+}
+
+/** 词条的原名（改名后 USER.ov 里存的是「原名 -> 现名」） */
+function dictOrigCn(cat, cn) {
+	const list = (USER.ov || {})[cat] || [];
+	const hit = list.find((x) => x[1] === cn);
+	return hit ? hit[0] : cn;
+}
+
+/** 改词条：内置的写 USER.ov，自定义的直接改 frags —— 两条路都留原名 */
+function dictRenameEntry(cat, cn, newCn, newEn) {
+	if (!newCn || !newEn) return false;
+	if (Object.prototype.hasOwnProperty.call(LIB, cat)) {
+		const orig = dictOrigCn(cat, cn);
+		USER.ov = USER.ov || {};
+		const list = USER.ov[cat] = (USER.ov[cat] || []);
+		const hit = list.find((x) => x[0] === orig);
+		if (hit) { hit[1] = newCn; hit[2] = newEn; } else list.push([orig, newCn, newEn]);
+	} else {
+		const arr = (USER.frags || {})[cat] || [];
+		const i = arr.findIndex((x) => String(x[0]).trim() === String(cn).trim());
+		if (i < 0) return false;
+		arr[i] = [newCn, newEn];
+	}
+	saveUser();
+	return true;
+}
+
+/** 删词条：内置的进 hidden（记原名，可恢复），自定义的真删 */
+function dictHideEntry(cat, cn) {
+	if (Object.prototype.hasOwnProperty.call(LIB, cat)) {
+		const k = builtinKey(cat) || cat;
+		USER.hidden = USER.hidden || {};
+		USER.hidden[k] = (USER.hidden[k] || []).concat([dictOrigCn(cat, cn)]);
+		saveUser();
+		return true;
+	}
+	const arr = (USER.frags || {})[cat] || [];
+	const i = arr.findIndex((x) => String(x[0]).trim() === String(cn).trim());
+	if (i < 0) return false;
+	arr.splice(i, 1);
+	if (!arr.length && USER.frags) delete USER.frags[cat];
+	saveUser();
+	return true;
+}
+
+/** 逗号串合并：按逗号切、去空、大小写不敏感去重、保持先出现顺序。
+ *  词库「插入提示词」和生成页「胶囊视图」共用同一份实现，两处行为不会漂。 */
+
+function mergeCsvTags(cur, add) {
+	const seen = {};
+	const out = [];
+	String(cur || "").split(",").concat(String(add || "").split(",")).forEach((raw) => {
+		const tk = String(raw || "").trim();
+		if (!tk) return;
+		const k = tk.toLowerCase();
+		if (seen[k]) return;
+		seen[k] = 1; out.push(tk);
+	});
+	return out.join(", ");
+}
+
+/** 词库（新版）：方形小卡片点选 → 底部提示词胶囊 */
 function libTab() {
+	const [cardMode, setCardMode] = React.useState(true);
+	// 0.7.79：词库「粘贴 JSON」兜底（文件对话框在某些环境不弹，导入就等于没有）
+	const [dictPasteOpen2, setDictPasteOpen2] = React.useState(false);
+	const [dictPasteText2, setDictPasteText2] = React.useState("");
+	// 0.7.67：选中的分类要留住 —— 插入、切页再回来都不能自动跳回默认「全部」
+	const [cardCat, _setCardCat] = React.useState(() => {
+		const saved = String((USER && USER.dictCat) || "");
+		if (!saved) return "pose";
+		try {
+			const gs = dictGroups();
+			if (gs.some((x) => x.key === saved)) return saved;
+		} catch (e) { }
+		return "pose";
+	});
+	const setCardCat = (k) => {
+		const key = String(k || "");
+		if (USER) { USER.dictCat = key; try { saveUser(); } catch (e) { } }
+		_setCardCat(key);
+	};
+	const [cardQ, setCardQ] = React.useState("");
+	const [cardSel, setCardSel] = React.useState([]);   // 单选池：卡片不带词性，插入时按胶囊词性分流
+	const [, repaint] = React.useReducer((x) => x + 1, 0);   // 词库是外部可变数据，改完手动重画
+	const [cardEdit, setCardEdit] = React.useState(null);   // 正在编辑的词条 {cat, cn, en, c, e2}
+	const clickTimer = React.useRef(null);
+	const dragRef = React.useRef(null);          // 正在拖的卡片 {cat, cn, en}
+	const [dragAt, setDragAt] = React.useState("");   // 悬停目标：卡片 key 或 chip:xxx                  // 单击延时，等双击
+	const [polFilter, setPolFilter] = React.useState("all");   // 显示范围：all / pos / neg
+	if (!cardMode) return h("div", { style: { display: "flex", flexDirection: "column", gap: "8px", minWidth: 0, minHeight: 0 } },
+		h("div", { style: { display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" } },
+			h("button", { style: Object.assign({}, S.btn2, { fontWeight: 600 }), onClick: () => setCardMode(true), title: "回到新版卡片词库" }, "◂ 新版卡片"),
+			h("span", { style: { fontSize: "11.5px", color: "var(--c-fg4)" } }, "当前是旧版树状词库；点左边按钮随时切回新版")),
+		h("div", { style: { display: "flex", flexDirection: "column", gap: "8px", minWidth: 0, minHeight: 0 } },
+			h(libTabLegacy, { onBack: () => setCardMode(true) })));
+
+	const groups = dictGroups();
+	const g = groups.find((x) => x.key === cardCat) || groups[0] || { key: "cat:空", name: "（没有分类）", src: [], custom: true };
+	const items = dictGroupItems(g);
+	const q = cardQ.trim().toLowerCase();
+	const byQ = q ? items.filter((it) => (it.cn + " " + it.en).toLowerCase().indexOf(q) >= 0) : items;
+	const shown = polFilter === "all" ? byQ : byQ.filter((it) => {
+		const has = String(it.en || "").split(",").map((x) => x.trim()).filter(Boolean);
+		const neg = has.some((x) => capPolOf(x) === "neg");
+		return polFilter === "neg" ? neg : !neg;   // 只负＝含负面胶囊；只正＝一颗负面都没有
+	});
+	const sel = cardSel;
+	const isOn = (it) => cardSel.some((s) => s.cn === it.cn && s.en === it.en);
+	const toggle = (it) => {
+		setCardSel((st) => {
+			if (st.some((s) => s.cn === it.cn && s.en === it.en)) return st.filter((s) => !(s.cn === it.cn && s.en === it.en));
+			return st.concat([{ cat: it.cat, cn: it.cn, en: it.en }]);
+		});
+	};
+
+	/** 选中卡片里的全部英文标签（按出现顺序、大小写不敏感去重） */
+	const selTags = () => {
+		const out = [];
+		cardSel.forEach((s) => String(s.en || "").split(",").map((x) => x.trim()).filter(Boolean).forEach((x) => {
+			if (!out.some((y) => y.toLowerCase() === x.toLowerCase())) out.push(x);
+		}));
+		return out;
+	};
+
+	/** 与生成页胶囊视图共用同一份合并实现 */
+	const mergeTags = (cur, add) => mergeCsvTags(cur, add);
+
+	/** 插入：按每颗胶囊自己的词性分流 —— 标了「负」的进负面，其余进正向，两栏原有内容都不动 */
+	const insertSel = () => {
+		const tags = selTags();
+		if (!tags.length) { setMsg("还没选卡片：先在卡片上点选"); return; }
+		const posT = [], negT = [];
+		tags.forEach((x) => (capPolOf(x) === "neg" ? negT : posT).push(x));
+		if (typeof setPos !== "function" || typeof setNeg !== "function") { setMsg("这个版本没有写入接口"); return; }
+		try {
+			if (posT.length) setPos((cur) => mergeTags(cur, posT.join(", ")));
+			if (negT.length) setNeg((cur) => mergeTags(cur, negT.join(", ")));
+			setMsg("已插入：正向 " + posT.length + " 个" + (negT.length ? "、负面 " + negT.length + " 个" : "（没有标负的胶囊）"));
+		} catch (e) { setMsg("插入失败：" + errText(e)); }
+	};
+
+	/** 右键词条：改名 / 删除；内置、自建都允许 */
+
+	/** 新卡片的落盘分类：自建组用它自己的名字，内置组写回它的源分类（改过名也不跑偏） */
+
+	/** 创建新卡片：直接开编辑器弹层（分类 / 中文 / 英文 / 极性），保存才落盘 */
+	const addCard = () => {
+		USER.frags = USER.frags || {};
+		setCardEdit({ isNew: true, cat: dictCardTargetCat(g), cn: "", en: "", c: "", e2: "" });
+	};
+
+	/** 一组卡片 → 可分发 JSON（带中文备注与极性） */
+	const packCards = (items) => {
+		const notes = {};
+		const tagPol = {};
+		const cards = items.map((it) => {
+			String(it.en || "").split(",").map((s) => s.trim()).filter(Boolean).forEach((tk) => {
+				const n = capNoteOf(tk);
+				if (n) notes[tk] = n;
+				const pl = capPolOf(tk);
+				if (pl) tagPol[tk] = pl;
+			});
+			return { cat: it.cat, cn: it.cn, en: it.en };
+		});
+		return { kind: "dsh-dict-cards", v: 1, at: new Date().toISOString(), cards: cards, notes: notes, tagPol: tagPol };
+	};
+	const exportCards = (items, label) => {
+		if (!items || !items.length) { setMsg("没有可导出的卡片"); return; }
+		const pack = packCards(items);
+		const fn = "词库卡片-" + String(label || "全部").replace(/[\\/:*?"<>|]/g, "-") + "-" + items.length + ".json";
+		if (downloadText(JSON.stringify(pack, null, 2), fn)) setMsg("已导出 " + items.length + " 张卡片 → " + fn);
+		else setMsg("导出失败：浏览器拦了下载");
+	};
+	/** 导出范围：勾选过就用勾选，否则当前分类当前筛选结果 */
+	const exportPicked = () => {
+		const picked = (cardSel.pos || []).concat(cardSel.neg || []);
+		exportCards(picked.length ? picked : shown, picked.length ? "选中" : g.name);
+	};
+	/** 合并一个 dsh-dict-cards 包进词库（中文同名＝覆盖提示词，备注与极性一起带进来） */
+	const applyDictPack = (obj) => {
+		{
+			const cards = Array.isArray(obj) ? obj : (obj && obj.cards);
+			if (!Array.isArray(cards) || !cards.length) { setMsg("导入失败：文件里没有卡片"); return; }
+			let added = 0, updated = 0, skipped = 0, notes = 0;
+			cards.forEach((c) => {
+				const cn = String((c && c.cn) || "").trim();
+				const en = String((c && c.en) || "").trim();
+				const cat = String((c && c.cat) || "").trim() || PR_HOME_CAT;
+				if (!cn || !en) { skipped++; return; }
+				USER.frags = USER.frags || {};
+				const list = (USER.frags[cat] || []).slice();
+				const at = list.findIndex((x) => String(x[0]).trim() === cn);
+				if (at >= 0) { list[at] = [cn, en]; updated++; } else { list.push([cn, en]); added++; }
+				USER.frags[cat] = list;
+				// 老文件的卡片极性 → 摊到这张卡的每颗胶囊上；新文件走 tagPol
+				if (c.polarity === "pos" || c.polarity === "neg") {
+					en.split(",").map((s) => s.trim()).filter(Boolean).forEach((tk) => setCapPol(tk, c.polarity));
+				}
+			});
+			const tp = (obj && obj.tagPol && typeof obj.tagPol === "object") ? obj.tagPol : null;
+			if (tp) Object.keys(tp).forEach((k) => setCapPol(k, tp[k]));
+			const nk = (obj && obj.notes && typeof obj.notes === "object") ? obj.notes : null;
+			if (nk) Object.keys(nk).forEach((k) => {
+				const v = String(nk[k] || "").trim();
+				if (!v) return;
+				USER.capNote = USER.capNote || {};
+				USER.capNote[String(k).trim().toLowerCase()] = v;
+				notes++;
+			});
+			// 0.7.80：新分类要同时进 USER.cats，并直接跳到第一个导入的分类 —— 否则面板停在旧分类，看着像「没变化」
+			const newCats = [];
+			cards.forEach((c) => {
+				const cat = String((c && c.cat) || "").trim();
+				if (cat && newCats.indexOf(cat) < 0) newCats.push(cat);
+			});
+			if (newCats.length) {
+				USER.cats = Array.from(new Set((USER.cats || []).concat(newCats)));
+				try { setCardQ(""); } catch (e) { }
+				try { setPolFilter("all"); } catch (e) { }
+				try { setCardCat("cat:" + newCats[0]); } catch (e) { }
+			}
+			saveUser(); repaint();
+			try { dictFlush(); } catch (e) { }
+			try { clientLog("dictImport", "cards=" + cards.length + " new=" + added + " upd=" + updated + " skip=" + skipped + " notes=" + notes + " cats=" + newCats.join("/")); } catch (e) { }
+			setMsg("导入 " + cards.length + " 张：新建 " + added + " · 覆盖 " + updated + " · 跳过 " + skipped + " · 备注 " + notes
+				+ (newCats.length ? " · 分类 " + newCats.join(" / ") + "（已跳到「" + newCats[0] + "」）" : ""));
+		};
+	};
+	/** 0.7.79：文件导入与「粘贴 JSON」共用 applyDictPack */
+	const importCards = (file) => {
+		const rd = new FileReader();
+		rd.onload = () => {
+			let obj = null;
+			try { obj = JSON.parse(String(rd.result || "")); } catch (e) { setMsg("导入失败：不是合法 JSON"); return; }
+			applyDictPack(obj);
+		};
+		rd.onerror = () => setMsg("读取文件失败");
+		rd.readAsText(file, "utf-8");
+	};
+	const dictPasteModal2 = () => h("div", {
+		onClick: () => setDictPasteOpen2(false),
+		style: { position: "fixed", inset: 0, zIndex: 2147483000, background: "rgba(0,0,0,.38)",
+			display: "flex", alignItems: "center", justifyContent: "center" },
+	},
+		h("div", {
+			onClick: (e) => e.stopPropagation(),
+			style: { width: "min(680px, 92vw)", background: "var(--c-panel)", color: "var(--c-fg)",
+				border: "1px solid var(--c-line)", borderRadius: "12px", padding: "14px 16px",
+				display: "flex", flexDirection: "column", gap: "8px", boxShadow: "0 18px 48px rgba(0,0,0,.38)" },
+		},
+			h("div", { style: { fontSize: "13px", fontWeight: 600 } }, "粘贴词库 JSON"),
+			h("div", { style: { fontSize: "11.5px", color: "var(--c-fg5)" } }, "dsh-dict-cards 格式：{ \"cards\": [ { \"cat\", \"cn\", \"en\" } ], \"notes\": {…}, \"tagPol\": {…} }。不依赖文件对话框，任何环境都能用。"),
+			h("textarea", {
+				value: dictPasteText2, onChange: (e) => setDictPasteText2(e.target.value), spellCheck: false,
+				placeholder: '{ "kind": "dsh-dict-cards", "v": 1, "cards": [ { "cat": "姿势·极限", "cn": "撑地张腿坐", "en": "sitting, spread legs" } ] }',
+				style: Object.assign({}, S.input || S.inp, { width: "100%", boxSizing: "border-box", height: "240px",
+					fontFamily: "ui-monospace,Consolas,monospace", fontSize: "12px" }),
+			}),
+			h("div", { style: { display: "flex", gap: "8px" } },
+				h("button", { style: S.btn, onClick: () => {
+					const raw = String(dictPasteText2 || "").trim();
+					if (!raw) { setMsg("先粘贴词库 JSON"); return; }
+					let obj = null;
+					try { obj = JSON.parse(raw); } catch (e) { setMsg("不是合法 JSON：" + String((e && e.message) || e).slice(0, 80)); return; }
+					setDictPasteOpen2(false);
+					applyDictPack(obj);
+				} }, "导入"),
+				h("button", { style: S.btn2, onClick: () => setDictPasteOpen2(false) }, "取消"),
+				h("span", { style: { marginLeft: "auto", fontSize: "11.5px", color: "var(--c-fg5)" } }, "Ctrl+V 粘贴 · Esc 取消"))));
+
+	const chipOne = (x) => h("span", {
+		key: x.key,
+		title: x.name + (x.all ? "\u000A固定分类：跨所有分类显示全部词条（不可改名 / 删除）" : "\u000A左键切换 · 右键改名字/删除这个分类"),
+		onClick: () => { setCardCat(x.key); },
+		onContextMenu: (e) => { e.preventDefault(); groupMenu(x); },
+		onDragOver: (e) => {
+			if (!dragRef.current) return;
+			e.preventDefault();
+			try { e.dataTransfer.dropEffect = "move"; } catch (x2) { }
+			if (dragAt !== "chip:" + x.key) setDragAt("chip:" + x.key);
+		},
+		onDragLeave: () => { if (dragAt === "chip:" + x.key) setDragAt(""); },
+		onDrop: (e) => { e.preventDefault(); e.stopPropagation(); dropOnChip(x); },
+		style: Object.assign({}, S.chip, {
+			padding: "4px 10px 4px 12px", fontSize: "12.5px", display: "inline-flex", alignItems: "center", gap: "6px", cursor: "pointer",
+			outline: dragAt === "chip:" + x.key ? "2px dashed var(--c-good, #16a34a)" : "none",
+			background: x.key === cardCat ? "var(--c-accent)" : "var(--c-accent-bg2)",
+			color: x.key === cardCat ? "var(--c-accent-on)" : "var(--c-fg2)",
+			borderColor: x.key === cardCat ? "var(--c-accent)" : "var(--c-line)",
+			borderStyle: "solid",
+		}),
+	},
+		x.name,
+		x.all ? null : h("span", {
+			title: x.custom ? "删除这个自建分类（连同词条）" : "隐藏这个内置分类（词条还在 dict.js）",
+			onClick: (e) => {
+				e.stopPropagation();
+				if (dictDeleteGroup(x)) { if (cardCat === x.key) setCardCat(""); setMsg(x.custom ? ("已删除分类「" + x.name + "」") : ("已隐藏「" + x.name + "」，可点「恢复分类」找回")); repaint(); }
+			},
+			style: { opacity: 0.5, fontSize: "12px", lineHeight: 1, padding: "0 2px", borderRadius: "4px" },
+		}, "\u00D7"));
+
+	const chipGroup = (x) => chipOne(x);
+
+	/** 拖到分类 chip：换分类（内置卡转成目标分类的自建卡，原分类里隐藏） */
+	const dropOnChip = (x) => {
+		const d = dragRef.current;
+		dragRef.current = null; setDragAt("");
+		if (!d) return;
+		if (x.all) { setMsg("「全部」是集合视图，不能当目标；拖到具体分类 chip 上"); return; }
+		const dst = dictCardTargetCat(x);
+		if (!dst || dst === d.cat) { setMsg("已经在这个分类里了"); return; }
+		if (dictMoveEntry(d.cat, d.cn, d.en, dst)) { setMsg("「" + d.cn + "」→「" + dst + "」"); repaint(); }
+		else setMsg("没搬动：「" + d.cn + "」不在词库里？");
+	};
+
+	/** 拖到另一张卡：同分类改顺序（插到它前/后），跨分类先搬再排 */
+	const dropOnCard = (target, e) => {
+		const d = dragRef.current;
+		dragRef.current = null; setDragAt("");
+		if (!d || (d.cat === target.cat && d.cn === target.cn)) return;
+		const rect = e.currentTarget.getBoundingClientRect();
+		const after = (e.clientY - rect.top) > rect.height / 2;
+		if (d.cat !== target.cat && !dictMoveEntry(d.cat, d.cn, d.en, target.cat)) {
+			setMsg("没搬动：「" + d.cn + "」不在词库里？");
+			return;
+		}
+		const cat = target.cat;
+		const names = dictOrdered(dictGroupItems({ src: [cat] })).map((it) => it.cn).filter((n) => n !== d.cn);
+		let at = names.indexOf(target.cn);
+		if (at < 0) at = after ? names.length : 0;
+		else at = after ? at + 1 : at;
+		names.splice(at, 0, d.cn);
+		USER.order = USER.order || {};
+		USER.order[cat] = names;
+		saveUser(); repaint();
+		setMsg("「" + d.cn + "」顺序已记下（" + cat + " 第 " + (at + 1) + " 位）");
+	};
+
+	/** 右键分类：改名（自建）/ 删除 / 恢复隐藏 */
+	const groupMenu = (x) => {
+		if (x.all) { setMsg("「全部」是固定分类：列出所有分类的词条，不能改名也不能删除"); return; }
+		const what = x.custom ? "自建分类" : "内置分类";
+		const tip = "「" + x.name + "」是" + what + "。输入新名字＝改名" + (x.custom ? "" : "（只改显示，dict.js 不动）") + "；输入 - ＝删除。";
+		const v = String(window.prompt(tip, x.name) || "").trim();
+		if (!v || v === x.name) return;
+		if (v === "-") {
+			if (dictDeleteGroup(x)) { if (cardCat === x.key) setCardCat(""); setMsg("已删除「" + x.name + "」"); repaint(); }
+			return;
+		}
+		const nm = v.replace(/[\\/:*?"<>|]/g, "-").slice(0, 24);
+		if (dictGroups().some((o) => o.name === nm)) { setMsg("已有同名分类：" + nm); return; }
+		USER.groupRename = USER.groupRename || {};
+		USER.groupRename[x.key] = nm;
+		saveUser();
+		setMsg("「" + x.name + "」→「" + nm + "」");
+		repaint();
+	};
+
+	const newGroup = () => {
+		const nm = dictNewGroup();
+		if (!nm) { setMsg(LAST_ERR || "没建分类"); return; }
+		setCardCat("cat:" + nm);
+		setMsg("已新建分类「" + nm + "」，接着点「＋ 词条」往里加词");
+		repaint();
+	};
+
+	const restoreGroups = () => {
+		if (USER.hideBuiltinDict) { USER.hideBuiltinDict = false; saveUser(); repaint(); setMsg("已恢复内置词库"); return; }
+		const n = dictRestoreGroups();
+		if (!n) { setMsg("没有隐藏的内置分类"); return; }
+		setMsg("已恢复 " + n + " 个内置分类");
+		repaint();
+	};
+
+	const cell = (it) => {
+		const on = isOn(it);
+		return h("div", {
+			key: it.cat + "\u0000" + it.cn,
+			onClick: () => {
+				// 等 200ms：双击时把这次单击撤掉，别让卡片先闪一下选中再弹编辑
+				if (clickTimer.current) { clearTimeout(clickTimer.current); clickTimer.current = null; return; }
+				clickTimer.current = setTimeout(() => { clickTimer.current = null; toggle(it); }, 200);
+			},
+			onDoubleClick: (e) => {
+				e.preventDefault();
+				if (clickTimer.current) { clearTimeout(clickTimer.current); clickTimer.current = null; }
+				openEdit(it);
+			},
+			onContextMenu: (e) => { e.preventDefault(); openEdit(it); },
+			draggable: true,
+			onDragStart: (e) => {
+				dragRef.current = { cat: it.cat, cn: it.cn, en: it.en };
+				try { e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", it.cn); } catch (x) { }
+			},
+			onDragEnd: () => { dragRef.current = null; setDragAt(""); },
+			onDragOver: (e) => {
+				if (!dragRef.current) return;
+				e.preventDefault();
+				try { e.dataTransfer.dropEffect = "move"; } catch (x) { }
+				const k = it.cat + "\u0000" + it.cn;
+				if (dragAt !== k) setDragAt(k);
+			},
+			onDragLeave: () => { if (dragAt === it.cat + "\u0000" + it.cn) setDragAt(""); },
+			onDrop: (e) => { e.preventDefault(); e.stopPropagation(); dropOnCard(it, e); },
+			title: it.cn + "\u000A" + it.en + "\u000A单击选中 / 双击改词条 / 右键同双击 / 拖动改顺序、拖到分类改分类（词性在胶囊上标）",
+			style: {
+				aspectRatio: "1 / 1", borderRadius: "10px", padding: "7px 7px 6px", cursor: "pointer",
+				display: "flex", flexDirection: "column", justifyContent: "space-between", gap: "3px",
+				background: on ? "var(--c-accent-bg)" : "var(--c-panel2)",
+				border: "1.5px solid " + (dragAt === it.cat + "\u0000" + it.cn ? "var(--c-good, #16a34a)"
+					: (on ? "var(--c-accent)" : "var(--c-line)")),
+				boxShadow: dragAt === it.cat + "\u0000" + it.cn ? "0 0 0 2px var(--c-good, #16a34a) inset" : "none",
+				overflow: "hidden", userSelect: "none", boxSizing: "border-box",
+			},
+		},
+			h("div", { style: { display: "flex", alignItems: "flex-start", gap: "4px" } },
+				h("div", { style: { fontSize: "12.5px", fontWeight: 600, lineHeight: 1.25, flex: 1, wordBreak: "break-all", color: on ? "var(--c-accent-fg)" : "var(--c-fg)" } }, it.cn),
+		),
+			h("div", { style: { fontSize: "9.5px", lineHeight: 1.15, color: "var(--c-fg5)", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden", wordBreak: "break-all" } }, it.en));
+	};
+
+	/** 选中池（单一列表）：每张卡下面列出它的胶囊，标了负的胶囊用红点 */
+	const selRow = () => {
+		const tagsOf = (s) => String(s.en || "").split(",").map((x) => x.trim()).filter(Boolean);
+		return h("div", { style: { display: "flex", gap: "5px", alignItems: "flex-start", flexWrap: "wrap", minHeight: "26px" } },
+			h("span", { style: { fontSize: "12px", padding: "3px 8px", borderRadius: "6px", border: "1px solid var(--c-line)", color: "var(--c-fg4)", whiteSpace: "nowrap" } },
+				"选中 " + cardSel.length),
+			cardSel.length ? cardSel.map((s, i) => h("span", {
+				key: "sel-" + i + "-" + s.en,
+				title: s.en + "\u000A点 × 取消选中；插入时按胶囊词性分流",
+				style: Object.assign({}, S.chip, { fontSize: "12px", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: "4px" }),
+			},
+				s.cn,
+				h("span", {
+					style: { opacity: 0.6, fontSize: "11px" },
+				}, "(" + tagsOf(s).filter((x) => capPolOf(x) === "neg").length + "负/" + tagsOf(s).length + ")"),
+				h("span", {
+					style: { opacity: 0.55 },
+					onClick: (e) => { e.stopPropagation(); setCardSel((st) => st.filter((x) => !(x.cn === s.cn && x.en === s.en))); },
+				}, "\u00D7")))
+				: h("span", { style: { fontSize: "11.5px", color: "var(--c-fg5)", paddingTop: "4px" } }, "点上面的卡片选中；插入时按胶囊词性分流"));
+	};
+
+	const openEdit = (it) => {
+		setCardEdit({ cat: it.cat, cn: it.cn, en: it.en, c: it.cn, e2: it.en });
+	};
+	const closeEdit = () => setCardEdit(null);
+	const saveEdit = () => {
+		if (!cardEdit) return;
+		const cn = String(cardEdit.c || "").trim();
+		const en = String(cardEdit.e2 || "").trim();
+		if (!cn || !en) { setMsg("中文名和英文标签都要填"); return; }
+		if (cardEdit.isNew) {
+			const cat = String(cardEdit.cat || "").trim();
+			if (!cat) { setMsg("先选一个分类"); return; }
+			USER.frags = USER.frags || {};
+			const list = (USER.frags[cat] || []).slice();
+			if (list.some((x) => String(x[0]).trim() === cn)) { setMsg("「" + cn + "」已经在「" + cat + "」里了，换个中文名"); return; }
+			list.push([cn, en]);
+			USER.frags[cat] = list;
+			saveUser();
+			repaint();
+			// 不关弹层：切成「编辑这张卡」，可以直接继续往里加新胶囊
+			setCardEdit({ cat: cat, cn: cn, en: en, c: cn, e2: en });
+			setMsg("已新建卡片「" + cn + "」→ " + en + "，放进「" + cat + "」；弹层留着，可以继续加胶囊");
+			return;
+		}
+		if (dictRenameEntry(cardEdit.cat, cardEdit.cn, cn, en)) {
+			setMsg("已改「" + cardEdit.cn + "」→「" + cn + "」：" + en);
+			closeEdit(); repaint();
+		} else setMsg("没找到这条词条");
+	};
+	const deleteEdit = () => {
+		if (!cardEdit) return;
+		const builtin = Object.prototype.hasOwnProperty.call(LIB, cardEdit.cat);
+		const tip = builtin
+			? "隐藏词条「" + cardEdit.cn + "」？\n内置词条只是从界面隐藏，lib/dict.js 不动。"
+			: "删除词条「" + cardEdit.cn + "」？\n自建词条删了就找不回来。";
+		if (!window.confirm(tip)) return;
+		if (dictHideEntry(cardEdit.cat, cardEdit.cn)) { setMsg("已删除「" + cardEdit.cn + "」"); closeEdit(); repaint(); }
+		else setMsg("没找到这条词条");
+	};
+
+
+	return h("div", { style: { display: "flex", flexDirection: "column", gap: "10px" } },
+		h("div", { style: { display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" } },
+			h("input", { value: cardQ, placeholder: "搜词条 / 英文标签", onChange: (e) => setCardQ(e.target.value), style: Object.assign({}, S.input || S.inp, { width: "220px" }) }),
+			["all", "pos", "neg"].map((k) => h("span", {
+				key: k, onClick: () => setPolFilter(k),
+				title: k === "all" ? "全部卡片" : (k === "pos" ? "只看不含负面胶囊的卡" : "只看含负面胶囊的卡"),
+				style: Object.assign({}, S.chip, { fontSize: "12px", cursor: "pointer", padding: "4px 10px",
+					background: polFilter === k ? "var(--c-accent)" : "transparent",
+					color: polFilter === k ? "var(--c-accent-on)" : "var(--c-fg4)",
+					borderColor: polFilter === k ? "var(--c-accent)" : "var(--c-line)" }),
+			}, k === "all" ? "全部" : k === "pos" ? "纯正向" : "含负面")),
+			h("button", { style: S.btn2, onClick: addCard, title: "在这个分类里新建一张卡片（中文名 + 提示词本体）" }, "＋ 新卡片"),
+			h("button", { style: S.btn2, onClick: exportPicked, title: "把勾选过的卡片（没勾就导出当前分类）导出成 .json，可发给别人导入" }, "导出"),
+			h("button", { style: S.btn2, onClick: () => revealCardFile("dict", ""), title: "打开词库 JSON 的落盘目录（本地绘画\词库）" }, "打开文件位置"),
+			h("button", { style: S.btn2, onClick: () => syncKindFromDisk("dict", { force: true }), title: "重新读 本地绘画\词库：目录里删掉的文件，面板上对应的词条也消失" }, "同步目录"),
+			h("button", { style: S.btn2, onClick: () => dirClear("dict", "词库"), title: "把 词库 目录整包搬到 _清空备份，并清空面板（可逆）" }, "清空"),
+			h("button", { style: S.btn2, onClick: () => {
+				if (!window.confirm("清空词库：\n· 自建词条全清\n· 内置词库（代码里那几千条）也一起隐藏\n\n磁盘文件搬去 _清空备份，内置词库可用「恢复分类」找回。继续？")) return;
+				USER.frags = {}; USER.dictFiles = {}; USER.hideBuiltinDict = true; USER.groupHide = [];
+				saveUser(); repaint();
+				fetch(EXPANDER + "/dir/clear", { method: "POST", headers: Object.assign({ "Content-Type": "application/json" }, CONSOLE_HEADERS), body: JSON.stringify({ kind: "dict" }) })
+					.then((r) => r.json())
+					.then((d) => setMsg(d && d.ok ? ("词库已清空（含内置）：搬走 " + String(d.count || 0) + " 个文件 → " + String(d.backup || "")) : ("清空失败：" + String((d && d.error) || "侧车没响应"))))
+					.catch((e) => setMsg("清空失败：" + String((e && e.message) || e)));
+			}, title: "自建词条清空，并且把内置词库整体隐藏（可恢复）" }, "清空含内置"),
+			USER.hideBuiltinDict ? h("button", { style: S.btn2, onClick: () => {
+				USER.hideBuiltinDict = false; saveUser(); repaint(); setMsg("已恢复内置词库");
+			}, title: "把内置词库放回面板（之前点过「清空含内置」）" }, "恢复内置") : null,
+			h("label", { style: Object.assign({}, S.btn2, { position: "relative", overflow: "hidden", display: "inline-flex", alignItems: "center", cursor: "pointer" }), title: "从导出的 .json 导入小卡片（中文同名＝覆盖提示词；备注与词性一起带进来）" }, "导入",
+				h("input", { type: "file", accept: ".json,application/json",
+					style: { position: "absolute", top: 0, left: 0, width: "100%", height: "100%", opacity: 0, cursor: "pointer", fontSize: "100px" },
+					onChange: (e) => { const f = e.target.files && e.target.files[0]; try { e.target.value = ""; } catch (x) { } if (f) importCards(f); else setMsg("没拿到文件：这个环境没弹文件对话框，改用右边「粘贴 JSON」"); } })),
+			h("button", { style: S.btn2, onClick: () => { setDictPasteText2(""); setDictPasteOpen2(true); }, title: "不依赖文件对话框：把词库包 JSON 粘进来" }, "粘贴 JSON"),
+			dictPasteOpen2 ? dictPasteModal2() : null,
+			h("button", { style: S.btn2, onClick: () => setCardMode(false), title: "回老的树状词库界面" }, "旧版"),
+			h("span", { style: { marginLeft: "auto", fontSize: "11.5px", color: "var(--c-fg4)" } }, g.name + " " + shown.length + " 条")),
+		h("div", { style: { display: "flex", gap: "6px", flexWrap: "wrap", alignItems: "center" } },
+			groups.map(chipGroup),
+			h("span", {
+				onClick: newGroup, title: "新建一个大分类",
+				style: Object.assign({}, S.chip, {
+					padding: "4px 12px", fontSize: "12.5px", cursor: "pointer", borderStyle: "dashed",
+					background: "transparent", color: "var(--c-fg4)", borderColor: "var(--c-line)",
+				}),
+			}, "＋ 分类"),
+			dictHiddenCats().filter((k) => k.indexOf("cat:") !== 0).length
+				? h("span", {
+					onClick: restoreGroups, title: "把隐藏掉的内置分类找回来",
+					style: Object.assign({}, S.chip, { padding: "4px 10px", fontSize: "12px", cursor: "pointer", background: "transparent", color: "var(--c-fg4)" }),
+				}, "恢复分类 " + dictHiddenCats().filter((k) => k.indexOf("cat:") !== 0).length)
+				: null),
+		h("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(96px, 1fr))", gap: "8px", maxHeight: "46vh", overflowY: "auto", padding: "2px" } },
+			shown.length ? shown.map(cell) : h("div", { style: { gridColumn: "1 / -1", fontSize: "12px", color: "var(--c-fg5)", padding: "12px" } }, q ? "没有匹配「" + cardQ + "」的词条" : "这个分类还没有卡片，点「＋ 新卡片」建一张")),
+		h("div", { style: { borderTop: "1px solid var(--c-line)", paddingTop: "8px", display: "flex", flexDirection: "column", gap: "6px" } },
+			selRow(),
+			h("div", { style: { display: "flex", gap: "6px", flexWrap: "wrap", paddingTop: "2px" } },
+				h("button", { style: Object.assign({}, S.btn2, { fontWeight: 600 }), onClick: insertSel, title: "标了「负」的胶囊进负面，其余进正向；两栏原有内容都不动" }, "插入提示词（按胶囊词性）"),
+				h("button", { style: S.btn2, onClick: () => { setTab("gen"); setZoneMode("prompt"); setMsg("已切到生成页；提示词区若要胶囊视图，点一下「切换 ▸」"); } }, "去生成页看"),
+				h("button", { style: S.btn2, onClick: () => { setCardSel([]); setMsg("已清空选中"); } }, "清空选中"))),
+		cardEdit ? h(DictCardEditor, {
+			draft: cardEdit,
+			groups: groups, group: g,
+			patch: (kv) => setCardEdit(Object.assign({}, cardEdit, kv)),
+			onChanged: repaint,          // 弹层里改胶囊词性后，卡片区跟着重画
+			onClose: closeEdit,
+			onSave: saveEdit,
+			onDelete: deleteEdit,
+			onExportThis: () => {
+				const cn0 = String(cardEdit.c || "").trim();
+				const en0 = String(cardEdit.e2 || "").trim();
+				if (!cn0 || !en0) { setMsg("中文名和提示词本体都要有才能导出"); return; }
+				exportCards([{ cat: cardEdit.cat, cn: cn0, en: en0 }], cn0);
+			},
+		}) : null);
+}
+
+function libTabLegacy() {
 		const lib = allLib();
 		const cats = Object.keys(lib);
 		const cat = cats.indexOf(activeCat) >= 0 ? activeCat : cats[0];
@@ -2652,17 +4337,25 @@ function normPart(v) {
 	return [];
 }
 
-/** 触发浏览器下载一个文本文件 */
+/** 0.7.55：先让侧车落盘（Electron 里 a.download 不落地），侧车不在才退回浏览器下载 */
 function downloadText(text, filename) {
+	const fn = String(filename || "export.json");
 	try {
-		const blob = new Blob([text], { type: "application/json;charset=utf-8" });
-		const url = URL.createObjectURL(blob);
-		const a = document.createElement("a");
-		a.href = url;
-		a.download = filename;
-		document.body.appendChild(a);
-		a.click();
-		setTimeout(() => { try { URL.revokeObjectURL(url); if (a.parentNode) a.parentNode.removeChild(a); } catch (e) {} }, 0);
+		fetch(EXPANDER + "/save-json", {
+			method: "POST",
+			headers: Object.assign({ "Content-Type": "application/json" }, CONSOLE_HEADERS),
+			body: JSON.stringify({ filename: fn, text: String(text) }),
+		})
+			.then((r) => r.json())
+			.then((d) => {
+				if (d && d.ok && d.path) {
+					MSG("已保存 " + fn + " → " + d.path);
+					revealCardFile("pack", d.path);
+				} else {
+					MSG("落盘失败（" + String((d && (d.error || d.message)) || "侧车没响应") + "）");
+				}
+			})
+			.catch(() => {});
 		return true;
 	} catch (e) { return false; }
 }
@@ -2700,7 +4393,7 @@ function dropJsonProps(onFile) {
       if (e.currentTarget) e.currentTarget.style.outline = "none";
       const dt = e.dataTransfer || (e.nativeEvent && e.nativeEvent.dataTransfer);
       const f = dt && dt.files && dt.files[0];
-      if (!f) return;
+      if (!f) { setMsg("拖拽没拿到文件（桌面版常见）：把卡放进 cardsDir 后点「重扫磁盘」，或用「粘贴 JSON」"); return; }
       if (!/\.(json|dslcard|dslrecipe)$/i.test(String(f.name || ""))) { setMsg("拖错了：只认 .json / .dslcard / .dslrecipe（松手的是「" + String(f.name || "") + "」）"); return; }
       onFile(f);
     },
@@ -2710,7 +4403,8 @@ function dropJsonProps(onFile) {
 function importCards(e) {
   const f = e && e.target && e.target.files && e.target.files[0];
   try { if (e && e.target) e.target.value = ""; } catch (err) {}
-  if (f) importCardsFromFile(f);
+  if (!f) { setMsg("没拿到文件：这个环境没弹文件对话框（桌面版常见）—— 用右边「粘贴 JSON」或把卡放进 cardsDir 再点「重扫磁盘」"); return; }
+  importCardsFromFile(f);
 }
 
 /** 导入分流：先看扩展名，再看文件头魔数 DSLCARD2 —— 改名成 .json、或没有扩展名的卡包也能进
@@ -2735,20 +4429,38 @@ function openCardFile(f, applyJson) {
 }
 
 function importCardsFromFile(f) {
-  if (!f) return;
+  if (!f) { setMsg("没拿到文件：拖拽没把 files 交过来（桌面版常见）—— 用「粘贴 JSON」"); return; }
+  setMsg("收到文件：" + String(f.name || "") + "（" + Math.round(Number(f.size || 0) / 1024) + " KB），正在解析…");
   openCardFile(f, applyCardImport);
 }
 
 /** 角色卡导入核心：按卡名 upsert（同名覆盖、保留 id / 封面 / 来源文件） */
 function applyCardImport(raw) {
   const list = Array.isArray(raw) ? raw : (raw && Array.isArray(raw.cards) ? raw.cards : (raw ? [raw] : []));
+  clientLog("applyCardImport", "in=" + list.length + " 条 · 现有 " + ((USER.cards || []).length) + " 张");
+  try { _applyCardImportBody(list); }
+  catch (e) {
+    clientLog("applyCardImport", "异常 " + ((e && e.message) || e) + " @ " + String((e && e.stack) || "").split("\n").slice(1, 3).join(" | "));
+    setMsg("导入出错（" + ((e && e.message) || e) + "）—— 已写日志 client-err.log（v" + CLIENT_VER + "）");
+  }
+}
+function _applyCardImportBody(list) {
   const ok = [];
   for (const c of list) {
     if (!c) continue;
     const rec = cardFromJson(c);
     if (rec) ok.push(rec);
   }
-  if (!ok.length) { setMsg("没有可导入的角色卡（每条至少要有 name 与 tags）"); return; }
+  if (!ok.length) {
+    const why = list.slice(0, 3).map((c) => {
+      const nm = String((c && c.name) || "").trim();
+      const tg = String((c && c.tags) || "").trim();
+      return "「" + (nm || "(无 name)") + "」" + (nm ? (tg ? "tags 空且 parts 拼不出词" : "缺 tags") : "缺 name");
+    }).join("；");
+    clientLog("applyCardImport", "0 张可用 · 收到 " + list.length + " 条 · " + why);
+    setMsg("没有可导入的角色卡：" + why + "（v" + CLIENT_VER + "）");
+    return;
+  }
   USER.cards = USER.cards || [];
   let added = 0, updated = 0;
   for (const c of ok) {
@@ -2762,22 +4474,100 @@ function applyCardImport(raw) {
     } else { USER.cards.push(c); added++; }
   }
   saveUser();
-  setMsg("已导入 " + ok.length + " 张：新增 " + added + "，更新 " + updated + "（共 " + USER.cards.length + " 张自建）");
-  materializeEmbedded(ok);
+  setMsg("已解析 " + ok.length + " 张：新增 " + added + "，更新 " + updated + "，正在落盘…");
+  persistCards(ok, "cards").then((r) => {
+    if (r.ok) {
+      setMsg("已导入 " + ok.length + " 张（新增 " + added + "、更新 " + updated + "）· 落盘 " + r.ok + " 张到角色卡目录");
+    } else {
+      setMsg("导入失败：磁盘写不进去（" + (r.errors[0] || "未知原因") + "）—— 卡没留下来。检查 config.json 的 cardsDir 是否可写");
+    }
+    materializeEmbedded(ok);
+  });
 }
 
+
+/** 0.7.74：导入的卡**先落盘**再算成功。
+ *  以前 applyCardImport / applyStyleImport 只写 localStorage，磁盘上什么都没有；
+ *  下一次「目录即真相」同步（切页 / 重开面板 / mount 后 1.2s）看到目录为空，
+ *  就把面板整类清空 —— 表现就是「导入瞬间成功，绘图台里没有」。
+ *  kind: "cards" | "style" | "dict"
+ */
+function persistCards(list, kind) {
+	const arr = (list || []).filter(Boolean);
+	if (!arr.length) return Promise.resolve({ ok: 0, fail: 0, errors: [] });
+	return Promise.all(arr.map((rec) => {
+		rec.pendingDisk = true;
+		// 0.7.92：以前这里也是白名单 —— 导入的卡落盘时丢 cover / id / embeddedDir / schemaVersion。
+		// 现在以整条记录为底（剔除运行时键），白名单字段再覆盖上去，和 writeCardToDisk 0.7.85 同一套写法。
+		const keep = Object.assign({}, rec || {});
+		["fromDisk", "diskDir", "pendingDisk", "busy", "edit", "__file"].forEach((k) => { delete keep[k]; });
+		const card = Object.assign({}, keep, {
+			name: rec.name, tags: rec.tags, note: rec.note, parts: rec.parts,
+			// neg 原样保留 {t,n}（中文备注不能丢），纯字符串也兼容
+			neg: (rec.neg || []).map((x) => (x && typeof x === "object")
+				? { t: String(x.t || ""), n: String(x.n || "") }
+				: String(x || "")).filter((x) => (x && typeof x === "object") ? x.t : x),
+			lora: rec.lora || "", loraW: rec.loraW, loraAlt: rec.loraAlt || "",
+			locks: (rec.locks || []), conditioning: rec.conditioning || null,
+		});
+		if (rec.id) card.id = String(rec.id);
+		if (rec.cover) card.cover = String(rec.cover);
+		return jpost(EXPANDER + "/dir/write", { kind: kind, card: card, path: String(rec.file || "") }, 60000)
+			.then((d) => {
+				if (!d || !d.ok) throw new Error(String((d && d.error) || "写入失败"));
+				rec.file = String(d.path || rec.file || "");
+				rec.fromDisk = true;
+				delete rec.pendingDisk;
+				return { name: rec.name, ok: true, conflict: !!d.conflict, existingTags: d.existingTags || "" };
+			})
+			.catch((e) => ({ name: rec.name, ok: false, error: String((e && e.message) || e) }));
+	})).then((rs) => {
+		const ok = rs.filter((x) => x.ok).length;
+		const fail = rs.length - ok;
+		const errors = rs.filter((x) => !x.ok).map((x) => x.name + "：" + x.error);
+		const conflicts = rs.filter((x) => x.conflict).map((x) => x.name);
+		try { saveUser(); } catch (e) { }
+		clientLog("persistCards", "kind=" + kind + " ok=" + ok + " fail=" + fail +
+			(conflicts.length ? " conflict=" + conflicts.join(",") : "") + (errors.length ? " errors=" + errors.join(" | ") : ""));
+		// 落盘成功后按磁盘重建面板：面板 = 目录，避免「内存有、界面没有」
+		// 0.7.78 修：kind='cards' 以前也调 syncKindFromDisk → 走进 mergeDiskDict，
+		// 会把角色卡当词库分类写进 USER.frags 和 词库 目录。角色卡必须走 syncCardsFromDisk。
+		if (ok) {
+			try {
+				if (kind === "cards") syncCardsFromDisk({ quiet: true });
+				else syncKindFromDisk(kind);
+			} catch (e) { clientLog("persistCards", "sync 失败 " + e); }
+		}
+		return { ok: ok, fail: fail, errors: errors, conflicts: conflicts };
+	});
+}
 
 /** 把磁盘上的一张卡写回它来源的文件（面板改锁 / 改词后落盘，保持文件是活的） */
 function writeCardToDisk(rec) {
   try {
-    const body = {
-      path: String((rec && rec.file) || ""),
-      card: { name: rec.name, locks: normLocks(rec.locks), tags: rec.tags, note: rec.note, parts: rec.parts, neg: normPart(rec.neg).map((x) => String(x.t || "")).filter(Boolean), lora: rec.lora, loraW: rec.loraW, loraAlt: rec.loraAlt, conditioning: condForSave(rec.conditioning) },
+    /**
+     * 0.7.85：落盘曾经只写上面这份白名单 —— 卡 JSON 里白名单之外的字段（`id`、`schemaVersion`、
+     * `loraNote`、`cover`、`packMode` …）会被**悄悄抹掉**：面板里还在，存一次盘就没了。
+     * 2026-10-22 实测 絉林.json 少了 `schemaVersion: 2` 与整条 `loraNote`（只有备份里还有）。
+     * 现在以「面板里那张卡」为底，白名单字段覆盖上去，其余原样保留。
+     */
+    const keep = Object.assign({}, rec || {});
+    ["fromDisk", "diskDir", "pendingDisk", "busy", "edit", "__file"].forEach((k) => { delete keep[k]; });
+    const card = {
+      name: rec.name, locks: normLocks(rec.locks), tags: rec.tags, note: rec.note, parts: rec.parts,
+      neg: normPart(rec.neg).map((x) => String(x.t || "")).filter(Boolean),
+      lora: rec.lora, loraW: rec.loraW, loraAlt: rec.loraAlt, conditioning: condForSave(rec.conditioning),
     };
-    if (!body.path) return;
-    fetch(EXPANDER + "/cards/write", { method: "POST", headers: Object.assign({ "Content-Type": "application/json" }, CONSOLE_HEADERS), body: JSON.stringify(body) })
-      .then((r) => { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); })
-      .then((d) => { if (!d || !d.ok) throw new Error((d && d.error) || "unknown"); })
+    if (rec.id) card.id = String(rec.id);
+    Object.keys(keep).forEach((k) => { if (!(k in card) && keep[k] !== undefined) card[k] = keep[k]; });
+    const body = { path: String((rec && rec.file) || ""), card: card };
+    // 0.7.60：没有来源文件也要落盘（新建一张 <角色卡目录>/<卡名>.json），这样目录即真相才成立
+    jpost(EXPANDER + "/dir/write", { kind: "cards", card: body.card, path: body.path }, 30000)
+      .then((d) => {
+        if (!d || !d.ok) throw new Error((d && d.error) || "unknown");
+        if (!rec.file && d.path) { rec.file = d.path; rec.fromDisk = true; }
+        return d;
+      })
       .catch((e) => MSG("磁盘写回失败：" + ((e && e.message) || e)));
   } catch (e) { /* ignore */ }
 }
@@ -2857,7 +4647,64 @@ function cardCoverOf(c) {
 		setMsg("已删除角色卡「" + c.name + "」");
 	}
 
-	function pickCoverFile(e) {
+	/**
+ * 0.7.87：封面「设了却没落盘」的根因修复。
+ * 以前「选择图片…」「用最近一张出图」「清除封面」只改卡编辑器的内存态（setCardEdit / setStyleEdit），
+ * 不按「保存」就整条丢掉 —— 表现就是「每次进控制台，卡片封面掉」。
+ * 现在只要这张卡已经在磁盘上（有 d.file），设/清封面立刻写 localStorage + 卡 JSON；
+ * 新卡还没落盘时才退回「先记在编辑器里，按保存一起写」。
+ */
+function cardRecFromEdit(d, name, id) {
+  const parts = (d && d.parts) || {};
+  return {
+    id: id || (d.id || ("u" + String(Date.now()))), name: name, locks: normLocks(d.locks),
+    tags: joinCardParts(parts), note: String(d.note || "").trim(), cover: String(d.cover || ""),
+    parts: parts, neg: normPart(d.neg), lora: String(d.lora || ""),
+    loraW: Number(d.loraW) > 0 ? Number(d.loraW) : 0.7, loraAlt: String(d.loraAlt || ""),
+    file: String(d.file || ""), conditioning: condForSave(d.cond),
+  };
+}
+
+function applyCardCover(url, note) {
+  const d = cardEdit || {};
+  const cover = String(url || "");
+  setCardEdit((p) => Object.assign({}, p, { cover: cover }));
+  const name = String(d.name || "").trim();
+  const file0 = String(d.file || "").trim();
+  if (!name || !file0) {
+    setMsg(note || (cover ? "封面已载入（新卡要按「保存」才落盘）" : "封面已清除"));
+    return;
+  }
+  const rec = Object.assign(cardRecFromEdit(Object.assign({}, d, { cover: cover }), name, d.id), { file: file0, cover: cover });
+  USER.cards = USER.cards || [];
+  let i = rec.id ? USER.cards.findIndex((x) => x && x.id && String(x.id) === String(rec.id)) : -1;
+  if (i < 0) i = USER.cards.findIndex((x) => x && String(x.file || "") === file0);
+  const merged = Object.assign({}, (i >= 0 ? USER.cards[i] : {}), rec);
+  if (i >= 0) USER.cards[i] = merged; else USER.cards.push(merged);
+  saveUser();
+  writeCardToDisk(merged);
+  setMsg(note || (cover ? "封面已写入卡文件" : "封面已清除并写回卡文件"));
+}
+
+function applyStyleCover(url, note) {
+  const d = styleEdit || {};
+  const cover = String(url || "");
+  setStyleEdit((p) => Object.assign({}, p, { cover: cover }));
+  const file0 = String(d.file || "").trim();
+  if (!file0) { setMsg(note || (cover ? "封面已载入（新卡要按「保存」才落盘）" : "封面已清除")); return; }
+  const arr = USER.styleCards || [];
+  let i = arr.findIndex((x) => x && ((x.file && String(x.file) === file0) || (d.id && x.id && String(x.id) === String(d.id))));
+  if (i < 0) { setMsg(note || (cover ? "封面已载入（按「保存」落盘）" : "封面已清除")); return; }
+  const rec = Object.assign({}, arr[i], { cover: cover, file: file0 });
+  arr[i] = rec;
+  saveUser();
+  dirWrite("style", rec, file0).then((r) => {
+    if (r && r.ok) setMsg(note || (cover ? "封面已写入风格卡文件" : "封面已清除并写回"));
+    else if (r && r.error) setMsg("封面写盘失败：" + r.error);
+  }).catch(() => { });
+}
+
+function pickCoverFile(e) {
 		const f = e && e.target && e.target.files && e.target.files[0];
 		if (!f) return;
 		if (!/^image\//.test(f.type || "")) { setMsg("只能选图片文件"); return; }
@@ -2865,7 +4712,7 @@ function cardCoverOf(c) {
 		rd.onload = () => {
 			const img = new Image();
 			img.onload = () => {
-				const MAX = 560;
+				const MAX = 360;
 				const s = Math.min(1, MAX / Math.max(img.width || 1, img.height || 1));
 				const w = Math.max(1, Math.round((img.width || MAX) * s));
 				const hh = Math.max(1, Math.round((img.height || MAX) * s));
@@ -2874,9 +4721,8 @@ function cardCoverOf(c) {
 				cv.getContext("2d").drawImage(img, 0, 0, w, hh);
 				let url = "";
 				try { url = cv.toDataURL("image/jpeg", 0.82); } catch (err) { setMsg("图片转换失败：" + (err && err.message)); return; }
-				if (url.length > 420000) { setMsg("压缩后仍偏大（" + Math.round(url.length / 1024) + " KB），换张小点的图或改用「用最近一张出图」"); return; }
-				setCardEdit((p) => Object.assign({}, p, { cover: url }));
-				setMsg("封面已载入（" + w + "×" + hh + "，约 " + Math.round(url.length / 1024) + " KB）");
+				if (url.length > 180000) { setMsg("压缩后仍偏大（" + Math.round(url.length / 1024) + " KB > 176 KB），换张小点的图或改用「用最近一张出图」"); return; }
+				applyCardCover(url, "封面已载入（" + w + "×" + hh + "，" + Math.round(url.length / 1024) + " KB），已写入卡文件");
 			};
 			img.onerror = () => setMsg("这个文件读不出图片");
 			img.src = String(rd.result || "");
@@ -2966,7 +4812,7 @@ function cardCoverOf(c) {
 		USER.cards = USER.cards || [];
 		const rec = { baseModels: _cardBm(d), training: parseJsonField(d.trainingText, d.training), regression: parseJsonField(d.regressionText, d.regression), id: d.id || ("u" + String(Date.now())), name: name, locks: normLocks(d.locks), tags: tags, note: String(d.note || "").trim(), cover: String(d.cover || ""), parts: parts, neg: normPart(d.neg), lora: String(d.lora || ""), loraW: Number(d.loraW) > 0 ? Number(d.loraW) : 0.7, loraAlt: String(d.loraAlt || ""), file: String(d.file || ""), conditioning: condForSave(d.cond) };
 		const i = USER.cards.findIndex((x) => x && x.id === rec.id);
-		if (i >= 0) USER.cards[i] = rec; else USER.cards.push(rec);
+		if (i >= 0) USER.cards[i] = Object.assign({}, USER.cards[i], rec); else USER.cards.push(rec);
 		saveUser();
 		if (rec.file) writeCardToDisk(rec);
   setCardEdit(null);
@@ -2996,7 +4842,7 @@ function cardCoverOf(c) {
 									const parts = d.parts || {};
 									const set = (k, v) => setCardEdit((p) => Object.assign({}, p, { [k]: v }));
 									const setPart = (k, v) => setCardEdit((p) => Object.assign({}, p, { parts: Object.assign({}, (p || {}).parts || {}, { [k]: v }) }));
-									const row = { display: "flex", alignItems: "flex-start", gap: "8px", marginBottom: "9px" };
+									const row = { display: "flex", alignItems: "flex-start", gap: "8px", marginBottom: "9px", flexWrap: "wrap", flexShrink: 0 };
 									const lab = { width: "78px", fontSize: "12px", color: "var(--c-fg3)", paddingTop: "6px", flex: "none" };
 									const inp = { flex: 1, minWidth: 0, padding: "5px 8px", borderRadius: "6px", border: "1px solid rgba(var(--c-ink-rgb),.22)", background: "var(--c-card)", color: "var(--c-fg)", fontSize: "12px" };
 									const chipBox = { display: "flex", flexWrap: "wrap", gap: "6px", flex: 1, alignItems: "center", minHeight: "30px" };
@@ -3097,7 +4943,7 @@ function cardCoverOf(c) {
 										_putCond(cond);
 									};
 
-									return h("div", { style: { display: "flex", flexDirection: "column", gap: "2px", maxWidth: "860px" } },
+									return h("div", { style: { display: "flex", flexDirection: "column", gap: "2px", maxWidth: "860px", width: "100%", minHeight: 0, paddingBottom: "6px" } },
 										h("div", { style: { fontWeight: 700, fontSize: "14px", color: "var(--c-fg)", marginBottom: "10px" } }, d.isNew ? "新建角色卡" : ("编辑「" + (d.name || "") + "」" + (d.builtin ? " · 内置卡" : ""))),
 										h("div", { style: row }, h("span", { style: lab }, "名称"), h("input", { style: inp, value: d.name || "", placeholder: "例如：示例角色", onChange: (e) => set("name", e.target.value) })),
 										h("div", { style: row }, h("span", { style: lab }, "角色 LoRA"),
@@ -3109,7 +4955,9 @@ function cardCoverOf(c) {
 										      if (cur && list.indexOf(cur) < 0) list.unshift(cur);
 										      return list.map((n) => h("option", { key: n, value: n }, (list.indexOf(n) === 0 && cur && (loras || []).indexOf(cur) < 0) ? (n + "（不在 LoRA 目录）") : n));
 										    })()),
-										  h("input", { style: Object.assign({}, inp, { flex: "0 0 76px" }), value: String(d.loraW || 0.7), onChange: (e) => set("loraW", Number(e.target.value) || 0.7), title: "强度（模型=文本）" })),
+										  h("input", { style: Object.assign({}, inp, { flex: "0 0 76px" }), value: String(d.loraW || 0.7), onChange: (e) => set("loraW", Number(e.target.value) || 0.7), title: "LoRA 权重" }),
+										  h("button", { style: CARD_BTN, onClick: () => loraImport(), title: "把 LoRA 文件导入 ComfyUI\\models\\loras（选文件上传，或填本机绝对路径）" }, "导入"),
+										  h("button", { style: CARD_BTN, onClick: () => loraDelete(d.lora), title: "把选中的这支 LoRA 搬进 models\\loras\\_trash（可恢复）" }, "删除")),
 										h("div", { style: row }, h("span", { style: lab }, "LLLite"),
 										  h("select", {
 										    style: Object.assign({}, inp, { flex: "1 1 240px" }),
@@ -3208,11 +5056,11 @@ h("button", { style: CARD_BTN, onClick: addCardLock }, "＋ 新增特征锁"),
 												h("div", { style: { display: "flex", gap: "6px", flexWrap: "wrap" } },
 													h("label", { style: CARD_BTN }, "选择图片…",
 														h("input", { type: "file", accept: "image/*", style: { display: "none" }, onChange: pickCoverFile })),
-													(job && job.image) ? h("button", { style: CARD_BTN_ACCENT, onClick: () => { set("cover", job.image); setMsg("已用最近一张出图当封面"); } }, "用最近一张出图") : null,
-													h("button", { style: CARD_BTN, onClick: () => set("cover", "") }, "清除封面")),
-												h("input", { style: Object.assign({}, inp, { flex: "none" }), value: String(d.cover || "").indexOf("data:") === 0 ? "（本地图片，已压缩内嵌）" : (d.cover || ""), placeholder: "或粘贴图片地址 https://…", onChange: (e) => set("cover", e.target.value) }))),
+													(job && job.image) ? h("button", { style: CARD_BTN_ACCENT, onClick: () => applyCardCover(job.image, "已用最近一张出图当封面，并写入卡文件") }, "用最近一张出图") : null,
+													h("button", { style: CARD_BTN, onClick: () => applyCardCover("") }, "清除封面")),
+												h("input", { style: Object.assign({}, inp, { flex: "none" }), value: String(d.cover || "").indexOf("data:") === 0 ? "（本地图片，已压缩内嵌）" : (d.cover || ""), placeholder: "或粘贴图片地址 https://…", onChange: (e) => set("cover", e.target.value), onBlur: (e) => applyStyleCover(e.target.value) }))),
 										h("div", { style: { display: "flex", gap: "8px", marginTop: "12px", alignItems: "center" } },
-											h("div", { style: { fontWeight: 600, fontSize: "12px", color: "var(--c-fg2)", margin: "12px 0 4px" } }, "资产与迁移（可选 · 让这张卡能跨机器、跨底模活下去）"),
+											h("div", { style: { fontWeight: 600, fontSize: "12px", color: "var(--c-fg2)", margin: "12px 0 4px" } }, "资产与迁移（可选 · 让这张卡能跨机器、跨底模活下去）")),
 										h("div", { style: row }, h("span", { style: lab }, "底模"),
 											h("input", { style: inp, value: _bmText, placeholder: "逗号分隔，例如 anima-aesthetic-v1.1.safetensors", onChange: (e) => { set("baseModelsText", e.target.value); setCardChk(null); } })),
 										h("div", { style: { fontSize: "11.5px", color: "var(--c-fg4)", margin: "-4px 0 8px" } }, "写清这张卡是在哪个底模上调出来的。换机或换底模之后，点「自检」就能知道还能不能用。"),
@@ -3225,7 +5073,7 @@ h("button", { style: CARD_BTN, onClick: addCardLock }, "＋ 新增特征锁"),
 												h("button", { style: CARD_BTN, onClick: () => validateCardAssets(cardEdit, setCardChk) }, "校验底模与迁移信息"),
 												cardChk ? h("div", { style: { fontSize: "11.5px", marginTop: "6px", whiteSpace: "pre-wrap", color: (cardChk.missingBaseModels && cardChk.missingBaseModels.length) ? "var(--c-bad)" : "var(--c-ok)" } },
 													(cardChk.checked ? ((cardChk.missingBaseModels || []).length ? "缺失底模：" + cardChk.missingBaseModels.join(", ") : "底模齐全 ✓") : "ComfyUI 未启动，未校验底模") + ((cardChk.notes || []).length ? " ｜ " + (cardChk.notes || []).join(" ｜ ") : "")) : null)),
-										h("div", { style: row }, h("span", { style: lab }, "回归锚"),
+										h("div", { style: row }, h("span", { style: lab }, "跑回归"),
 											h("div", { style: { flex: 1, minWidth: 0 } },
 												h("div", { style: { display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center" } },
 													h("button", { style: CARD_BTN, onClick: () => runRegression(cardEdit, "role"), title: "对这张卡的 regression.seeds 逐个出图；底模、尺寸、步数、CFG、采样品都取当前面板" }, REG.running ? ("回归中 " + REG.cur + "/" + REG.total + "…") : "跑回归锚"),
@@ -3236,11 +5084,22 @@ h("button", { style: CARD_BTN, onClick: addCardLock }, "＋ 新增特征锁"),
 														r.image ? h("img", { src: r.image, style: { width: "86px", borderRadius: "6px", border: "1px solid rgba(var(--c-ink-rgb),.12)", display: "block" } }) : null,
 														h("div", { style: { fontSize: "10.5px", marginTop: "2px", wordBreak: "break-all", color: r.ok === true ? "var(--c-ok)" : (r.ok === false ? "var(--c-bad)" : "var(--c-fg4)") } },
 															"seed " + r.seed + (r.ok === true ? " ✓" : (r.ok === false ? " ✗ " + (r.error || "") : " 等待")))))) : null)),
-										h("button", { style: Object.assign({}, CARD_BTN_ACCENT, { padding: "6px 20px" }), onClick: saveCard }, "保存"),
-			h("button", { style: CARD_BTN, onClick: saveAsCard, title: "复制成一张新的角色卡，原卡保持不变" }, "另存为"), h("button", { style: CARD_BTN, onClick: () => exportCardPack([d], "role", "all"), title: "全量卡包：角色 LoRA + 两支 LLLite 权重 + 5 张控制图，对方解包即用（约 235 MB）" }, "导出全量卡包"),
-											h("button", { style: CARD_BTN, onClick: () => { setTagAt(""); setTagNote(""); setTagDraft(""); setCardEdit(null); setMsg("已取消"); } }, "取消"),
-											(d.isNew || d.builtin) ? null : h("button", { style: CARD_BTN_DANGER, onClick: () => { const cc = cardEdit; setCardEdit(null); delCard(cc); } }, "删除这张"),
-											h("span", { style: { fontSize: "11px", color: "var(--c-fg3)" } }, "封面自动压缩到 ≤560px 存本地")));
+										h("div", {
+											style: {
+												display: "flex", flexWrap: "wrap", alignItems: "center", gap: "8px",
+												marginTop: "16px", padding: "10px 0 6px",
+												borderTop: "1px solid rgba(var(--c-ink-rgb),.10)",
+												flex: "0 0 auto", background: "var(--c-card)",
+												flexShrink: 0,
+											},
+										},
+											h("button", { style: Object.assign({}, CARD_BTN_ACCENT, { padding: "6px 20px", flexShrink: 0 }), onClick: saveCard, title: "保存这张卡（也可以按 Ctrl+Enter）" }, "保存"),
+											h("button", { style: Object.assign({}, CARD_BTN, { flexShrink: 0 }), onClick: saveAsCard, title: "复制成一张新的角色卡，原卡保持不变" }, "另存为"),
+											h("button", { style: Object.assign({}, CARD_BTN, { flexShrink: 0 }), onClick: () => exportCardPack([d], "role", "all"), title: "全量卡包：角色 LoRA + 两支 LLLite 权重 + 5 张控制图，对方解包即用（约 235 MB）" }, "导出全量卡包"),
+											h("button", { style: Object.assign({}, CARD_BTN, { flexShrink: 0 }), onClick: () => revealCardFile("cards", d.file || ""), title: d.file ? ("在资源管理器里选中这张卡的 JSON：" + d.file) : "这张卡还没落盘（点保存才写进 cardsDir）—— 先打开角色卡目录" }, "打开文件位置"),
+											h("button", { style: Object.assign({}, CARD_BTN, { flexShrink: 0 }), onClick: () => { setTagAt(""); setTagNote(""); setTagDraft(""); setCardEdit(null); setMsg("已取消"); } }, "取消"),
+											(d.isNew || d.builtin) ? null : h("button", { style: Object.assign({}, CARD_BTN_DANGER, { flexShrink: 0 }), onClick: () => { const cc = cardEdit; setCardEdit(null); delCard(cc); } }, "删除这张"),
+											h("span", { style: { fontSize: "11px", color: "var(--c-fg3)", flex: "1 1 160px", minWidth: 0 } }, "封面自动压缩到 ≤560px 存本地")));
 								}
 
 		/** 插入风格卡：core=false 全量；core=true 去掉「光影 / 其它」，方便试不同氛围 */
@@ -3339,7 +5198,7 @@ h("button", { style: CARD_BTN, onClick: addCardLock }, "＋ 新增特征锁"),
 		  rd.onload = () => {
 		    const img = new Image();
 		    img.onload = () => {
-		      const MAX = 560;
+		      const MAX = 360;
 		      const sc = Math.min(1, MAX / Math.max(img.width || 1, img.height || 1));
 		      const w = Math.max(1, Math.round((img.width || MAX) * sc));
 		      const hgt = Math.max(1, Math.round((img.height || MAX) * sc));
@@ -3348,9 +5207,8 @@ h("button", { style: CARD_BTN, onClick: addCardLock }, "＋ 新增特征锁"),
 		      cv.getContext("2d").drawImage(img, 0, 0, w, hgt);
 		      let url = "";
 		      try { url = cv.toDataURL("image/jpeg", 0.82); } catch (err) { setMsg("图片转换失败：" + (err && err.message)); return; }
-		      if (url.length > 420000) { setMsg("压缩后仍偏大，换张小点的图"); return; }
-		      setStyleEdit((p) => Object.assign({}, p, { cover: url }));
-		      setMsg("封面已载入（" + w + "×" + hgt + "）");
+		      if (url.length > 180000) { setMsg("压缩后仍偏大（" + Math.round(url.length / 1024) + " KB > 176 KB），换张小点的图"); return; }
+		      applyStyleCover(url, "封面已载入（" + w + "×" + hgt + "），已写入卡文件");
 		    };
 		    img.onerror = () => setMsg("这个文件读不出图片");
 		    img.src = String(rd.result || "");
@@ -3373,9 +5231,13 @@ h("button", { style: CARD_BTN, onClick: addCardLock }, "＋ 新增特征锁"),
 		  }
 		  USER.styleCards = USER.styleCards || [];
 		  const rec = { id: asNew ? ("s" + String(Date.now())) : (d.id || ("s" + String(Date.now()))), name: nm, tags: tags, note: String(d.note || "").trim(), cover: String(d.cover || ""), parts: parts, neg: normPart(d.neg), loras: normStyleLoras(d), ckpt: String(d.ckpt || ""), gen: Object.assign({}, d.gen || {}), baseModels: _styleBm(d), training: parseJsonField(d.trainingText, d.training), regression: parseJsonField(d.regressionText, d.regression) };
-		  if (!asNew) { const i = USER.styleCards.findIndex((x) => x && x.id === rec.id); if (i >= 0) USER.styleCards[i] = rec; else USER.styleCards.push(rec); }
-		  else USER.styleCards.push(rec);
-		  saveUser();
+			  if (!asNew) { const i = USER.styleCards.findIndex((x) => x && x.id === rec.id); if (i >= 0) USER.styleCards[i] = rec; else USER.styleCards.push(rec); }
+	  else USER.styleCards.push(rec);
+	  saveUser();
+	  dirWrite("style", rec, String(d.file || rec.file || "")).then((r) => {
+	    if (r && r.ok) { rec.file = r.path; rec.fromDisk = true; saveUser(); }
+	    else if (r && r.error) setMsg("风格卡已存面板，但写盘失败：" + r.error);
+	  }).catch(() => { });
 		  setStyleEdit(null);
 		  setMsg((asNew ? "已另存为新卡「" : "已保存风格卡「") + nm + "」（" + tags.split(",").length + " 条）");
 		}
@@ -3429,6 +5291,15 @@ function exportCardPack(cards, cardType, presetMode) {
     const idx = parseInt(pick, 10);
     card = list[Number.isFinite(idx) && idx >= 1 && idx <= list.length ? idx - 1 : 0];
   }
+  // 0.7.57：没有 LoRA 就没有权重可内嵌，先本地拦下（不要等侧车回 400 让人猜）
+  const _ls = [].concat(
+    (Array.isArray(card.loras) ? card.loras.map((l) => (l && l.name) || l) : []),
+    card.lora ? [card.lora] : []
+  ).map((x) => String(x || "").trim()).filter(Boolean);
+  if (!_ls.length) {
+    setMsg("这张卡没挂 LoRA，全量卡包没有权重可打包 —— 先挂一支 LoRA，或用「导出全部」只存 JSON（那个不内嵌权重）");
+    return;
+  }
   const packAll = (presetMode === "all");
   const embedLL = (presetMode === "full" || packAll);
   if (packAll) presetMode = "baked";
@@ -3446,19 +5317,45 @@ function exportCardPack(cards, cardType, presetMode) {
     if (t === null) return;
     embed = t.split(",").map((x) => x.trim()).filter(Boolean).map((x) => x.replace(/^.*[\\/]/, "").replace(/\.safetensors$/i, ""));
   }
+  // 0.7.89：编辑器里的卡用 `cond` 存身份控制，卡 JSON 里叫 `conditioning`。
+  // 以前把编辑器记录原样丢给打包接口 → 侧车按 `conditioning` 找权重/控制图，一个都找不到，
+  // 「导出全量卡包」实际只内嵌了 LoRA。这里先翻成卡形态，再顺手剔掉编辑器专用键。
+  const cardForPack = (() => {
+    const c = Object.assign({}, card);
+    if (!c.conditioning && c.cond) {
+      try { const cc = condForSave(c.cond); if (cc) c.conditioning = cc; } catch (e) { }
+    }
+    ["cond", "isNew", "builtin", "edit", "busy", "pendingDisk", "fromDisk", "diskDir", "__file"].forEach((k) => { delete c[k]; });
+    return c;
+  })();
   setMsg("正在打包「" + card.name + "」（" + (PACK_MODE_CN[mode] || mode) + "）…");
+  const sendBody = { card: cardForPack, cardType: cardType || "style", mode: mode, embed: embed, embedPatches: embedLL, embedAssets: embedLL, toDisk: true };
   fetch(EXPANDER + "/stylecards/pack", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ card: card, cardType: cardType || "style", mode: mode, embed: embed, embedPatches: embedLL, embedAssets: embedLL }),
+    headers: Object.assign({ "Content-Type": "application/json" }, sidecarHeaders(EXPANDER)),
+    body: JSON.stringify(sendBody),
   })
     .then((r) => {
-      if (!r.ok) return r.json().then((j) => { throw new Error((j && j.error) || ("HTTP " + r.status)); });
+      const ctype = String(r.headers.get("Content-Type") || "");
+      if (!r.ok || ctype.indexOf("application/json") >= 0) {
+        return r.json().then((j) => {
+          if (!r.ok || !j || j.ok === false) throw new Error((j && (j.error || j.message)) || ("HTTP " + r.status));
+          return { disk: j };
+        });
+      }
       let meta = {};
       try { meta = JSON.parse(r.headers.get("X-Card-Meta") || "{}"); } catch (e) {}
       return r.blob().then((b) => ({ b: b, meta: meta }));
     })
     .then((o) => {
+      if (o.disk) {
+        const un0 = o.disk.unresolved || [];
+        setMsg("已导出到 " + o.disk.path + "（" + (o.disk.bytes / 1048576).toFixed(2) + " MB" + (o.disk.cover ? " · 含封面" : "") + "） 内嵌 " +
+               (o.disk.embed || []).length + " 支 / 配方 " + (o.disk.refs || []).length + " 支" +
+               (un0.length ? " ▸ " + un0.length + " 支本机没有权重（sha 为空）：" + un0.join("、") : ""));
+        revealCardFile("pack", o.disk.path);
+        return;
+      }
       const safeName = (s) => String(s || "").replace(/[\\/:*?"<>|]/g, "_").replace(/\s+/g, " ").trim() || "card";
       const name = safeName(o.meta.filename || (card.name + (mode === "recipe" ? ".dslrecipe" : ".dslcard")));
       const url = URL.createObjectURL(o.b);
@@ -3470,7 +5367,11 @@ function exportCardPack(cards, cardType, presetMode) {
              (o.meta.embed || []).length + " 支 / 配方 " + (o.meta.refs || []).length + " 支" +
              (un.length ? " ▸ " + un.length + " 支本机没有权重（sha 为空）：" + un.join("、") : ""));
     })
-    .catch((e) => setMsg("导出失败：" + e.message));
+    .catch((e) => {
+      const detail = (e && (e.name ? e.name + ": " : "") + (e.message || String(e))) || "未知错误";
+      clientLog("exportCardPack", "card=" + String((card && card.name) || "") + " mode=" + mode + " err=" + detail);
+      setMsg("导出失败（v" + CLIENT_VER + "）：" + detail + " —— 细节已写 client-err.log，另：若一直这样请确认侧车 8199 在线");
+    });
 }
 
 /** 卡片容器（.dslcard / .dslrecipe）导入：三档统一走 sidecar 解析
@@ -3480,15 +5381,26 @@ function exportCardPack(cards, cardType, presetMode) {
 function importDslCard(f) { uploadCardPack(f, false); }
 
 function uploadCardPack(f, auto) {
-  setMsg("正在解析 " + f.name + (auto ? "（自动补下载缺失 LoRA）…" : "…"));
-  fetch(EXPANDER + "/stylecards/unpack" + (auto ? "?auto=1" : ""), {
-    method: "POST",
-    headers: { "Content-Type": "application/octet-stream" },
-    body: f,
-  })
-    .then((r) => r.json())
-    .then((d) => {
-      if (!d || !d.ok) { setMsg("导入失败：" + ((d && d.error) || "未知错误")); return; }
+	// 0.7.72：改成 XHR —— 有上传/解析进度、有超时、侧车掉线/返回非 JSON 都会明确报错。
+	// 旧版用 fetch 且只在 promise 链上挂 catch：请求一旦悬着（侧车重启、包太大卡住），
+	// 界面就永远停在「正在解析…」，看不出是传文件慢还是侧车没回。
+	const nm = String((f && f.name) || "卡包");
+	const mb = Math.round(Number((f && f.size) || 0) / 1048576);
+	const t0 = Date.now();
+	let pct = 0, tick = null, done = false;
+	const stop = () => { if (tick) { clearInterval(tick); tick = null; } };
+	const fail = (why) => {
+		if (done) return; done = true; stop();
+		try { clientLog("uploadCardPack", "file=" + nm + " mb=" + mb + " err=" + why); } catch (e) { }
+		setMsg("导入失败：" + why + "（v" + CLIENT_VER + "）");
+	};
+	const applyUnpack = (d) => {
+		if (done) return; done = true; stop();
+      if (!d || !d.ok) {
+        clientLog("uploadCardPack", "resp ok=false err=" + ((d && d.error) || "unknown") + " type=" + ((d && d.cardType) || ""));
+        setMsg("导入失败：" + ((d && d.error) || "未知错误") + "（v" + CLIENT_VER + "）");
+        return;
+      }
       const miss = d.missing || [], conf = d.conflicts || [], bm = d.baseMismatch || [], dd = d.dedup || [];
       const dl = miss.filter((m) => m.source && m.source.url);
       if (!auto && dl.length) {
@@ -3497,7 +5409,12 @@ function uploadCardPack(f, auto) {
           uploadCardPack(f, true); return;
         }
       }
+      let finished = false;
       const finish = (list) => {
+        // 0.7.78：.then(finish) 和 .catch(() => finish(null)) 都会调到这里，
+        // 以前没有守卫 → 一次导入跑两遍（日志里同秒两条 applyCardImport、两次落盘）
+        if (finished) return;
+        finished = true;
         const healed = healCardLoras(d.card, list);
         if (d.cardType === "role") { applyCardImport(d.card); } else { applyStyleImport(d.card); }
         const modeCn = PACK_MODE_CN[d.mode] || d.mode || "未知档位";
@@ -3526,8 +5443,31 @@ function uploadCardPack(f, auto) {
           try { if (window.__dshSetLoras) window.__dshSetLoras(list); } catch (e) {}
         })
         .catch(() => finish(null));
-    })
-    .catch((e) => setMsg("导入失败：" + e));
+	};
+	const xhr = new XMLHttpRequest();
+	try { xhr.open("POST", EXPANDER + "/stylecards/unpack" + (auto ? "?auto=1" : ""), true); } catch (e) { fail("打不开请求：" + e); return; }
+	const hdrs = Object.assign({ "Content-Type": "application/octet-stream" }, sidecarHeaders(EXPANDER));
+	Object.keys(hdrs).forEach((k) => { try { xhr.setRequestHeader(k, hdrs[k]); } catch (e) { } });
+	xhr.timeout = Math.max(180000, mb * 8000);          // 每秒 8MB 的余量，175MB 包 ≈ 23 分钟上限
+	xhr.upload.onprogress = (e) => { if (e.lengthComputable) pct = Math.min(99, Math.round((e.loaded / e.total) * 100)); };
+	xhr.onload = () => {
+		if (xhr.status !== 200) { fail("侧车返回 HTTP " + xhr.status + "：" + String(xhr.responseText || "").slice(0, 160)); return; }
+		let d = null;
+		try { d = JSON.parse(String(xhr.responseText || "null")); } catch (e) { fail("侧车返回的不是 JSON：" + String(xhr.responseText || "").slice(0, 120)); return; }
+		clientLog("uploadCardPack", "resp ok=" + (d && d.ok) + " type=" + (d && d.cardType) + " mode=" + (d && d.mode) +
+			" name=" + ((d && d.card && d.card.name) || "") + " count=" + (d && d.count) + " err=" + ((d && d.error) || ""));
+		applyUnpack(d);
+	};
+	xhr.onerror = () => fail("上传中断：连不上侧车 8199（侧车在重启？）");
+	xhr.ontimeout = () => fail("超时 " + Math.round(xhr.timeout / 1000) + "s 没返回（包 " + mb + " MB）—— 先看 8199 是否在线，再点一次导入");
+	xhr.onabort = () => fail("请求被取消");
+	clientLog("uploadCardPack", "send file=" + nm + " mb=" + mb + " auto=" + (auto ? 1 : 0));
+	setMsg("正在解析 " + nm + "（" + mb + " MB）…");
+	tick = setInterval(() => {
+		const sec = Math.round((Date.now() - t0) / 1000);
+		setMsg("正在解析 " + nm + " · " + sec + "s" + (pct < 100 && pct > 0 ? " · 已传 " + pct + "%" : " · 侧车处理中") + "（v" + CLIENT_VER + "）");
+	}, 1000);
+	try { xhr.send(f); } catch (e) { fail("发不出去：" + e); }
 }
 
 /** 卡内 LoRA 路径自愈：卡被改名、或 _dshcards/<旧卡名>/ 被删之后，
@@ -3612,6 +5552,7 @@ function importReportPanel() {
 
 function applyStyleImport(raw) {
   const list = Array.isArray(raw) ? raw : (raw && Array.isArray(raw.styleCards) ? raw.styleCards : (raw && Array.isArray(raw.cards) ? raw.cards : (raw ? [raw] : [])));
+  clientLog("applyStyleImport", "in=" + list.length + " 条 · 现有 " + ((USER.styleCards || []).length) + " 张");
   const ok = [];
   let added = 0, updated = 0;
   USER.styleCards = USER.styleCards || [];
@@ -3629,7 +5570,11 @@ function applyStyleImport(raw) {
   }
   if (!ok.length) { setMsg("没有可导入的风格卡（每条至少要有 name 与 tags）"); return; }
   saveUser();
-  setMsg("已导入 " + ok.length + " 张：新增 " + added + "，覆盖 " + updated + "（共 " + USER.styleCards.length + " 张自建）");
+  setMsg("已解析 " + ok.length + " 张风格卡：新增 " + added + "，覆盖 " + updated + "，正在落盘…");
+  persistCards(ok, "style").then((r) => {
+    if (r.ok) setMsg("已导入 " + ok.length + " 张风格卡（新增 " + added + "、覆盖 " + updated + "）· 落盘 " + r.ok + " 张到画风目录");
+    else setMsg("导入失败：磁盘写不进去（" + (r.errors[0] || "未知原因") + "）—— 检查 config.json 的 cardsDir");
+  });
 }
 		
 		/** 风格卡卡片（与角色卡同款：封面 + 名称 + 条数 + 标签预览 + 插入 ▾ / 编辑） */
@@ -3696,7 +5641,7 @@ function applyStyleImport(raw) {
 		  const _rgText = d.regressionText != null ? d.regressionText : (d.regression ? JSON.stringify(d.regression) : "");
 		  const set = (k, v) => setStyleEdit((p) => Object.assign({}, p, { [k]: v }));
 		  const setPart = (k, v) => setStyleEdit((p) => Object.assign({}, p, { parts: Object.assign({}, (p || {}).parts || {}, { [k]: v }) }));
-		  const row = { display: "flex", alignItems: "flex-start", gap: "8px", marginBottom: "9px" };
+		  const row = { display: "flex", alignItems: "flex-start", gap: "8px", marginBottom: "9px", flexWrap: "wrap", flexShrink: 0 };
 		  const lab = { width: "78px", fontSize: "12px", color: "var(--c-fg3)", paddingTop: "6px", flex: "none" };
 		  const inp = { flex: 1, minWidth: 0, padding: "5px 8px", borderRadius: "6px", border: "1px solid rgba(var(--c-ink-rgb),.18)", background: "var(--c-card)", color: "var(--c-fg)", fontSize: "12px" };
 		  const chipBox = { display: "flex", flexWrap: "wrap", gap: "6px", flex: 1, alignItems: "center", minHeight: "30px" };
@@ -3752,7 +5697,7 @@ const addLora = () => {
 		    set("loraPick", "");
 		  };
 const noNeg = normPart(d.neg).length;
-		  return h("div", { style: { display: "flex", flexDirection: "column", gap: "2px", maxWidth: "860px" } },
+		  return h("div", { style: { display: "flex", flexDirection: "column", gap: "2px", maxWidth: "860px", width: "100%", minHeight: 0, paddingBottom: "6px" } },
 		    h("div", { style: { fontWeight: 700, fontSize: "14px", color: "var(--c-fg)", marginBottom: "10px" } }, d.isNew ? "新建风格卡" : ("编辑风格卡 · " + (d.name || ""))),
 		    h("div", { style: row }, h("span", { style: lab }, "名称"), h("input", { style: inp, value: d.name || "", placeholder: "例如：干净线稿 · 平涂", onChange: (e) => set("name", e.target.value) })),
 		    h("div", { style: row }, h("span", { style: lab }, "触发词"), h("input", { style: inp, value: parts.trigger || "", placeholder: "画师/风格触发词，一般放最前面（可空）", onChange: (e) => setPart("trigger", e.target.value) })),
@@ -3782,7 +5727,9 @@ h("div", { style: row }, h("span", { style: lab }, "画风 LoRA"),
 		            h("option", { value: "" }, "选一个画风 LoRA…"),
 		            (loras || []).map((n) => h("option", { key: n, value: n }, n))),
 		          h("input", { style: Object.assign({}, inp, { flex: "0 0 66px" }), value: String(d.loraW2 || 0.6), onChange: (e) => set("loraW2", Number(e.target.value) || 0.6), title: "强度" }),
-		          h("button", { style: CARD_BTN, onClick: addLora }, "＋ 加入")),
+		          h("button", { style: CARD_BTN, onClick: addLora }, "＋ 加入"),
+		          h("button", { style: CARD_BTN, onClick: () => loraImport(), title: "把 LoRA 文件导入 ComfyUI\\models\\loras（选文件上传，或填本机绝对路径）" }, "导入"),
+		          h("button", { style: CARD_BTN, onClick: () => loraDelete(d.loraPick), title: "把选中的这支 LoRA 搬进 models\\loras\\_trash（可恢复）" }, "删除")),
 		        h("div", { style: { display: "flex", flexWrap: "wrap", gap: "6px", alignItems: "center" } },
 		          (d.loras || []).length
 		            ? (d.loras || []).map((l, i) => h("span", { key: "lw" + i, style: Object.assign({}, chip, { cursor: "default" }), title: l.name },
@@ -3827,16 +5774,25 @@ mod("style", "画风"),
 		        h("div", { style: { display: "flex", gap: "6px", flexWrap: "wrap" } },
 		          h("label", { style: CARD_BTN }, "选择图片…",
 		            h("input", { type: "file", accept: "image/*", style: { display: "none" }, onChange: pickStyleCoverFile })),
-		          (job && job.image) ? h("button", { style: CARD_BTN_ACCENT, onClick: () => { set("cover", job.image); setMsg("封面已用最近一张出图"); } }, "用最近一张出图") : null,
-		          h("button", { style: CARD_BTN, onClick: () => set("cover", "") }, "清除封面")),
-		        h("input", { style: Object.assign({}, inp, { flex: "none" }), value: String(d.cover || "").indexOf("data:") === 0 ? "（本地上传的图片）" : String(d.cover || ""), placeholder: "也可以贴图片 URL", onChange: (e) => set("cover", e.target.value) }))),
-		    h("div", { style: { display: "flex", gap: "8px", marginTop: "12px", alignItems: "center" } },
-		      h("button", { style: Object.assign({}, CARD_BTN_ACCENT, { padding: "6px 20px" }), onClick: () => saveStyleCard(false) }, "保存"),
-		      h("button", { style: CARD_BTN, onClick: () => saveStyleCard(true), title: "复制成一张新的风格卡，原卡不变" }, "另存为"),
-		h("button", { style: CARD_BTN, onClick: () => exportCardPack([d], "style", "baked"), title: "全量卡包：风格 LoRA 与相关权重全部内嵌，对方解包即用" }, "导出全量卡包"),
-		      h("button", { style: CARD_BTN, onClick: () => { setTagAt(""); setTagNote(""); setTagDraft(""); setStyleEdit(null); } }, "取消"),
-		      (d.isNew || d.builtin) ? null : h("button", { style: CARD_BTN_DANGER, onClick: () => { const cc = styleEdit; setStyleEdit(null); delStyleCard(cc); } }, "删除"),
-		      h("span", { style: { fontSize: "11px", color: "var(--c-fg3)" } }, "封面自动压缩到 ≤560px 存本地")));
+		          (job && job.image) ? h("button", { style: CARD_BTN_ACCENT, onClick: () => applyStyleCover(job.image, "封面已用最近一张出图，并写入卡文件") }, "用最近一张出图") : null,
+		          h("button", { style: CARD_BTN, onClick: () => applyStyleCover("") }, "清除封面")),
+		        h("input", { style: Object.assign({}, inp, { flex: "none" }), value: String(d.cover || "").indexOf("data:") === 0 ? "（本地上传的图片）" : String(d.cover || ""), placeholder: "也可以贴图片 URL", onChange: (e) => set("cover", e.target.value), onBlur: (e) => applyCardCover(e.target.value) }))),
+		    h("div", {
+		      style: {
+		        display: "flex", flexWrap: "wrap", alignItems: "center", gap: "8px",
+		        marginTop: "16px", padding: "10px 0 6px",
+		        borderTop: "1px solid rgba(var(--c-ink-rgb),.10)",
+		        flex: "0 0 auto", background: "var(--c-card)",
+		        flexShrink: 0,
+		      },
+		    },
+		      h("button", { style: Object.assign({}, CARD_BTN_ACCENT, { padding: "6px 20px", flexShrink: 0 }), onClick: () => saveStyleCard(false) }, "保存"),
+		      h("button", { style: Object.assign({}, CARD_BTN, { flexShrink: 0 }), onClick: () => saveStyleCard(true), title: "复制成一张新的风格卡，原卡不变" }, "另存为"),
+		      h("button", { style: Object.assign({}, CARD_BTN, { flexShrink: 0 }), onClick: () => exportCardPack([d], "style", "baked"), title: "全量卡包：风格 LoRA 与相关权重全部内嵌，对方解包即用" }, "导出全量卡包"),
+		h("button", { style: Object.assign({}, CARD_BTN, { flexShrink: 0 }), onClick: () => revealCardFile("style", ""), title: "风格卡存在浏览器本地；这里打开导出的 .json / .dslcard 卡包该放的目录（本地绘画\画风）" }, "打开文件位置"),
+		      h("button", { style: Object.assign({}, CARD_BTN, { flexShrink: 0 }), onClick: () => { setTagAt(""); setTagNote(""); setTagDraft(""); setStyleEdit(null); } }, "取消"),
+		      (d.isNew || d.builtin) ? null : h("button", { style: Object.assign({}, CARD_BTN_DANGER, { flexShrink: 0 }), onClick: () => { const cc = styleEdit; setStyleEdit(null); delStyleCard(cc); } }, "删除这张"),
+		      h("span", { style: { fontSize: "11px", color: "var(--c-fg3)", flex: "1 1 160px", minWidth: 0 } }, "封面自动压缩到 ≤560px 存本地")));
 		}
 		
 		/** 风格卡页：与角色卡同一套布局 */
@@ -3851,7 +5807,10 @@ mod("style", "画风"),
 		      h("span", { style: { flex: 1 } }),
 		      h("button", { style: CARD_BTN, onClick: exportAllStyleCards, title: "把自建风格卡全部导出成一个 .json" }, "导出全部"),
 		      h("label", { style: Object.assign({}, CARD_BTN, { display: "inline-flex", alignItems: "center" }), title: "从 .json / .dslcard / .dslrecipe 导入风格卡" }, "导入", h("input", { type: "file", accept: ".json,.dslcard,.dslrecipe,application/json,application/octet-stream", style: { display: "none" }, onChange: importStyleCards })),
-		      h("button", { style: CARD_BTN_ACCENT, onClick: newStyleCard }, "+ 新建")),
+		h("button", { style: CARD_BTN, onClick: () => revealCardFile("style", ""), title: "在资源管理器里打开风格卡导出目录（本地绘画\画风）" }, "打开文件夹"),
+		      h("button", { style: CARD_BTN_ACCENT, onClick: () => syncKindFromDisk("style", { force: true }), title: "重新读 本地绘画\\画风：目录里删掉的文件，面板上对应的卡也消失" }, "同步目录"),
+			h("button", { style: CARD_BTN, onClick: () => dirClear("style", "风格卡"), title: "把 画风 目录整包搬到 _清空备份，并清空面板（可逆）" }, "清空"),
+			h("button", { style: CARD_BTN, onClick: newStyleCard }, "+ 新建")),
 		    cards.length
 		      ? h("div", Object.assign({ style: { display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(190px,1fr))", gap: "14px" } }, dropJsonProps(importStyleCardsFromFile)), cards.map((c) => styleTile(c)))
 		      : h("div", { style: { padding: "32px", textAlign: "center", fontSize: "13px", color: "var(--c-fg3)", border: "1px dashed rgba(var(--c-ink-rgb),.12)", borderRadius: "10px" } }, "还没有风格卡，点右上角「+ 新建」"),
@@ -3977,6 +5936,35 @@ function stabilizePrompt(text, negText, cards) {
 
 		function cardTab() {
 		if (cardEdit) return cardEditor();
+		const importPasted = () => {
+			const raw = String(pasteText || "").trim();
+			if (!raw) { setMsg("先粘贴卡 JSON"); return; }
+			let obj = null;
+			try { obj = JSON.parse(raw); } catch (e) { setMsg("不是合法 JSON：" + String((e && e.message) || e).slice(0, 80)); return; }
+			if (!obj) { setMsg("粘贴的内容是空的"); return; }
+			setPasteOpen(false);
+			applyCardImport(obj);
+		};
+		const pasteModal = () => h("div", {
+			onClick: () => setPasteOpen(false),
+			style: { position: "fixed", inset: 0, zIndex: 2147483000, background: "rgba(0,0,0,.38)", display: "flex", alignItems: "center", justifyContent: "center" },
+		},
+			h("div", {
+				onClick: (e) => e.stopPropagation(),
+				style: { width: "min(640px, 92vw)", background: "var(--c-panel)", color: "var(--c-fg)", border: "1px solid var(--c-line)",
+					borderRadius: "12px", padding: "14px 16px", display: "flex", flexDirection: "column", gap: "8px", boxShadow: "0 18px 48px rgba(0,0,0,.38)" },
+			},
+				h("div", { style: { fontSize: "13px", fontWeight: 600 } }, "粘贴角色卡 JSON"),
+				h("div", { style: { fontSize: "11.5px", color: "var(--c-fg5)" } }, "整张卡、卡数组、或 { \"cards\": [ … ] } 都能进：每条至少要有 name 与 tags。不依赖文件对话框，任何环境都能用。"),
+				h("textarea", {
+					value: pasteText, onChange: (e) => setPasteText(e.target.value), spellCheck: false,
+					placeholder: '{ "name": "角色名", "tags": "1girl, solo, …", "neg": [], "locks": [] }',
+					style: Object.assign({}, S.input || S.inp, { width: "100%", boxSizing: "border-box", height: "240px", fontFamily: "ui-monospace,Consolas,monospace", fontSize: "11.5px", lineHeight: 1.45, resize: "vertical" }),
+				}),
+				h("div", { style: { display: "flex", gap: "8px" } },
+					h("button", { style: S.btn, onClick: importPasted }, "导入"),
+					h("button", { style: S.btn2, onClick: () => setPasteOpen(false) }, "取消"),
+					h("span", { style: { marginLeft: "auto", fontSize: "11.5px", color: "var(--c-fg5)" } }, "Ctrl+V 粘贴 · Esc 取消"))));
 		const cards = allCards();
 		const nB = cards.filter((c) => c.builtin).length;
 		return h("div", { style: { display: "flex", flexDirection: "column", gap: "14px", padding: "4px 2px", width: "100%" } },
@@ -3985,11 +5973,20 @@ function stabilizePrompt(text, negText, cards) {
 				h("span", { style: { fontSize: "12px", color: "var(--c-fg3)" } }, cards.length + " 张 · 内置 " + nB + " · 自建 " + (cards.length - nB)),
 				h("span", { style: { flex: 1 } }),
 				
-				      h("button", { style: CARD_BTN, onClick: exportAllCards, title: "把自建卡全部导出成一个 .json 备份" }, "导出全部"), h("label", { style: Object.assign({}, CARD_BTN, { display: "inline-block" }), title: "从 .json / .dslcard / .dslrecipe 导入角色卡" }, "导入", h("input", { type: "file", accept: ".json,.dslcard,.dslrecipe,application/json,application/octet-stream", style: { display: "none" }, onChange: importCards })), h("button", { style: CARD_BTN, onClick: newCard }, "＋ 新建")),
+				      h("button", { style: CARD_BTN, onClick: exportAllCards, title: "把自建卡全部导出成一个 .json 备份" }, "导出全部"),
+				      h("label", { style: Object.assign({}, CARD_BTN, { position: "relative", overflow: "hidden", display: "inline-block" }), title: "从 .json / .dslcard / .dslrecipe 导入角色卡（弹不出对话框就用「粘贴 JSON」）" }, "导入",
+				        h("input", { type: "file", accept: ".json,.dslcard,.dslrecipe,application/json,application/octet-stream",
+				          style: { position: "absolute", top: 0, left: 0, width: "100%", height: "100%", opacity: 0, cursor: "pointer", fontSize: "100px" },
+				          onChange: importCards })),
+				      h("button", { style: CARD_BTN, onClick: () => syncCardsFromDisk({ force: true }), title: "重新扫描 config.json 的 cardsDir：磁盘上的卡直接进面板" }, "重扫磁盘"),
+				      h("button", { style: CARD_BTN, onClick: () => { setPasteText(""); setPasteOpen(true); }, title: "不依赖文件对话框：把卡 JSON 粘进来" }, "粘贴 JSON"),
+				h("button", { style: CARD_BTN, onClick: () => revealCardFile("cards", ""), title: "在资源管理器里打开角色卡目录（config.json 的 cardsDir）" }, "打开文件夹"),
+				      h("button", { style: CARD_BTN, onClick: newCard }, "＋ 新建")),
 			cards.length
 				? h("div", Object.assign({ style: { display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(190px,1fr))", gap: "14px" } }, dropJsonProps(importCardsFromFile)), cards.map((c) => cardTile(c)))
 				: h("div", { style: { padding: "32px", textAlign: "center", fontSize: "13px", color: "var(--c-fg3)", border: "1px dashed rgba(var(--c-ink-rgb),.12)", borderRadius: "10px" } }, "还没有角色卡"),
-			h("div", { style: { fontSize: "12px", color: "var(--c-fg3)" } }, "点卡片 = 选中 · 下方「插入 ▾」可选完整插入 / 不插入服饰（换装用），追加到正向/负面末尾（自动去重，不清空已有） · 封面可自定义 · 可导入导出，也可直接拖 .json / .dslcard / .dslrecipe 到卡片区 · v1050"));
+			pasteOpen ? pasteModal() : null,
+			h("div", { style: { fontSize: "12px", color: "var(--c-fg3)" } }, "点卡片 = 选中 · 下方「插入 ▾」可选完整插入 / 不插入服饰（换装用），追加到正向/负面末尾（自动去重，不清空已有） · 封面可自定义 · 可导入导出，也可直接拖 .json / .dslcard / .dslrecipe 到卡片区；磁盘上的卡由「重扫磁盘」同步 · v1051"));
 	}
 
 	// ==================== 预设页 ====================
@@ -4002,6 +5999,7 @@ function presetTab() {
 				h("span", { style: S.label }, "把当前参数与提示词存成预设"),
 				h("div", { style: S.row },
 					h("input", { style: Object.assign({}, S.inp, { width: "150px" }), placeholder: "预设名", value: presetName, onChange: (e) => setPresetName(e.target.value) }),
+			h("button", { style: Object.assign({}, CARD_BTN, { color: "var(--c-bad, #d33)" }), onClick: () => dirClear("cards", "角色卡"), title: "把 角色卡 目录里的文件整包搬到 _清空备份，并清空面板（可逆）" }, "清空"),
 					h("input", { style: Object.assign({}, S.inp, { width: "130px" }), placeholder: "分类(默认)", value: presetCat, onChange: (e) => setPresetCat(e.target.value) }),
 					h("button", { style: S.btn, onClick: savePreset }, "保存为预设"),
 					h("span", { style: S.dim }, "存的是：正/负提示词 + 底模 + LoRA + 尺寸步数 CFG 采样器")),
@@ -4064,7 +6062,8 @@ function presetTab() {
 
 
 	// ==================== 组装 ====================
-	return h("div", { ref: rootRef, style: Object.assign({}, S.wrap, resolveTheme(theme, systemDark), availH ? { height: availH + "px", maxHeight: availH + "px", minHeight: 0 } : null) },
+	return h("div", { ref: rootRef, className: "dcomfy-panel", style: Object.assign({}, S.wrap, resolveTheme(theme, systemDark), availH ? { height: availH + "px", maxHeight: availH + "px", minHeight: 0 } : null) },
+		h("style", { key: "dcomfy-theme-css" }, PANEL_CSS),
 		// 顶栏
 		h("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px", flexWrap: "wrap" } },
 			h("div", { style: { display: "flex", gap: "10px", alignItems: "baseline", flexWrap: "wrap", minWidth: 0, flex: "1 1 auto" } },
@@ -4078,7 +6077,7 @@ function presetTab() {
 							: null,
 				status,
 				h("span", { style: S.dim }, ckpts.length + " 底模 · " + loras.length + " LoRA · " + (USER.presets || []).length + " 预设")),
-			h("div", { style: { display: "flex", gap: "6px" } },
+			h("div", { style: { display: "flex", gap: "6px", marginLeft: "auto", justifyContent: "flex-end", flexWrap: "wrap", minWidth: 0 } },
 				!online ? h("button", { style: S.btn2, title: "手动拉起 ComfyUI（约 20~60 秒）", onClick: async () => {
 				  setOnline(null); setMsg("正在启动 ComfyUI，等 20~60 秒…");
 				  try {
@@ -4120,7 +6119,7 @@ function presetTab() {
 				h("button", { style: S.btn2, onClick: () => window.open(COMFY, "_blank") }, "原界面"),
 				h("select", {
 					style: Object.assign({}, S.sel, { minWidth: "86px", padding: "3px 6px", fontSize: "12px" }),
-					title: "面板配色：跟随系统 / 浅色 / 深色 / 自定义",
+					title: "面板配色：跟随系统 / 浅色 / 深色 / 纯白 / 纯黑 / 自定义",
 					value: (theme && theme.mode) || "auto",
 					onChange: (e) => setTheme(Object.assign({}, THEME_DEFAULTS, theme || {}, { mode: e.target.value })),
 				}, THEME_MODES.map((m) => h("option", { key: m[0], value: m[0] }, m[1]))),
@@ -4162,11 +6161,11 @@ function presetTab() {
 					  msg ? h("span", { title: msg, style: Object.assign({}, S.dim, { marginLeft: "auto", padding: "0 8px", fontSize: "12px", maxWidth: "60%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flexShrink: 1 }, /失败|连不上|离线|没认出来/.test(msg) ? S.bad : {}) }, msg) : null),
 
 		h(TabBoundary, { key: tab },
-			tab === "gen" ? safeTab(genTab, "生成") : null,
-			tab === "style" ? safeTab(styleCardTab, "风格卡") : null,
-			tab === "card" ? safeTab(cardTab, "角色卡") : null,
-			tab === "lib" ? safeTab(libTab, "词库") : null,
-			tab === "preset" ? safeTab(presetTab, "预设") : null),
+			tab === "gen" ? h(genTab, { key: "gen" }) : null,
+			tab === "style" ? h(styleCardTab, { key: "style" }) : null,
+			tab === "card" ? h(cardTab, { key: "card" }) : null,
+			tab === "lib" ? h(libTab, { key: "lib" }) : null,
+			tab === "preset" ? h(presetTab, { key: "preset" }) : null),
 		impRep ? importReportPanel() : null,
 
 
