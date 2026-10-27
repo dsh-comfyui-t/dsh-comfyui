@@ -21,6 +21,7 @@ import hashlib
 import io
 import json
 import os
+import re
 import sys
 import zipfile
 
@@ -44,6 +45,32 @@ def relfiles(base, skip=FORBIDDEN_PART):
             p = os.path.join(dirpath, fn)
             out.append(os.path.relpath(p, base).replace('\\', '/'))
     return sorted(out)
+
+
+def local_imports(plug):
+    """扫 plugin/*.py 的「同目录本地模块」依赖。
+
+    白名单制打包只按 package.json files 收件 —— files 里少写一个 .py，
+    装完就是启动即 ModuleNotFoundError（0.7.81 实际事故：sidecar_dirs.py
+    与 sidecar_loras.py 都漏了，expander.py 第 129 行直接崩）。
+    """
+    mods = {fn[:-3] for fn in os.listdir(plug) if fn.endswith('.py')}
+    deps = {}
+    for fn in sorted(os.listdir(plug)):
+        if not fn.endswith('.py'):
+            continue
+        try:
+            text = io.open(os.path.join(plug, fn), encoding='utf-8').read()
+        except Exception:
+            continue
+        for m in re.finditer(r'^\s*(?:from\s+([A-Za-z_]\w*)\s+import|import\s+([A-Za-z_]\w*))', text, re.M):
+            name = m.group(1) or m.group(2)
+            if name == fn[:-3]:
+                continue
+            # sidecar_* 前缀一律算本地依赖 —— 文件被漏掉时正好靠这条抓出来
+            if name in mods or name.startswith('sidecar_'):
+                deps.setdefault(fn, set()).add(name)
+    return deps
 
 
 def expand(items, plug):
@@ -118,6 +145,17 @@ def main():
     inst = os.path.join(suite, 'install')
     if os.path.isdir(inst):
         wanted.extend('install/' + r for r in relfiles(inst))
+
+    # 白名单漏一个本地模块 = 装完起不来，所以这里先拦一道
+    deps = local_imports(plug)
+    miss_mod = sorted({d for s in deps.values() for d in s if ('plugin/%s.py' % d) not in wanted})
+    if miss_mod:
+        die('本地模块被 import 但没进白名单（package.json files）：' + ', '.join(m + '.py' for m in miss_mod))
+    notpacked = [fn for fn in sorted(os.listdir(plug))
+                 if fn.endswith('.py') and ('plugin/' + fn) not in wanted]
+    if notpacked:
+        die('plugin 根目录的 .py 没进白名单：' + ', '.join(notpacked))
+    print('[OK] import 覆盖：%d 个 py 的本地依赖全部在包内' % len([f for f in os.listdir(plug) if f.endswith('.py')]))
 
     REQUIRED = ('plugin/package.json', 'plugin/cordis.patch.yml', 'plugin/lib/index.js',
                 'plugin/lib/client.js', 'plugin/expander.py', 'VERSION.json', 'LICENSE')

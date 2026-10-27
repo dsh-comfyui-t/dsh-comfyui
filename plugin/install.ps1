@@ -73,7 +73,9 @@ Say ('Python: ' + $PythonExe)
 
 # ---- 3. defaults for dirs ----
 if (-not $WorkDir)   { $WorkDir = Join-Path $here 'work' }
-if (-not $CardsDir)  { $CardsDir = Join-Path $WorkDir 'cards' }
+# Default cardsDir lives under the user Documents folder, never inside the plugin dir
+# (plugin upgrade replaces the whole directory and would take the cards with it).
+if (-not $CardsDir)  { $CardsDir = Join-Path ([Environment]::GetFolderPath('MyDocuments')) 'dsh-comfyui\cards' }
 if (-not $OutputDir) { $OutputDir = Join-Path $ComfyRoot 'output' }
 foreach ($d in @($WorkDir, $CardsDir)) {
   if (-not (Test-Path -LiteralPath $d)) { New-Item -ItemType Directory -Force -Path $d | Out-Null }

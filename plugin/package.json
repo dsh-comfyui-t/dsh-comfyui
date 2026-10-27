@@ -1,6 +1,6 @@
 {
-  "name": "@local/dsh-comfyui-console",
-  "version": "0.7.0",
+  "name": "dsh-comfyui-console",
+  "version": "0.7.151",
   "description": "ComfyUI drawing console for DSH (Anima / LLLite / role & style cards)",
   "type": "module",
   "main": "lib/index.js",
@@ -14,32 +14,53 @@
     "./package.json": "./package.json"
   },
   "files": [
-    "lib/",
-    "docs/",
+    "lib/client.js",
+    "lib/index.js",
     "expander.py",
     "sidecar_auth.py",
     "sidecar_cards.py",
     "sidecar_comfy.py",
     "sidecar_config.py",
+    "sidecar_dirs.py",
     "sidecar_llm.py",
+    "sidecar_loras.py",
     "sidecar_pack.py",
     "sidecar_routes.py",
     "sidecar_state.py",
     "sidecar_util.py",
+    "sidecar_aline.py",
+    "aline_mods/comfy_install.py",
+    "aline_mods/comfy_paths.py",
+    "aline_mods/compatibility.py",
+    "aline_mods/cross_paths.py",
+    "aline_mods/face_models.py",
+    "aline_mods/install_post_controls.py",
+    "aline_mods/install_translation.py",
+    "aline_mods/launch_modes.py",
+    "aline_mods/model_assets.py",
+    "aline_mods/offline_translation.py",
+    "aline_mods/online_models.py",
+    "aline_mods/post_processing.py",
+    "aline_mods/runtime_bridge.py",
+    "aline_mods/tag_dictionary.py",
+    "dictionary_seed.json",
+    "install_post_controls.py",
+    "install_translation.py",
+    "face_models.py",
+    "comfy_nodes/",
     "config.example.json",
     "cordis.patch.yml",
-    "install.ps1",
-    "README.md",
-    "lora来源.example.json",
     "routes.json",
-    "tools/build_client.py",
+    "lora来源.json",
+    "README.md",
     "CHANGELOG.md",
-    "tools/update.ps1",
-    "tools/build_suite.py"
+    "install.ps1",
+    "docs/"
   ],
   "scripts": {
-    "build:client": "python tools/build_client.py",
-    "check:client": "python tools/build_client.py --check"
+    "build:client": "node tools/build_client.mjs",
+    "check:client": "node tools/build_client.mjs --check",
+    "build:client:py": "python tools/build_client.py"
   },
   "keywords": [
     "dsh",
@@ -59,7 +80,8 @@
     "minHost": "0.2.0-rc.2",
     "update": {
       "inPlace": [
-        "lib/",
+        "lib/client.js",
+        "lib/index.js",
         "expander.py",
         "sidecar_auth.py",
         "sidecar_cards.py",
@@ -71,7 +93,16 @@
         "sidecar_state.py",
         "sidecar_util.py",
         "routes.json",
-        "lora来源.json"
+        "lora来源.json",
+        "sidecar_dirs.py",
+        "sidecar_loras.py",
+        "sidecar_aline.py",
+        "aline_mods/",
+        "dictionary_seed.json",
+        "install_post_controls.py",
+        "install_translation.py",
+        "face_models.py",
+        "comfy_nodes/"
       ],
       "preserve": [
         "config.json",
@@ -81,6 +112,9 @@
         "outputDir"
       ],
       "restart": "dsh web"
+    },
+    "bundle": {
+      "patch": "./cordis.patch.yml"
     }
   },
   "peerDependencies": {

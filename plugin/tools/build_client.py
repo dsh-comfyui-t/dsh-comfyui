@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""build_client.py —— 从 lib/{dict,presets,workflow,app}.js 拼接 lib/client.js
+"""build_client.py —— 从 lib/{dict,presets,workflow,dictcard,app}.js 拼接 lib/client.js
 
 背景：DSH 客户端插件只认一个 ./client 导出，浏览器里没有文件系统，
 require() 不能解析同目录文件，所以四个源文件必须拼成一个单文件。
@@ -8,6 +8,7 @@ require() 不能解析同目录文件，所以四个源文件必须拼成一个�
     // ==== ... （来自 lib/dict.js）====
     // ==== ... （来自 lib/presets.js）====
     // ==== ... （来自 lib/workflow.js）====
+    // ==== ... （来自 lib/dictcard.js）====
     // ==== ... （来自 lib/app.js）====
 标记之前的包装头（window.__ModuleLoader__ 那段）和 app.js 之后的
 exports.apply / return module.exports 尾巴都原样保留。
@@ -24,7 +25,7 @@ CLIENT = os.path.join(LIB, 'client.js')
 IND = '\t\t'
 TAIL_ANCHOR = '\n' + IND + 'exports.apply = apply;'
 MARK_RE = re.compile(r'(?m)^' + IND + r'// =+ [^\n]*\u6765\u81ea lib/(\w+)\.js[^\n]*$')
-SOURCES = ('dict', 'presets', 'workflow', 'app')
+SOURCES = ('dict', 'presets', 'workflow', 'dictcard', 'online_models', 'app')
 EXPORT_RE = re.compile(r'^[ \t]*export\s+(default\s+)?')
 
 
@@ -62,10 +63,12 @@ def main():
         same = (c == new)
         print('client.js 与源文件一致' if same else 'client.js 落后于源文件')
         print('差异: %+d 字符' % (len(new) - len(c)))
-        return 0 if same else 1
+        if not same:
+            return 1
+        return check_module_id()
     if c == new:
         print('已是最新，无需重建')
-        return 0
+        return check_module_id()
     # 备份放在包外：放 lib/ 里会被打进发布包（0.5.7 实测漏过一次）
     BAK_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), '.build-backup')
     os.makedirs(BAK_DIR, exist_ok=True)
@@ -74,6 +77,25 @@ def main():
     with io.open(CLIENT, 'w', encoding='utf-8', newline='') as f:
         f.write(new)
     print('重建完成: %d -> %d 字符  备份 %s' % (len(c), len(new), os.path.basename(bak)))
+    return check_module_id()
+
+
+def check_module_id():
+    """client.js 里 window.__ModuleLoader__.load({ id }) 必须等于 package.json 的 name。
+
+    踩过：0.6.1 上游那份 client.js 的 id 是 `@local/dsh-comfyui-console`（他们的包名），
+    直接并到我方线后包里带的 id 与宿主挂载 id 不一致 —— 本机因为宿主改写才看不出问题，
+    换台机器装就是「插件装上了但面板不出现」。所以让构建脚本自己盯住。
+    """
+    import json
+    pkg = os.path.join(os.path.dirname(HERE), 'package.json')
+    name = json.loads(io.open(pkg, encoding='utf-8').read())['name']
+    c = read(CLIENT)
+    want = '\tid: "%s",' % name
+    if want not in c:
+        print('[FAIL] client.js 模块 id 不是 %s（应为本包名）' % name)
+        return 1
+    print('[ok  ] 模块 id = %s' % name)
     return 0
 
 
