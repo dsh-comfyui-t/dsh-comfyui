@@ -25,7 +25,7 @@ CLIENT = os.path.join(LIB, 'client.js')
 IND = '\t\t'
 TAIL_ANCHOR = '\n' + IND + 'exports.apply = apply;'
 MARK_RE = re.compile(r'(?m)^' + IND + r'// =+ [^\n]*\u6765\u81ea lib/(\w+)\.js[^\n]*$')
-SOURCES = ('dict', 'presets', 'workflow', 'dictcard', 'app')
+SOURCES = ('dict', 'presets', 'workflow', 'dictcard', 'online_models', 'app')
 EXPORT_RE = re.compile(r'^[ \t]*export\s+(default\s+)?')
 
 

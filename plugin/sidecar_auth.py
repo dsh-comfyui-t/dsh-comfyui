@@ -51,6 +51,13 @@ import secrets  # noqa: E402  （放在常量区之后，避免改动文件头�
 
 _TOKEN_CACHE = {'token': ''}
 _OPEN_PATHS = ('/health', '/version')
+# <img src> 是浏览器直接发的图片请求：既不能加 X-Console-Client，也不带 Origin，
+# 落进 token 分支必然 401 —— 表现就是"图全裂"。这些前缀只返回图片字节
+# （输出图 / 输出缩略图 / 模型预览图 / 在线模型图），不涉及写操作与本机任意路径读取，
+# 所以按只读放行。写操作和其余 GET 仍然走原鉴权。
+# /loras/file 单独一个理由：导出走浏览器 <a download>，拿不到自定义头；它只返回
+# models/loras 里的文件（_abs_of 已挡掉 .. 之类），仍然是只读。
+_OPEN_GET_PREFIXES = ('/outputs/view', '/outputs/thumb', '/models/preview', '/online/images/', '/loras/file')
 
 
 def _token_file():
@@ -105,6 +112,8 @@ def _auth_ok(handler, path):
     if handler.command == 'OPTIONS':
         return True
     if path in _OPEN_PATHS:
+        return True
+    if handler.command == 'GET' and path.startswith(_OPEN_GET_PREFIXES):
         return True
     # ⚠️ Origin 是**客户端可控的请求头**，单看它挡不住本机恶意进程（见 docs/生成经验.md #8）。
     #    所以这里做两道叠闸：

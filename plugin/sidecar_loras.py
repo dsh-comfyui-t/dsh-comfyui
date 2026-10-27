@@ -227,6 +227,86 @@ def _loras_del(name):
     return {'ok': True, 'name': os.path.basename(fp), 'from': fp, 'trash': trash, 'left': left,
             'note': '已搬进 _trash（不硬删，想恢复搬回来）'}
 
+
+def _loras_rename(name, new_name):
+    """同目录内改文件名。
+
+    `new_name` 只取文件名部分，带路径会被砍成 basename；不带扩展名时沿用原名扩展名，
+    免得把 .safetensors 改成别的东西之后 ComfyUI 认不出来。"""
+    root, fp = _abs_of(name)
+    if not root:
+        return {'ok': False, 'error': '找不到 models/loras 目录'}
+    if not fp or not os.path.isfile(fp):
+        return {'ok': False, 'error': '文件不存在: %s' % (name or '')}
+    base = os.path.basename(str(new_name or '').strip().replace('\\', '/'))
+    if not base:
+        return {'ok': False, 'error': '新名字不能为空'}
+    stem, ext = os.path.splitext(base)
+    if not stem:
+        return {'ok': False, 'error': '新名字不合法'}
+    if not ext:
+        ext = os.path.splitext(fp)[1]
+    for ch in '/\\:*?"<>|':
+        if ch in stem:
+            return {'ok': False, 'error': '名字里不能有 %s' % ch}
+    tgt = os.path.join(os.path.dirname(fp), stem + ext)
+    if os.path.abspath(tgt) == os.path.abspath(fp):
+        return {'ok': True, 'name': name, 'unchanged': True}
+    if os.path.exists(tgt):
+        return {'ok': False, 'error': '同目录已经有「%s」' % (stem + ext)}
+    try:
+        os.rename(fp, tgt)
+    except Exception as e:
+        return {'ok': False, 'error': '改名失败: %s' % e}
+    rel = os.path.relpath(tgt, root).replace(os.sep, '/')
+    return {'ok': True, 'name': rel, 'old': name}
+
+
+def _loras_move(name, folder):
+    """把 LoRA 挪进 models/loras 下的子文件夹；`folder` 为空 = 挪回根目录。
+
+    分类本来就是由文件夹位置决定的，所以「拖到分类上」直接调这个就够，
+    不需要另存一张分类表。目标目录不存在时现建。"""
+    root, fp = _abs_of(name)
+    if not root:
+        return {'ok': False, 'error': '找不到 models/loras 目录'}
+    if not fp or not os.path.isfile(fp):
+        return {'ok': False, 'error': '文件不存在: %s' % (name or '')}
+    seg = str(folder or '').replace('\\', '/').strip().strip('/')
+    parts = [x for x in seg.split('/') if x and x not in ('.', '..')]
+    if parts and parts[0] in SKIP_DIRS:
+        return {'ok': False, 'error': '不能放进 %s' % parts[0]}
+    dst_dir = os.path.join(root, *parts) if parts else root
+    tgt = os.path.join(dst_dir, os.path.basename(fp))
+    if os.path.abspath(tgt) == os.path.abspath(fp):
+        return {'ok': True, 'name': name, 'unchanged': True}
+    if os.path.exists(tgt):
+        return {'ok': False, 'error': '目标文件夹里已经有同名文件'}
+    try:
+        os.makedirs(dst_dir, exist_ok=True)
+        shutil.move(fp, tgt)
+    except Exception as e:
+        return {'ok': False, 'error': '移动失败: %s' % e}
+    rel = os.path.relpath(tgt, root).replace(os.sep, '/')
+    return {'ok': True, 'name': rel, 'old': name}
+
+
+def _loras_file(name):
+    """导出一个 LoRA：返回 ((绝对路径, 字节数), '') 或 (None, 错误)。
+
+    只允许 models/loras 里面的文件（_abs_of 已经挡掉相对路径里的 .. 之类），
+    所以拿到的 fp 一定落在 loras 根下。
+    """
+    root, fp = _abs_of(name)
+    if not root:
+        return None, '找不到 models/loras 目录'
+    if not fp or not os.path.isfile(fp):
+        return None, '文件不存在: %s' % (name or '')
+    try:
+        return (fp, os.path.getsize(fp)), ''
+    except Exception as e:
+        return None, '读取失败: %s' % e
+
 # ---------------- 从网站下载 / 压缩包 / 下载文件夹扫描（0.7.71） ----------------
 
 def _max_bytes():

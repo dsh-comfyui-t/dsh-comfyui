@@ -188,8 +188,7 @@ def main():
         return
     io.open(os.path.join(suite, 'MANIFEST.sha256'), 'w', encoding='utf-8', newline='\n').write(man)
 
-    _bv = ver.get('version') or ver.get('bundleVersion') or ver['components']['plugin']['version']
-    name = a.name or ('绘图台双卡套件-%s-%s' % (_bv, ver.get('builtAt', '')[:10]))
+    name = a.name or ('绘图台双卡套件-%s-%s' % (ver['bundleVersion'], ver.get('builtAt', '')[:10]))
     os.makedirs(a.out, exist_ok=True)
     zp = os.path.join(a.out, name + '.zip')
     with zipfile.ZipFile(zp, 'w', zipfile.ZIP_DEFLATED) as z:

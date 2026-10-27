@@ -34,6 +34,7 @@ def _cards_scan(d):
         return {'ok': False, 'error': '目录不存在: %s' % d, 'cards': []}
     out = []
     files = []
+    skipped = []
     for fn in os.listdir(d):
         if not fn.lower().endswith('.json'):
             continue
@@ -54,8 +55,14 @@ def _cards_scan(d):
         elif isinstance(raw, list):
             lst = raw
         elif isinstance(raw, dict):
+            # 非卡 JSON（如 lllite-index.json）：顶层既没有 cards 数组，也没有 name+tags/parts
+            if not (str(raw.get('name') or '').strip()
+                    and (str(raw.get('tags') or '').strip() or raw.get('parts'))):
+                skipped.append(os.path.basename(fp))
+                continue
             lst = [raw]
         else:
+            skipped.append(os.path.basename(fp))
             continue
         for c in lst:
             if not isinstance(c, dict):
@@ -67,7 +74,7 @@ def _cards_scan(d):
             c = dict(c)
             c['__file'] = fp
             out.append(c)
-    return {'ok': True, 'dir': d, 'count': len(out), 'cards': out}
+    return {'ok': True, 'dir': d, 'count': len(out), 'cards': out, 'skipped': skipped}
 
 
 def _cards_write(body):

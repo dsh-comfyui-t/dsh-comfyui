@@ -8,9 +8,10 @@ DSH 里的 ComfyUI 前端：底模切换、LoRA 多选、提示词扩展、**角
 
 | 项 | 要求 |
 |---|---|
-| DSH | 宿主版本能加载 Cordis 插件（`@deepseek-ai/cordis ^0.5.3`）。最低宿主 `minHost` 见 `package.json` → `dsh.minHost`（当前 `0.2.0-rc.2`），低于它插件不会被装载 |
+| minHost | `dsh.configVersion` 2 / `minHost` 见 `package.json` |
+| DSH | 宿主版本能加载 Cordis 插件（`@deepseek-ai/cordis ^0.5.3`） |
 | Node | 随 DSH 自带的版本即可 |
-| Python | 3.10+，**只用标准库**（侧车不依赖 torch / 不装任何包）。侧车按职责拆成 9 个模块：`expander.py` 只剩 HTTP 分发，其余见 `sidecar_*.py`（state / util / routes / llm / comfy / config / cards / pack / auth） |
+| Python | 3.10+。核心路径**只用标准库**（侧车不依赖 torch）；`Pillow` 强烈建议装（缩略图与卡包封面），`psutil` / `PyYAML` / `ctranslate2` 按需 —— 详见 `requirements.txt`。侧车按职责拆成 9 个模块：`expander.py` 只剩 HTTP 分发，其余见 `sidecar_*.py`（state / util / routes / llm / comfy / config / cards / pack / auth） |
 | ComfyUI | 便携版（带 `python_embeded\python.exe`）或普通 clone（带 `main.py`），需有 Anima 节点族 |
 | 模型 | 底模 `anima-aesthetic-v1.1`（角色）/ `anima-base-v1.0`（画风）+ `qwen_3_06b_base.safetensors` + `qwen_image_vae.safetensors` |
 
@@ -66,7 +67,7 @@ Invoke-RestMethod http://127.0.0.1:8199/health
 浏览器会把该地址作为 `Origin` 发过来，**默认会被 403 拒绝**。要开就给 `config.json` 加 `"allowLan": true` 并重启 dsh web
 （或在 `install.ps1` 时加 `-AllowLan`）。只放行私网段，公网地址始终拒绝；服务端脚本/curl 不带 Origin，不受影响。
 
-## 5.1 鉴权与请求体上限（0.7.92 起重写）
+## 5.1 鉴权与请求体上限（0.7.151 起重写）
 
 侧车（127.0.0.1:8199）能花 API key（`/expand`）、写卡（`/cards/write`）、停服务（`/comfy/stop`），所以设两道**叠闸**：
 
@@ -176,7 +177,7 @@ ESM 缓存是**按进程**的，所以页面刷新不够；也不要给插件名
 
 ## 10. 包名与改名
 
-当前包名是 `dsh-comfyui-console`（v0.7.92，已去掉 `private`、带 `files` 白名单与 `dsh` 更新元数据，可 `npm pack` / 拷目录安装）。
+当前包名是 `dsh-comfyui-console`（v0.7.151，已去掉 `private`、带 `files` 白名单与 `dsh` 更新元数据，可 `npm pack` / 拷目录安装）。
 
 再改名要**同时**动五处，漏一处就装载失败：
 

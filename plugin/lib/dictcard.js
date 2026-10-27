@@ -1,77 +1,3 @@
-// 词库小卡片的两个组件：一对输入框（中文备注 + 英文标签 + 词性）和整张卡片的编辑弹层。
-// 独立成段是为了把 app.js 里 9k 字符的 JSX 挪走；拼接后仍在同一个工厂作用域里。
-
-/** 词性三键：正 / 负 / 自（自＝没标，插入时按正向算） */
-function PolKeys(props) {
-	const cur = props.pol || "";
-	return ["pos", "neg", ""].map((k) => h("button", {
-		key: "p" + (k || "auto"),
-		type: "button",
-		title: k === "pos" ? "永远进正向" : (k === "neg" ? "永远进负面（插入时进负面栏）" : "自动：没标词性，插入时按正向"),
-		onClick: (e) => {
-			if (e && e.stopPropagation) e.stopPropagation();
-			if (props.onPick) props.onPick(k);
-		},
-		style: {
-			fontSize: "10.5px", lineHeight: 1.15, padding: "1px 6px", borderRadius: "999px", cursor: "pointer",
-			background: cur === k ? (k === "neg" ? "var(--c-bad-bg)" : (k === "pos" ? "var(--c-accent-bg2)" : "var(--c-panel2)")) : "transparent",
-			color: k === "neg" ? "var(--c-bad)" : (k === "pos" ? "var(--c-fg2)" : "var(--c-fg5)"),
-			border: "1px solid " + (cur === k ? (k === "neg" ? "var(--c-bad)" : (k === "pos" ? "var(--c-accent)" : "var(--c-line)")) : "var(--c-line)"),
-		},
-	}, k === "pos" ? "正" : k === "neg" ? "负" : "自"));
-}
-
-/** 一对输入：中文备注 + 英文标签 + 词性 + 按钮。草稿自己管，提交交给外面 */
-function CapPairInput(props) {
-	const [cn, setCn] = React.useState(props.initCn || "");
-	const [en, setEn] = React.useState(props.initEn || "");
-	const [myPol, setMyPol] = React.useState(props.pol || "");   // 自管词性（新增那行用）
-	const curPol = props.onPol ? (props.pol || "") : myPol;      // 外部给了 onPol 就是受控
-	const pickPol = (k) => { if (props.onPol) props.onPol(k); else setMyPol(k); };
-	const submit = () => {
-		const c = String(cn).trim(), e = String(en).trim();
-		setCn(""); setEn("");
-		props.onCommit(c, e, curPol);
-	};
-	const inputStyle = { padding: "2px 5px", borderRadius: "999px", fontSize: "11.5px", border: "none", background: "transparent", color: "var(--c-fg)" };
-	return h("span", {
-		style: { display: "inline-flex", alignItems: "center", gap: "2px", padding: "1px 3px 1px 8px", borderRadius: "999px",
-			border: "1px dashed var(--c-line)", background: props.accent ? "var(--c-accent-bg2)" : "transparent",
-			flex: props.grow ? "1 1 240px" : "0 0 auto", minWidth: props.grow ? "180px" : "0" },
-	},
-		h("input", {
-			autoFocus: !!props.autoFocus, value: cn, placeholder: "中文备注",
-			onChange: (e) => setCn(e.target.value),
-			onKeyDown: (e) => {
-				if (e.key === "Enter") { e.preventDefault(); e.stopPropagation(); submit(); }
-				else if (e.key === "Escape") { e.stopPropagation(); props.onCancel(); }
-			},
-			style: Object.assign({ width: "92px" }, inputStyle),
-		}),
-		h("span", { style: { width: "1px", height: "14px", background: "var(--c-line)", flexShrink: 0 } }),
-		h("input", {
-			value: en, placeholder: props.enHint || "英文标签",
-			onChange: (e) => setEn(e.target.value),
-			onKeyDown: (e) => {
-				if (e.key === "Enter" || e.key === "," || e.key === "，") { e.preventDefault(); e.stopPropagation(); submit(); }
-				else if (e.key === "Backspace" && !en && props.onEmptyBackspace) { e.preventDefault(); e.stopPropagation(); props.onEmptyBackspace(); }
-				else if (e.key === "Escape") { e.stopPropagation(); props.onCancel(); }
-			},
-			onBlur: () => { const c = String(cn).trim(), e2 = String(en).trim(); if (e2 && props.onBlur) props.onBlur(c, e2, curPol); },
-			style: Object.assign({ flex: props.grow ? "1 1 110px" : "0 0 auto", width: props.grow ? null : "136px", minWidth: "88px" }, inputStyle),
-		}),
-		props.showPol === false ? null : h(PolKeys, { pol: curPol, onPick: pickPol }),
-		h("button", {
-			style: Object.assign({}, S.btn2, { padding: "1px 9px", fontSize: "11px", borderRadius: "999px" }),
-			title: props.btnTitle || "", onClick: submit,
-		}, props.btn || "加"),
-		props.onDrop ? h("button", {
-			style: Object.assign({}, S.btn2, { padding: "1px 8px", fontSize: "11px", borderRadius: "999px", borderColor: "var(--c-bad)", color: "var(--c-bad)" }),
-			onClick: () => props.onDrop(),
-		}, "删掉") : null);
-}
-
-/** 词库小卡片编辑弹层：中文名 + 胶囊提示词（每颗带词性）+ 保存 / 删除 / 导出 */
 function DictCardEditor(props) {
 	const d = props.draft || {};
 	const patch = props.patch;
@@ -214,3 +140,78 @@ function DictCardEditor(props) {
 					"原：", d.cn, " → ", d.e2)
 				: null));
 }
+
+// 词库小卡片的两个组件：一对输入框（中文备注 + 英文标签 + 词性）和整张卡片的编辑弹层。
+// 独立成段是为了把 app.js 里 9k 字符的 JSX 挪走；拼接后仍在同一个工厂作用域里。
+
+/** 词性三键：正 / 负 / 自（自＝没标，插入时按正向算） */
+function PolKeys(props) {
+	const cur = props.pol || "";
+	return ["pos", "neg", ""].map((k) => h("button", {
+		key: "p" + (k || "auto"),
+		type: "button",
+		title: k === "pos" ? "永远进正向" : (k === "neg" ? "永远进负面（插入时进负面栏）" : "自动：没标词性，插入时按正向"),
+		onClick: (e) => {
+			if (e && e.stopPropagation) e.stopPropagation();
+			if (props.onPick) props.onPick(k);
+		},
+		style: {
+			fontSize: "10.5px", lineHeight: 1.15, padding: "1px 6px", borderRadius: "999px", cursor: "pointer",
+			background: cur === k ? (k === "neg" ? "var(--c-bad-bg)" : (k === "pos" ? "var(--c-accent-bg2)" : "var(--c-panel2)")) : "transparent",
+			color: k === "neg" ? "var(--c-bad)" : (k === "pos" ? "var(--c-fg2)" : "var(--c-fg5)"),
+			border: "1px solid " + (cur === k ? (k === "neg" ? "var(--c-bad)" : (k === "pos" ? "var(--c-accent)" : "var(--c-line)")) : "var(--c-line)"),
+		},
+	}, k === "pos" ? "正" : k === "neg" ? "负" : "自"));
+}
+
+/** 一对输入：中文备注 + 英文标签 + 词性 + 按钮。草稿自己管，提交交给外面 */
+function CapPairInput(props) {
+	const [cn, setCn] = React.useState(props.initCn || "");
+	const [en, setEn] = React.useState(props.initEn || "");
+	const [myPol, setMyPol] = React.useState(props.pol || "");   // 自管词性（新增那行用）
+	const curPol = props.onPol ? (props.pol || "") : myPol;      // 外部给了 onPol 就是受控
+	const pickPol = (k) => { if (props.onPol) props.onPol(k); else setMyPol(k); };
+	const submit = () => {
+		const c = String(cn).trim(), e = String(en).trim();
+		setCn(""); setEn("");
+		props.onCommit(c, e, curPol);
+	};
+	const inputStyle = { padding: "2px 5px", borderRadius: "999px", fontSize: "11.5px", border: "none", background: "transparent", color: "var(--c-fg)" };
+	return h("span", {
+		style: { display: "inline-flex", alignItems: "center", gap: "2px", padding: "1px 3px 1px 8px", borderRadius: "999px",
+			border: "1px dashed var(--c-line)", background: props.accent ? "var(--c-accent-bg2)" : "transparent",
+			flex: props.grow ? "1 1 240px" : "0 0 auto", minWidth: props.grow ? "180px" : "0" },
+	},
+		h("input", {
+			autoFocus: !!props.autoFocus, value: cn, placeholder: "中文备注",
+			onChange: (e) => setCn(e.target.value),
+			onKeyDown: (e) => {
+				if (e.key === "Enter") { e.preventDefault(); e.stopPropagation(); submit(); }
+				else if (e.key === "Escape") { e.stopPropagation(); props.onCancel(); }
+			},
+			style: Object.assign({ width: "92px" }, inputStyle),
+		}),
+		h("span", { style: { width: "1px", height: "14px", background: "var(--c-line)", flexShrink: 0 } }),
+		h("input", {
+			value: en, placeholder: props.enHint || "英文标签",
+			onChange: (e) => setEn(e.target.value),
+			onKeyDown: (e) => {
+				if (e.key === "Enter" || e.key === "," || e.key === "，") { e.preventDefault(); e.stopPropagation(); submit(); }
+				else if (e.key === "Backspace" && !en && props.onEmptyBackspace) { e.preventDefault(); e.stopPropagation(); props.onEmptyBackspace(); }
+				else if (e.key === "Escape") { e.stopPropagation(); props.onCancel(); }
+			},
+			onBlur: () => { const c = String(cn).trim(), e2 = String(en).trim(); if (e2 && props.onBlur) props.onBlur(c, e2, curPol); },
+			style: Object.assign({ flex: props.grow ? "1 1 110px" : "0 0 auto", width: props.grow ? null : "136px", minWidth: "88px" }, inputStyle),
+		}),
+		props.showPol === false ? null : h(PolKeys, { pol: curPol, onPick: pickPol }),
+		h("button", {
+			style: Object.assign({}, S.btn2, { padding: "1px 9px", fontSize: "11px", borderRadius: "999px" }),
+			title: props.btnTitle || "", onClick: submit,
+		}, props.btn || "加"),
+		props.onDrop ? h("button", {
+			style: Object.assign({}, S.btn2, { padding: "1px 8px", fontSize: "11px", borderRadius: "999px", borderColor: "var(--c-bad)", color: "var(--c-bad)" }),
+			onClick: () => props.onDrop(),
+		}, "删掉") : null);
+}
+
+/** 词库小卡片编辑弹层：中文名 + 胶囊提示词（每颗带词性）+ 保存 / 删除 / 导出 */
