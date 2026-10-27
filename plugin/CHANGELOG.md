@@ -2297,6 +2297,8 @@ for _s in (sys.stdout, sys.stderr):
 - 验证：`BG` 21 个成员全部为 function（`tasksSnapshot` `adopt` `run` `retrySave` `cancel` `progress` `shutdown` `setJob` `startWatch` `stopWatch` `emit` `subscribe` `snapshot` `clear` `isFinished`）；`node --check` 通过；求值零错误；`client.js` 重建 1,007,510 B（`PBG`×5、`tasksSnapshot`×5）。
 - 顺带核过 194 个同名全局的成员访问，只有 BG 一个真缺；`S` 样式 17 个键本地齐全（`btn2` 定义 1 处、引用 147 次）；`USER.seedVer` 是 A 线 presets 种子版本号，其代码自己处理 `undefined`，不需要补。## 0.7.95 · 2026-10-27 · 正式合并（拆掉「扩展」套娃）
 
+## 0.7.95 · 2026-10-27 · A 线拆平：顶层 7 个 tab，PreviewConsole 受控常挂载
+
 0.7.94 里 A 线功能是塞在一个「扩展」tab 里的嵌套界面（里面还有一层它自己的 tab 条）。这次把它拆平。
 
 - **顶层 tab 从 6 个变 7 个**：生成 / 风格卡 / 角色卡 / 词库 / 预设 / **输出** / **模型库** / **工作台 A**。「扩展」这个名字不再存在。
