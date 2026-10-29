@@ -1,6 +1,6 @@
 {
   "name": "dsh-comfyui-console",
-  "version": "0.7.151",
+  "version": "0.7.152",
   "description": "ComfyUI drawing console for DSH (Anima / LLLite / role & style cards)",
   "type": "module",
   "main": "lib/index.js",

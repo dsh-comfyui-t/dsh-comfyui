@@ -67,7 +67,7 @@ Invoke-RestMethod http://127.0.0.1:8199/health
 浏览器会把该地址作为 `Origin` 发过来，**默认会被 403 拒绝**。要开就给 `config.json` 加 `"allowLan": true` 并重启 dsh web
 （或在 `install.ps1` 时加 `-AllowLan`）。只放行私网段，公网地址始终拒绝；服务端脚本/curl 不带 Origin，不受影响。
 
-## 5.1 鉴权与请求体上限（0.7.151 起重写）
+## 5.1 鉴权与请求体上限（0.7.152 起重写）
 
 侧车（127.0.0.1:8199）能花 API key（`/expand`）、写卡（`/cards/write`）、停服务（`/comfy/stop`），所以设两道**叠闸**：
 
@@ -177,7 +177,7 @@ ESM 缓存是**按进程**的，所以页面刷新不够；也不要给插件名
 
 ## 10. 包名与改名
 
-当前包名是 `dsh-comfyui-console`（v0.7.151，已去掉 `private`、带 `files` 白名单与 `dsh` 更新元数据，可 `npm pack` / 拷目录安装）。
+当前包名是 `dsh-comfyui-console`（v0.7.152，已去掉 `private`、带 `files` 白名单与 `dsh` 更新元数据，可 `npm pack` / 拷目录安装）。
 
 再改名要**同时**动五处，漏一处就装载失败：
 

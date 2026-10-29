@@ -52,8 +52,8 @@ def _pack_root():
 
 
 
-CORE_EMBED = ['julinst-e10']
-BASE_MODEL = {'unet': 'anima-aesthetic-v1.1.safetensors',
+CORE_EMBED = ['<画风LoRA>']
+BASE_MODEL = {'unet': '<底模>.safetensors',
               'clip': 'qwen_3_06b_base.safetensors',
               'vae': 'qwen_image_vae.safetensors'}
 _SHA_CACHE = {}

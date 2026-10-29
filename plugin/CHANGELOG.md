@@ -1,3 +1,56 @@
+## 0.7.152 · 2026-10-29 · 删卡同步磁盘、导卡补字段、比例分段
+
+### 删卡为什么删不掉
+
+「删除这张」按钮的回调是这样写的：
+
+```js
+onClick: () => { const cc = styleEdit; setStyleEdit(null); delStyleCard(cc); }
+```
+
+传进去的是 `styleEdit` —— 编辑器弹层的状态对象，不是面板里的卡片记录。
+而 `editStyleCard()` 只构造了十一个字段：
+
+```js
+{ id, name, note, cover, neg, parts, loras, ckpt, gen, isNew, builtin }
+```
+
+**`file` 不在里面。**
+
+于是删除逻辑里所有 `String(c.file || "")` 取到的都是空串，
+唯一能定位落盘文件的入口恒为空 —— 删除退化成「只清内存」。
+而 `mergeDiskStyle` 是磁盘为准的：下次同步把磁盘上的记录推回来，卡片复活。
+
+侧车侧一直是好的：`/dir/del` 在带 token、仅 Origin、端到端三种条件下都实测通过。
+问题全在前端拿不到路径。
+
+**修法分三层，任一层命中即可**
+
+1. `editStyleCard` 补 `file` / `diskDir`，从 `USER.styleCards` 里的真实记录带过来
+2. 删除时先查 `USER` 里同 `id` 的记录取 `file`
+3. 再退到 `/dir/list?kind=style`，按 **name** 匹配 `__file`
+
+`delCard`（角色卡）同病同治。同时把确认框文案改成写明「会同时从磁盘文件里删掉这张卡」，
+失败时用 `clientLog` 打出 `name` / `file` / `有真实记录=`，便于下次直接定位。
+
+### 导入丢字段
+
+`applyStyleImport` 只取十个字段，而 `saveStyleCard` 与 `exportAllStyleCards` 都是十三个。
+落下的三个是 `baseModels` / `training` / `regression`。已补齐。
+
+### 比例分段
+
+`parts` 增加 `proportion` 段，`STYLE_ORDER` 里排在 `style` 之前。
+预设表 `PROPORTION_PRESETS` 提供 `chibi` / `half` / `adult` 等档位，`custom` 可自行填写。
+拼进提示词，不碰 LoRA 权重。
+
+实测：比例从不被 LoRA 锁定 —— 同 seed 下 `chibi` 出三头身，不写比例词出三点五头身，
+写 `tall adult, mature proportions, long legs` 出八头身。卡层默认值挡不住提示词覆盖。
+
+### 已安装用户注意
+
+覆盖插件目录后重启。**已打开的页面要 Ctrl+Shift+R**，
+重启服务端不会让已经打开的标签页换代码。
 ## 0.7.151 · 2026-10-27 · 二级页顶到面板底边：清掉 S.wrap 的 48px 底部内边距
 
 ### 那 48px 是什么
@@ -2099,7 +2152,7 @@ for _s in (sys.stdout, sys.stderr):
 |---|---|
 | 无 LLLite 基线出图（512×768 / 8 步 / euler / cfg 4.5） | 6 s 出图，画面正常 |
 | 同 seed 两次（换 prefix 强制真重算） | **像素差 0** —— 本机出图是确定性的 |
-| 带 LLLite（`julin-lllite-v2-400` + 控制图） | 平均差 21.7/255、99.985% 像素变化，角色明显向控制图靠拢 |
+| 带 LLLite（`<身份LLLite-v2>` + 控制图） | 平均差 21.7/255、99.985% 像素变化，角色明显向控制图靠拢 |
 | 带 LLLite 重复一次 | 像素差 0 |
 
 **结论**：`buildGraph` 的 UNETLoader + CLIPLoader(qwen_image) + AnimaLLLiteApply 20/21/22 链在真机上完全正确。
@@ -2757,7 +2810,7 @@ function instanceHeaders() {
 **验证**
 
 ```
-/dictionary/status            200  {"ok": true, "schema_version": 1, "db_path": "D:\\paint\\com…"}
+/dictionary/status            200  {"ok": true, "schema_version": 1, "db_path": "<ComfyUI父目录>\\com…"}
 /dictionary/browse?limit=1    200  {"items": [{"id": 279, "source_key": "mandar…
 /dictionary/categories?tags=1 200  {"items": [{"name": "水果", "count": 2}…
 不带 client 头                401  仍需 client 头 ✓
@@ -3327,7 +3380,7 @@ LOCAL_ONLY = frozenset(('/version', '/routes', '/log', '/local/status',
 ```
 GET  /loras                  → count=20  dir=D:\paint\ComfyUI\models\loras
 GET  /loras/file?name=xunlian1.safetensors → 91,853,952 B（与磁盘完全一致）
-GET  /loras/file?name=软萌.safetensors      → Content-Disposition: attachment; filename*=UTF-8''%E8%BD%AF%E8%90%8C.safetensors
+GET  /loras/file?name=<LoRA>.safetensors      → Content-Disposition: attachment; filename*=UTF-8''%E8%BD%AF%E8%90%8C.safetensors
 POST /loras/scan             → 200  count=20
 POST /loras/del {不存在}      → 200  {"ok": false, "error": "文件不存在: ..."}
 POST /loras/del {真实文件}     → 200  left=20  trash=_trash-20261027-152106  （源文件消失、trash 内可见、测试残留已清）
