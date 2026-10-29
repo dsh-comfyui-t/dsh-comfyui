@@ -1,11 +1,11 @@
 {
   "bundle": "dsh-comfyui-console + comfyui-cards",
-  "version": "0.7.152",
+  "version": "0.7.153",
   "builtAt": "2026-10-27T19:41:00+0800",
   "components": {
     "plugin": {
       "name": "dsh-comfyui-console",
-      "version": "0.7.152",
+      "version": "0.7.153",
       "configVersion": 2,
       "minHost": "0.2.0-rc.2",
       "entry": "plugin/lib/index.js",
@@ -44,5 +44,5 @@
     "lora来源.json 真件（只发 lora来源.example.json 占位版）",
     "构建备份与历史快照（*.bak-* / .build-backup / .bak-old）"
   ],
-  "bundleVersion": "0.7.152"
+  "bundleVersion": "0.7.153"
 }

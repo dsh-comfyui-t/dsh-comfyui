@@ -5,6 +5,8 @@
 #   2. copies skills\       -> <DshHome>\skills\comfyui-cards\SKILL.md        (keeps a .bak copy)
 #   3. writes config.json   from config.example.json + your parameters (only if missing)
 #   4. optionally mounts the plugin into a profile (official channel or junction)
+#      and ALWAYS ensures its name is listed in that profile's dsh.profile.bundles --
+#      without that entry the plugin loads silently nowhere and the sidebar has no entry.
 #   5. runs light checks and prints a machine-readable result with -Json
 #
 # Modes
@@ -56,6 +58,33 @@ function Done([string]$verdict, [string]$extra) {
     }
     if ($verdict -eq 'failed') { exit 1 }
     exit 0
+}
+
+# ---------- bundle registration ----------
+# A package only gets its dsh.bundle.patch applied when its name appears in
+# <profile>\package.json -> dsh.profile.bundles. Copying files or making a
+# junction is NOT enough: the plugin stays invisible and the sidebar shows
+# no entry, with no error anywhere. dsh plugin add does this for you; the
+# junction path has to do it by hand.
+function EnsureBundle([string]$profileDir, [string]$name) {
+    $pj = Join-Path $profileDir 'package.json'
+    if (-not (Test-Path $pj)) { return 'no package.json' }
+    $raw = [IO.File]::ReadAllText($pj, [Text.Encoding]::UTF8)
+    try { $j = $raw | ConvertFrom-Json } catch { return 'package.json is not valid JSON' }
+    if (-not $j.dsh) { $j | Add-Member -NotePropertyName dsh -NotePropertyValue ([pscustomobject]@{}) -Force }
+    if (-not $j.dsh.profile) { $j.dsh | Add-Member -NotePropertyName profile -NotePropertyValue ([pscustomobject]@{}) -Force }
+    $cur = @()
+    if ($j.dsh.profile.bundles) { $cur = @($j.dsh.profile.bundles) }
+    if ($cur -contains $name) { return 'already listed' }
+    $next = @($cur) + @($name)
+    if ($j.dsh.profile.PSObject.Properties['bundles']) {
+        $j.dsh.profile.bundles = $next
+    } else {
+        $j.dsh.profile | Add-Member -NotePropertyName bundles -NotePropertyValue $next -Force
+    }
+    $out = $j | ConvertTo-Json -Depth 32
+    [IO.File]::WriteAllText($pj, $out, (New-Object System.Text.UTF8Encoding($false)))
+    return 'added'
 }
 
 $here = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
@@ -174,7 +203,11 @@ if ($ApplyProfile) {
     elseif (-not $Profile) { Step 'profile' 'skipped' 'no -Profile and no $env:DSH_PROFILE' }
     else {
         & $dsh.Source plugin --profile $Profile add $pluginDst 2>&1 | Out-Null
-        if ($LASTEXITCODE -eq 0) { Step 'profile' 'ok' ('dsh plugin add -> ' + $Profile) }
+        if ($LASTEXITCODE -eq 0) {
+            # dsh plugin add normally registers the bundle itself; verify rather than assume
+            $reg = EnsureBundle (Join-Path $DshHome ('profiles\' + $Profile)) $name
+            Step 'profile' 'ok' ('dsh plugin add -> ' + $Profile + ' ; bundles: ' + $reg)
+        }
         else { Step 'profile' 'failed' 'dsh plugin add returned non-zero; fall back to -LinkJunction' }
     }
 } elseif ($LinkJunction) {
@@ -187,16 +220,27 @@ if ($ApplyProfile) {
             if ($Force) {
                 cmd /c rmdir "$link" | Out-Null
                 cmd /c mklink /J "$link" "$pluginDst" | Out-Null
-                Step 'profile' 'ok' ('junction remade -> ' + $pluginDst)
-            } else { Step 'profile' 'kept' ($link + ' already exists (pass -Force to re-point)') }
+                $reg = EnsureBundle (Join-Path $DshHome ('profiles\' + $Profile)) $name
+                Step 'profile' 'ok' ('junction remade -> ' + $pluginDst + ' ; bundles: ' + $reg)
+            } else {
+                $reg = EnsureBundle (Join-Path $DshHome ('profiles\' + $Profile)) $name
+                Step 'profile' 'kept' ($link + ' already exists (pass -Force to re-point); bundles: ' + $reg)
+            }
         } else {
             cmd /c mklink /J "$link" "$pluginDst" | Out-Null
-            if (Test-Path $link) { Step 'profile' 'ok' ('junction -> ' + $pluginDst) }
-            else { Step 'profile' 'failed' 'mklink /J failed' }
+            if (Test-Path $link) {
+                $reg = EnsureBundle (Join-Path $DshHome ('profiles\' + $Profile)) $name
+                if ($reg -eq 'added' -or $reg -eq 'already listed') {
+                    Step 'profile' 'ok' ('junction -> ' + $pluginDst + ' ; bundles: ' + $reg)
+                } else {
+                    Step 'profile' 'failed' ('junction made but bundle registration failed: ' + $reg)
+                }
+            } else { Step 'profile' 'failed' 'mklink /J failed' }
         }
     }
 } else {
     Step 'profile' 'manual' ('run:  dsh plugin --profile ' + $Profile + ' add "' + $pluginDst + '"')
+    # manual path: see EnsureBundle -- the name must land in dsh.profile.bundles or nothing loads
 }
 
 # ---------- 6. checks ----------

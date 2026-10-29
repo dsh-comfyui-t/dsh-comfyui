@@ -239,6 +239,31 @@ if ((Test-Path $syncScript) -and (Test-Path (Join-Path $suiteRoot 'VERSION.json'
     Add-Check 'version:consistent' 'skipped' 'no VERSION.json beside install\ (installed copy)'
 }
 
+# ---- bundle registration ----
+# The one check whose absence makes every other check meaningless: a plugin whose
+# name is missing from dsh.profile.bundles loads nowhere, produces no error, and
+# shows no sidebar entry. Files on disk and a working junction are not enough.
+if ($Profile) {
+    $pj = Join-Path $DshHome ('profiles\' + $Profile + '\package.json')
+    if (Test-Path $pj) {
+        try {
+            $j = [IO.File]::ReadAllText($pj, [Text.Encoding]::UTF8) | ConvertFrom-Json
+            $bl = @()
+            if ($j.dsh -and $j.dsh.profile -and $j.dsh.profile.bundles) { $bl = @($j.dsh.profile.bundles) }
+            $hit = @($bl | Where-Object { $_ -eq 'dsh-comfyui-console' }).Count
+            if ($hit -eq 1) {
+                Add-Check 'bundle:registered' 'ok' 'dsh.profile.bundles lists dsh-comfyui-console'
+            } elseif ($hit -gt 1) {
+                Add-Check 'bundle:registered' 'WARN' ('listed ' + $hit + ' times; duplicates can break boot')
+            } else {
+                Add-Check 'bundle:registered' 'FAIL' ('missing from dsh.profile.bundles -> no sidebar entry and no error; re-run install-ai.ps1 with -LinkJunction or -ApplyProfile')
+            }
+        } catch {
+            Add-Check 'bundle:registered' 'FAIL' ('profile package.json unreadable: ' + $_.Exception.Message)
+        }
+    } else { Add-Check 'bundle:registered' 'skipped' ('no ' + $pj) }
+} else { Add-Check 'bundle:registered' 'skipped' 'no -Profile given' }
+
 # ---- report ----
 $fails = @($rows | Where-Object { $_.status -eq 'FAIL' }).Count
 $warns = @($rows | Where-Object { $_.status -eq 'WARN' }).Count

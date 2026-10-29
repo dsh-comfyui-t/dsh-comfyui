@@ -1,3 +1,80 @@
+## 0.7.153 · 2026-10-29 · 安装后插件不加载（bundles 缺注册）
+
+### 现象与机制
+
+装完重启，侧边栏没有「ComfyUI 绘图台」。没有弹窗，没有红色报错，其它面板都在。
+
+根因在 `install/install-ai.ps1` 的 `-LinkJunction` 分支：它只做了
+
+```powershell
+cmd /c mklink /J "$link" "$pluginDst"
+```
+
+目录链接建好了，包文件也在 `<DshHome>\plugins\dsh-comfyui-console\plugin`，
+但**没有把 `dsh-comfyui-console` 写进 profile 的 `dsh.profile.bundles`**。
+
+`@deepseek-ai/dsh-app-boot` 的 `loadProfileDirectory()` 是这样找插件的：
+
+```js
+const bundles = readProfileManifest(binName, dir).dsh?.profile?.bundles ?? [];
+for (const packageName of bundles) try {
+  const packageDir = resolveBundleDir(binName, packageName, installAnchor, dir);
+  const bundle = bundleManifest.dsh?.bundle;
+  if (bundle === void 0) throw new Error('... declares no dsh.bundle');
+  const patches = bundlePatchPaths(packageDir, bundle).flatMap((p) => loadOverlayPatches(binName, p));
+  layers.push({ packageName, packageDir, patches });
+} catch (error) { skippedBundles.push({ packageName, reason: String(error) }); }
+```
+
+遍历的是 `dsh.profile.bundles`，`dependencies` 不参与这个判断。名字不在数组里，包的 `dsh.bundle.patch` 就永远不会被加载。
+解析失败只进 `skippedBundles`，不抛、不打印——**所以整件事静默发生**。
+
+`dsh plugin add` 之所以「装了就有」，是 pnpm 之后 boot 会自动补：
+
+```js
+for (const dependency of after.dependencies)
+  if (dependency.bundle && !bundles.includes(dependency.name)) bundles.push(dependency.name);
+```
+
+手工建 junction 不经过这一步。
+
+### 修法
+
+新增 `EnsureBundle($profileDir, $name)`，读 profile 的 `package.json`，缺失就追加到
+`dsh.profile.bundles` 并用 `[IO.File]::WriteAllText` + `UTF8Encoding($false)` 写回（不能带 BOM，
+Node 的 `JSON.parse` 不剥 BOM）。
+
+三条路径全部接上：
+
+| 分支 | 处理 |
+|---|---|
+| `-ApplyProfile`（`dsh plugin add`） | 命令成功后再校验一次，不假设它一定注册了 |
+| `-LinkJunction` 新建 | 建完链接立即 EnsureBundle，失败则整步判 failed |
+| `-LinkJunction` + `-Force` 重建 | 同上 |
+| `-LinkJunction` 链接已存在 | 仍然补一次，不跳过 |
+
+幂等：已存在就返回 `already listed`，不重复追加。实测连跑三次，数组里始终只有一条。
+
+`install/verify.ps1` 新增检查 `bundle:registered`：
+
+| 状态 | 含义 |
+|---|---|
+| `ok` | 数组里有且只有一条 |
+| `WARN` | 出现多次，重复注册可能导致 boot 失败 |
+| `FAIL` | 缺失，直接说明「没有侧边栏入口且无报错」，并给修复命令 |
+
+### 验收
+
+用临时 profile 实测三段：
+
+```
+未注册          -> FAIL  "missing from dsh.profile.bundles -> no sidebar entry and no error"
+已注册一条      -> ok    "dsh.profile.bundles lists dsh-comfyui-console"
+重复两条        -> WARN  "listed 2 times; duplicates can break boot"
+```
+
+安装脚本实测 `-LinkJunction`：`profile` 步骤输出 `junction -> ... ; bundles: added`，
+profile 的 `bundles` 从 `["@deepseek-ai/dsh-base"]` 变为 `["@deepseek-ai/dsh-base", "dsh-comfyui-console"]`。
 ## 0.7.152 · 2026-10-29 · 删卡同步磁盘、导卡补字段、比例分段
 
 ### 删卡为什么删不掉

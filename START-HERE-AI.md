@@ -25,7 +25,7 @@
 
 | 组件 | 标识 | 版本 | 说明 |
 |---|---|---|---|
-| 绘图台插件 | 包名 `dsh-comfyui-console` | **0.7.152**（`dsh.configVersion` 2） | Host 插件 `lib/index.js` + 侧车 `expander.py`（127.0.0.1:8199）+ 面板 `lib/client.js` |
+| 绘图台插件 | 包名 `dsh-comfyui-console` | **0.7.153**（`dsh.configVersion` 2） | Host 插件 `lib/index.js` + 侧车 `expander.py`（127.0.0.1:8199）+ 面板 `lib/client.js` |
 | 双卡技能 | 技能名 `comfyui-cards` | 随套件 | `skills/comfyui-cards/SKILL.md`，讲卡结构与 LoRA/LLLite 自训流程 |
 | 安装脚本 | `install/install-ai.ps1` | — | 装文件 + 写 `config.json` + 可选挂载 profile，支持 `-Json` |
 | 验证脚本 | `install/verify.ps1` | — | 只读体检，支持 `-Json`，有 FAIL 就退出码 1 |
@@ -203,10 +203,10 @@ powershell -ExecutionPolicy Bypass -File install\verify.ps1 -Json     # 退出�
 | 文件齐 | `Test-Path "$pd\lib\index.js"` 等 5 个 | 全 `True` |
 | 配置能解析 | `[IO.File]::ReadAllText("$pd\config.json") \| ConvertFrom-Json` | 不报错 |
 | 侧车活着 | `Invoke-RestMethod http://127.0.0.1:8199/health` | `{ok:true, routes:[…]}` |
-| 版本对齐 | `Invoke-RestMethod http://127.0.0.1:8199/version` | `loaded=0.7.152`、`stale=false`、`configVersion=2` |
+| 版本对齐 | `Invoke-RestMethod http://127.0.0.1:8199/version` | `loaded=0.7.153`、`stale=false`、`configVersion=2` |
 | 卡目录可读 | 看 `cardsDir` 下 `*.json` / `*.dslcard` 数量 | ≥ 你预期的卡数 |
 | ComfyUI | `Invoke-RestMethod http://127.0.0.1:8188/system_stats` | 有 `system` 字段（没起就 8188 不通，属正常） |
-| 面板 | 浏览器开 `http://127.0.0.1:10722` | 出现「ComfyUI 绘图台」，顶栏有 `v0.7.152` |
+| 面板 | 浏览器开 `http://127.0.0.1:10722` | 出现「ComfyUI 绘图台」，顶栏有 `v0.7.153` |
 
 `stale=true` 的含义：磁盘已换新代码、进程还是旧的 → **重启 dsh web**，刷新页面无效（ESM 缓存按进程）。
 
@@ -256,7 +256,7 @@ powershell -ExecutionPolicy Bypass -File install\verify.ps1 -Json     # 退出�
 ├─ install\
 │   ├─ install-ai.ps1        安装（-Json 可解析）
 │   └─ verify.ps1            只读体检（有 FAIL 退出码 1）
-├─ plugin\                   插件 0.7.152（可直接被 update.ps1 当作升级源）
+├─ plugin\                   插件 0.7.153（可直接被 update.ps1 当作升级源）
 │   ├─ lib\index.js          Host 插件：起侧车、配置迁移、版本常量
 │   ├─ lib\client.js         面板（由 tools\build_client.py 从 app.js 生成）
 │   ├─ lib\app.js            面板源文件
