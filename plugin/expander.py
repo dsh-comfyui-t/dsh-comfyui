@@ -471,7 +471,7 @@ class H(BaseHTTPRequestHandler):
                 self.send_response(200)
                 self.send_header('Content-Type', 'application/octet-stream')
                 self.send_header('Content-Length', str(_sz))
-                # 中文文件名（软萌.safetensors / 絉彩绘-…）必须用 RFC 5987 的 filename*
+                # 中文文件名（<LoRA>.safetensors / <画风卡>-…）必须用 RFC 5987 的 filename*
                 self.send_header('Content-Disposition',
                                  "attachment; filename*=UTF-8''%s" % urllib.parse.quote(_bn))
                 self._cors()

@@ -1,8 +1,61 @@
 ---
 name: "comfyui-cards"
 description: "dsh-comfyui-console 插件里角色卡与风格卡的完整机制与自训流程：两种卡存哪、字段（含 conditioning 身份控制）、特征锁与 scope、完整/换装插入、全量卡包导出与三档 API 语义、导入与 dest 路由、缺件下载、分发口径；以及从零训练角色 LoRA / 画风 LoRA / LLLite 身份控制的数据配比、打标口径、超参、评测取件、坑表与画风剥离。风格卡制作流水线（画风 LoRA 为工序的一环）、**角色卡硬规定：不得混入画风**（四条禁止 / 互斥表 / E1–E3 验收 / 配套超参）；出图侧生成参数与采样（底模、剂量、分辨率、种子对照、症状对照）；工作流与节点链（三份工作流、节点顺序、三种导入、改完必重建）；侧车 74 条 HTTP 接口（鉴权、分组、常用调用）。另有词库小卡片（胶囊词条）：卡片网格、分类与「全部」、胶囊中文备注、胶囊词性（正/负/自）与按词性插入、拖拽排序与换分类、`dsh-dict-cards` JSON 导入导出。用户提到角色卡、风格卡、特征锁、插入、导出卡、导入卡、.dslcard、.dslrecipe、卡包、LoRA 内嵌、LLLite 身份控制、训练 LoRA、数据集打标、caption、重训、画风剥离、facetraining、不得混入画风、画风串味、生成参数、剂量、同 seed 对照、工作流 JSON、节点顺序、侧车接口、8199、词库、词条、小卡片、胶囊、正负词性、拖拽排序、词库导出时才加载。"
-whenToUse: "要新建/修改/导入/导出/分发角色卡或风格卡；要调特征锁与 scope；要配或排查 LLLite 身份控制；要从零训练或重训角色 LoRA、画风 LoRA、LLLite，要准备数据集与打标、定超参、评测挑选存档、做画风剥离；要给风格卡加画风 LoRA 或按两档完整度推进；要落实「角色卡不得混入画风」这条硬规定（打标禁词、素材口径、E1 换画风 LoRA / E2 删画风词 / E3 秩检查验收、16/8 与 1e-5 配套超参）；要定出图参数（底模、剂量 0.45–0.55、分辨率桶、同 seed 对照）或按症状反查原因；要改工作流 JSON、调节点顺序、用拖拽导入、判断要不要重建 client.js；要调侧车 8199 的接口（鉴权三件套、/version 自检、/lllite/resolve、/loras/import、/dir/write）；要判断一张角色卡/风格卡做完了没有（LoRA / cond 图 / LLLite 权重 / 三把锁齐不齐，A·B·C 哪一档）、按流水线顺序推进制作、或判断某次改动是否需要重建 client.js 或重启侧车；要核对卡包往返与验收命令时；要改词库小卡片（胶囊词性、拖拽、导入导出）或排查 `xxx is not defined` 时。"
+whenToUse: "要新建/修改/导入/导出/分发角色卡或风格卡——**此时第一动作是贴 §0.0 的三档表（A 提示词卡 / B + 角色 LoRA / C + 身份控制）与预计时间，等用户选档后才能动手；未选档前不建卡、不生成数据集、不开训**；要调特征锁与 scope；要配或排查 LLLite 身份控制；要从零训练或重训角色 LoRA、画风 LoRA、LLLite，要准备数据集与打标、定超参、评测挑选存档、做画风剥离；要给风格卡加画风 LoRA 或按两档完整度推进；要落实「角色卡不得混入画风」这条硬规定（打标禁词、素材口径、E1 换画风 LoRA / E2 删画风词 / E3 秩检查验收、16/8 与 1e-5 配套超参）；要定出图参数（底模、剂量 0.45–0.55、分辨率桶、同 seed 对照）或按症状反查原因；要改工作流 JSON、调节点顺序、用拖拽导入、判断要不要重建 client.js；要调侧车 8199 的接口（鉴权三件套、/version 自检、/lllite/resolve、/loras/import、/dir/write）；要判断一张角色卡/风格卡做完了没有（LoRA / cond 图 / LLLite 权重 / 三把锁齐不齐，A·B·C 哪一档）、按流水线顺序推进制作、或判断某次改动是否需要重建 client.js 或重启侧车；要核对卡包往返与验收命令时；要改词库小卡片（胶囊词性、拖拽、导入导出）或排查 `xxx is not defined` 时。"
 ---
+
+## 0.0 角色卡请求的第一动作（硬规定，2026-10-28 起）
+
+**用户说「做角色卡 / 训练角色卡 / 按这个素材做个卡 / 帮我建一张卡」时，第一件事不是建卡、不是写 parts、更不是开训，是把下面这张表贴出来让用户选档。**
+
+**未得到用户对档位的明确选择之前，不得动手。** 例外只有两种：用户在同一条消息里已经点名了档位（「先只做提示词卡」「直接训到 C 档」），或只是询问概念不涉及具体角色。
+
+### 贴给用户的三档表（照抄，按本次素材调整时间）
+
+| 档 | 组成 | 实际拿到什么 | 预计时间 | 一致性 |
+|---|---|---|---|---|
+| **A 提示词卡** | `parts` + `locks` + `neg` + `cover` | 能插词能出图；脸型 / 瞳距 / 发丝走向会漂 | **约 40 分钟** | 60–70% |
+| **B + 角色 LoRA** | A + 训件（`lora` 非空） | 身份稳住，姿态与比例自由 | **约 2–3 小时** | 75–85% |
+| **C + 身份控制** | B + cond 图 + LLLite 权重 + `presets` ≥ 3 档 | 姿态 / 角度 / 构图被硬约束 | **约 4–5 小时** | 角度鲁棒 +20% |
+
+### 同一张表里附上选档判据
+
+| 用途 | 选 |
+|---|---|
+| 固定几个角度出图，脸不太在意 | **A** |
+| 要自由姿势，脸必须稳（多数情况） | **B** |
+| 要特定动作或角度被硬拽住 | **C** |
+
+### 时间口径（2026-10-28 实测修正，不要照旧数字报）
+
+默认按 **768 分辨率 / 600 步** 报（训练约 40 分钟）。用户要求 1024 或更高步数时，用实测速率重算并说明：
+
+```
+训练 = 步数 × 单步耗时
+单步：1024 → 11.3 s    768 → 4.2 s    LLLite → 3.9 s
+生成 = 张数 × 0.7 min（单张）或 × 0.42 min（batch 4）
+```
+
+**报时间必须带前提**（分辨率 / 步数 / 张数），只报一个「3 小时」没有信息量。
+
+### 贴表之后、动手之前，还要量三个数
+
+素材决定天花板，选完档也要先量这三项再开工——不达标的关系到承诺的时间与效果，要在同一轮说清：
+
+| 量什么 | 怎么量 | 判据 | 不达标 |
+|---|---|---|---|
+| **单张立绘眼部像素** | 立绘宽度 ÷ 头身 × 0.12 估，或直接裁眼部量 | ≥ 40 px | 切分 + 4× 超分，或请用户补一张特写；低于 20 px 直接说「脸学不到」 |
+| **视角覆盖** | 数原图里有几个不同角度 | ≥ 3 个 | 只有正脸 ⇒ 斜侧必崩，降档或明确告知 |
+| **画风来源数** | 数素材出自几种画风 / 画师 | ≥ 2 种 | **只有 1 种 ⇒ E1 必挂**（§12A.1 第 1 条），画风会混进身份；必须提前说明，并给出补偿方案（换画风重绘一轮，约 +45 分钟） |
+
+**素材不达标时，时间上浮 50–100% 并把原因写进表里**。例：`单画风素材：E1 过不了，需先做多画风重绘，B 档 2–3 小时 → 3.5 小时`。
+
+### 用户选定档位之后
+
+按 §11 的五段流水线推进，**不再重复询问**。中途只有两种情况要回来找用户：
+
+1. **素材出现机器无法裁决的冲突**（例：三视图发色与证件照不一致，听谁的）——这类必须问，猜错要整卡重做；
+2. **验收门挂了**（E1 / E5 / E2 任一不过）——报告挂了哪道、原因、以及回退到第几步，让用户决定「重做数据集」还是「接受降档」。
 
 ## 0. 路径约定（换机器只改这一节）
 
@@ -17,7 +70,7 @@ whenToUse: "要新建/修改/导入/导出/分发角色卡或风格卡；要调�
 | `D:\paint\venv312\Scripts\python.exe` | 装了依赖的 Python（渲染 / 合成脚本用） | 你的 Python 3.10+ |
 | `D:\paint\runtime\python312\pythonw.exe` | 侧车用（无控制台）Python | 你的 `pythonw.exe` |
 
-**正文命令块里的写法约定**（<日期> 按使用报告补）：为了不把占位符塞进每个代码块，命令块里保留作者机器的真实路径，读的时候按下表替换——
+**正文命令块里的写法约定**（2026-10-22 按使用报告补）：为了不把占位符塞进每个代码块，命令块里保留作者机器的真实路径，读的时候按下表替换——
 **但叙述与判断一律用占位符**，两者不要混：
 
 | 占位符 | 指什么 | 作者机器实测值 |
@@ -57,7 +110,7 @@ $PYTHONW   = 'D:\paint\runtime\python312\pythonw.exe'
 `lib\app.js`（源码，界面主体）、`lib\dict.js`、`lib\presets.js`、`lib\workflow.js`、
 `lib\client.js`（**浏览器只加载这个，由上面四份拼接生成**）、`expander.py`（侧车 :8199）、`config.json`、`lora来源.json`。
 
-## 0. 机制变动（<日期> 这轮）
+## 0. 机制变动（2026-10-20 这轮）
 
 - **导出入口统一**：两个编辑器各只剩一个按钮「导出全量卡包」，不再弹档位选择、不再问内嵌哪几支。角色卡固定全量（LoRA + 两支 LLLite 权重 + 5 张控制图，约 235 MB），风格卡固定 `baked`。
 - **卡包容器升级**：header 增加 `version`（2 | 3），内嵌文件条目增加 `dest`（`lora` / `patch` / `asset`），asset 条目还带原 `asset` id；解包按 `dest` 分流到 `models/loras`、`models/model_patches`、`_cond/` + `assets.json`。
@@ -67,7 +120,7 @@ $PYTHONW   = 'D:\paint\runtime\python312\pythonw.exe'
 - **卡面精简**：角色卡与风格卡卡片上都不再显示「N 条 · 特征锁N · 负N · LoRA · LLLite」这类统计行，只留封面 / 卡名 / 提示词预览。统计仍在编辑器里看。
 - **生成页**：新增「常用尺寸」预设行（9 组，点一下同时改宽高）。
 
-## 0.1 机制变动（<日期> / 22 这轮：词库小卡片）
+## 0.1 机制变动（2026-10-21 / 22 这轮：词库小卡片）
 
 - **词条改叫「小卡片」**，固定在「词库」页，一个网格铺开；新增固定分类 `全部`（跨分类汇总，不能改名/删除/隐藏）。
 - **词性从卡片搬到胶囊上**：`USER.pol`（卡片级）已废弃、代码不再读；新键 `USER.capPol[小写英文标签] = "pos" | "neg"`，没记＝未标（按正向）。插入时按每颗胶囊的词性分流。
@@ -88,7 +141,7 @@ $PYTHONW   = 'D:\paint\runtime\python312\pythonw.exe'
 
 **同一目录里绝不要留两张同名卡**：会互相盖，表现为「锁丢了」「标签变少」。历史版挪进子目录（扫描不进子目录）。
 
-### 1.1 角色卡的存储：版本行为差（0.7.46 → 0.7.47 变了，<日期>）
+### 1.1 角色卡的存储：版本行为差（0.7.46 → 0.7.47 变了，2026-10-22）
 
 | 版本 | 前端从 `/cards` 读磁盘吗 | 磁盘上放卡的效果 | 导入入口 |
 |---|---|---|---|
@@ -103,8 +156,8 @@ $PYTHONW   = 'D:\paint\runtime\python312\pythonw.exe'
 
 ```jsonc
 {
-  "id": "<身份LLLite-v3>", "name": "<角色名>", "schemaVersion": 3,
-  "tags": "<角色触发词>, 1girl, solo, long black hair, …, small breasts, slim",
+  "id": "<角色件>", "name": "<角色卡>", "schemaVersion": 3,
+  "tags": "julin, 1girl, solo, long black hair, …, small breasts, slim",
   "parts": { "trigger":[], "base":[], "hair":[], "eyes":[], "glasses":[], "outfit":[], "extra":[] },
   "neg": [ { "t": "adult, tall, dark skin" } ],       // 对象数组，n 是手写中文备注
   "lora": "<角色LoRA>.safetensors", "loraW": 0.9, "loraAlt": "",
@@ -124,13 +177,13 @@ $PYTHONW   = 'D:\paint\runtime\python312\pythonw.exe'
   - `full`：只在**完整插入**时生效；
   - `swap`：只在**换装插入**那一刻生效；
   - `both`：两者都生效。
-- **现役三锁**：<角色>特征锁（23 词，both）、服饰特征锁（97 词，full）、体型特征锁（18 词，both）。
-- **裙长闸**（在服饰锁内，7 词）：`knee-length skirt, midi skirt, ankle length skirt, floor-length skirt, low hem, microskirt, micro mini skirt`。基准 = 短黑百褶裙、裙摆大腿中段；正向只写 `black skirt`；验收与基准图 `<基准图>.png` 并排比。
+- **现役三锁**：<角色卡>特征锁（23 词，both）、服饰特征锁（97 词，full）、体型特征锁（18 词，both）。
+- **裙长闸**（在服饰锁内，7 词）：`knee-length skirt, midi skirt, ankle length skirt, floor-length skirt, low hem, microskirt, micro mini skirt`。基准 = 短黑百褶裙、裙摆大腿中段；正向只写 `black skirt`；验收与基准图 `捏Ta-成稿-<角色卡>-站姿全身-1024x1496.png` 并排比。
 - 113 词表是盯着用的既有资产：**只追加、不重写、不删原词**。
 
 ## 4. 两种插入
 
-- **完整插入**：卡的正向 `tags` + `parts` 全上，服装按卡来，`full`/`both` 锁生效 → 标准<角色>。
+- **完整插入**：卡的正向 `tags` + `parts` 全上，服装按卡来，`full`/`both` 锁生效 → 标准<角色卡>。
 - **换装插入**：只上角色部分，服装词自己写，`swap`/`both` 锁生效 → 换装不被服饰锁抢词（裙长闸此时不拦）。
 - 两张卡的统计信息（条数/锁数/负向数/LoRA/LLLite）在**编辑器**里看，卡面不再显示。
 
@@ -160,7 +213,7 @@ CLIPLoader(qwen_3_06b_base, type=qwen_image) + VAELoader(qwen_image_vae)
 
 - **磁盘侧**：控制图在 `cardsDir\_cond\*.png`，登记表 `_cond\assets.json`（key 形如 `cond/face`，含 `file`/`sha256`/`w`/`h`/`framing`）；权重在 `ComfyUI\models\model_patches\`，索引 `lllite-index.json`。
 - **解析结果四态**：`resolved` 生效 / `degraded` 缺件（原因逐条写在 `reason`）/ `blocked` 校验失败（sha 不符）/ `off` 未启用。卡面与生成页显示的就是这些状态。
-- **staging**：解析通过后侧车把控制图复制到 `ComfyUI\input\dsh_lllite\`、权重确认在 `model_patches`，返回给图的相对路径。（<日期> 修掉了 `shutil` 未导入导致 staging 恒失败的老 bug。）
+- **staging**：解析通过后侧车把控制图复制到 `ComfyUI\input\dsh_lllite\`、权重确认在 `model_patches`，返回给图的相对路径。（2026-10-20 修掉了 `shutil` 未导入导致 staging 恒失败的老 bug。）
 - **比例自动纠偏**：画布比例与所选档控制图比例差超过 ±25% 时，自动挑最接近的一档并在提示里说明。
 - 自包含 JSON 里带 `image.b64` 时，`POST /cards/import` 会把图落回 `_cond/` 并重建 `assets.json`（UI 上没有按钮，接口保留）。
 
@@ -189,7 +242,7 @@ CLIPLoader(qwen_3_06b_base, type=qwen_image) + VAELoader(qwen_image_vae)
 
 1. **发 `.dslcard` 全量卡包**，不要发 `.json` 单卡、也不要发 `.dslrecipe`：自训 LoRA 在对方机器上无处可取。
 2. 对方还需要：
-   - **底模三件套**：`anima-aesthetic-v1.1.safetensors`（UNETLoader）、`qwen_3_06b_base.safetensors`（CLIPLoader, type=`qwen_image`）、`qwen_image_vae.safetensors`。容器只写 `baseModel` 元数据。
+   - **底模三件套**：`<底模>.safetensors`（UNETLoader）、`qwen_3_06b_base.safetensors`（CLIPLoader, type=`qwen_image`）、`qwen_image_vae.safetensors`。容器只写 `baseModel` 元数据。
    - **同版本或更新的插件**：锁解释器、词典、`conditioning` 支持、面板 UI 全在 `client.js`；老版本能导入卡但**静默忽略 locks 与 conditioning**。
 3. 风格卡只在 localStorage —— 让对方拿到的唯一途径就是导出卡包。
 
@@ -201,7 +254,7 @@ CLIPLoader(qwen_3_06b_base, type=qwen_image) + VAELoader(qwen_image_vae)
 | 改名保存后盘上多出一张 | 老版 `_cards_write` 只按 name 匹配 | 已修：先按 id 匹配；确认卡里有 `id` |
 | `/cards/write` 报 `path 不在角色卡目录内` | 侧车只允许写 `cardsDir` | 用面板保存，别手改 `path` |
 | 从别的网页调 8199 返回 403 | Origin 白名单只放行本机（127.0.0.1 / localhost / [::1]） | 正常现象；本机页面与 curl（不带 Origin）不受影响 |
-| 卡面统计行不见了 | <日期> 按要求删除（角色卡与风格卡都删） | 统计在编辑器里看 |
+| 卡面统计行不见了 | 2026-10-20 按要求删除（角色卡与风格卡都删） | 统计在编辑器里看 |
 | 卡导入成功但角色不像 | 自训 LoRA 没内嵌（发了 `.json`/`recipe`） | 重发全量卡包 |
 | 锁写了却不生效 | ①老版插件不认 `locks`；②`scope` 选错 | 升级插件 / 改 scope |
 | 强度档显示 degraded：权重文件不存在 | 权重没 staging 到 `models/model_patches` | 重新插入卡触发 resolve；检查 `COMFY_ROOT` 与 `lllite-index.json` |
@@ -209,14 +262,14 @@ CLIPLoader(qwen_3_06b_base, type=qwen_image) + VAELoader(qwen_image_vae)
 | 裙子越出越长 | 正向写了长度修饰词，或长度闸被挪出服饰锁 | 正向只写 `black skirt`，闸词留在服饰锁 |
 | 改了 `app.js` 界面没变 | 浏览器只加载 `lib\client.js` | `python plugin\tools\build_client.py` 重建，刷新；仍不变就重启 `dsh web`（模块按进程缓存） |
 | 侧车改动不生效 | `expander.py` 由 8199 那个 pythonw 进程加载 | 停 8199 的 PID 后重新拉起（见第 10 节） |
-| 词库卡片一渲染就 `capNoteOf is not defined` | 助手写在 `app.js` 顶格，但实际落在 `genTab` 的嵌套作用域（该文件从 `condForSave` 起有一层历史错层），模块级的 `dictcard.js` 看不见 | 把用到的符号提到模块级（`allLib()` 之后）；跑 `日志\<调试脚本>.js` 验证 |
+| 词库卡片一渲染就 `capNoteOf is not defined` | 助手写在 `app.js` 顶格，但实际落在 `genTab` 的嵌套作用域（该文件从 `condForSave` 起有一层历史错层），模块级的 `dictcard.js` 看不见 | 把用到的符号提到模块级（`allLib()` 之后）；跑 `日志\probe-client-scope.js` 验证 |
 | 新建卡报 `dictCardTargetCat is not defined` | 同上，`PR_HOME_CAT` + `dictCardTargetCat` 一起在嵌套作用域 | 两个一起提到模块级 |
 | 拖拽调好的顺序换机器就没了 | 顺序只在 `USER.order[分类]`（localStorage），导出 JSON 不含它 | 关键顺序靠分类拆分；要带走就重排一次 |
 | 导入别人的词库包后词性没了 | 老包只有 `cards[].polarity`；`tagPol` 是 0.7.44+ 才有的字段 | 用新版导出的包（导入仍兼容老包） |
 | 磁盘上放了角色卡，界面里没有 | **0.7.46 及更早前端根本不读 `/cards`**（只有 write/validate/import 三处调用） | 升 0.7.47+，或点「重扫磁盘」；不要按「缓存问题」去重启 |
 | 点「导入」没反应、拖 .json 也没反应（Electron / 桌面版） | `display:none` 的 `<input type=file>` 走 label 代理失效；拖拽拿不到 `dataTransfer.files`（主进程没转发） | 0.7.47 起 input 改成透明 overlay 覆盖按钮，并加了「粘贴 JSON」兜底；导入失败会有「收到文件：…」提示 |
 | 按技能 §11.9 找不到 `anima_train_network.py` 等训练脚本 | 技能旧版没写脚本出处（只写了作者机器路径） | 见 §11「获取方式」：全部来自 kohya-ss/sd-scripts 上游，`git clone` 后即得 |
-| 按技能找 `train.ps1` / `style_check.py` / `make-lora-sheet*.py` 找不到 | 这些是作者本地脚本，旧版没随技能分发（<日期> 报告问题 1 的同类） | 0.7.47 起随技能放在 `$DSH_HOME\skills\comfyui-cards\scripts\`（`scripts\README.md` 给换机命令） |
+| 按技能找 `train.ps1` / `style_check.py` / `make-lora-sheet*.py` 找不到 | 这些是作者本地脚本，旧版没随技能分发（2026-10-22 报告问题 1 的同类） | 0.7.47 起随技能放在 `$DSH_HOME\skills\comfyui-cards\scripts\`（`scripts\README.md` 给换机命令） |
 | `train.ps1` 一跑就 `required file missing: D:\paint\...` | 参数默认值指向作者机器 | 显式传 `-Ckpt -Vae -Qwen3 -VPy -Trainer`（README 有整段示例） |
 
 ## 10. 验收与命令
@@ -245,7 +298,7 @@ Start-Process D:\paint\runtime\python312\pythonw.exe -ArgumentList 'expander.py'
 
 ## 11. 角色卡制作流水线（总纲：角色 LoRA / 身份控制 / LLLite / 特征锁 都算"制作过程"）
 
-**口径（<日期> 起）**：角色卡不是"填一个 JSON"。一张**可用的**角色卡由五段交付组成，
+**口径（2026-10-25 起）**：角色卡不是"填一个 JSON"。一张**可用的**角色卡由五段交付组成，
 其中角色 LoRA、LLLite 身份控制、控制图、特征锁都是**同一条流水线上的工序**，不是可选附件：
 
 | 段 | 工序 | 产物 | 落到卡的字段 | 验收门槛 | 详章 |
@@ -253,7 +306,7 @@ Start-Process D:\paint\runtime\python312\pythonw.exe -ArgumentList 'expander.py'
 | 1 | 图集与打标 | 30–60 张同角色图 + caption（trigger + 只写变化项） | — | 去重、1024 桶、身份词不进 caption | §12 |
 | 2 | 角色 LoRA | `xxx_comfyui.safetensors`（ANIMA→ComfyUI 转换后） | `lora` / `loraAlt` / `loraW`(0.7–0.9) | 同 seed 换词脸不漂；`loraAlt` 留旧件可回滚 | §12 |
 | 3 | 控制图（cond assets） | 正脸近景 / 全身正面 canny 线条稿，登记 `_cond/assets.json` | `conditioning.presets.*.asset` | 面板「导入控制图库」后能选中 | §5 |
-| 4 | LLLite 身份控制 | `xxx-lllite-v2-400` / `<身份LLLite-v3>.safetensors`（各 29.6 MB）+ `lllite-index.json` 登记 | `conditioning.presets.*.weights` / `strength` / `preprocess` | 目标动作能被条件图拽住，乘数守 1.0 | §14 |
+| 4 | LLLite 身份控制 | `xxx-lllite-v2-400` / `v3-400.safetensors`（各 29.6 MB）+ `lllite-index.json` 登记 | `conditioning.presets.*.weights` / `strength` / `preprocess` | 目标动作能被条件图拽住，乘数守 1.0 | §14 |
 | 5 | 特征锁（禁词锁） | 3 把：特征锁(both) / 服饰锁(full) / 体型锁(both) | `locks` | **对着已训件的实际漂移项写**，不照抄别人的锁 | §3 |
 | 0 | 卡本体 | `parts`(≥6 段) / `neg`(≥40) / `tags` / `cover` / `id` | 同左 | 导入面板能插、能出图 | §2 |
 
@@ -265,7 +318,7 @@ Start-Process D:\paint\runtime\python312\pythonw.exe -ArgumentList 'expander.py'
 | **B + LoRA** | A + `lora` 非空（`conditioning.enabled` 仍可 false） | 身份稳住，姿态/比例自由 | 大多数日常出图停在这档 |
 | **C + 身份控制** | B + cond 图 + LLLite 权重 + `presets`≥3 档（`enabled=true`） | 姿态/角度/构图被硬约束 | 需要固定动作或角度时才做 |
 
-**注意**：`conditioning.enabled` 可以是 `false` 而卡仍算完整——现役<角色>卡就是 `enabled=false`、
+**注意**：`conditioning.enabled` 可以是 `false` 而卡仍算完整——现役<角色卡>卡就是 `enabled=false`、
 presets 6 档待命。**判据是"文件与登记齐不齐"，不是"开关开不开"**。
 
 ### 11.1 工序顺序与依赖（不能乱）
@@ -316,7 +369,7 @@ $c = (Get-Content "$CARD_DIR\<名>.json" -Raw | ConvertFrom-Json).cards[0]
 |---|---|---|---|---|
 | 角色 LoRA | 身份（脸/发/饰物）+ **比例** | `<角色LoRA-v2>.safetensors`（比例版 v2） | 87.6 MB | 0.7–0.8 |
 | 画风 LoRA | 笔触/媒介/上色 | `<画风LoRA>.safetensors` | 175.1 MB | 0.45–0.55 |
-| LLLite | 构图/姿态/角度硬约束 | `<身份LLLite-v2>` / `<身份LLLite-v3>.safetensors` | 29.6 MB | 条件乘数 1.0 |
+| LLLite | 构图/姿态/角度硬约束 | `<身份LLLite-v2>` / `v3-400.safetensors` | 29.6 MB | 条件乘数 1.0 |
 
 旧件保留可回滚：`<角色LoRA>`（角色 v1，dim32）/ `<画风LoRA>`（画风）/ `<角色LoRA-v2>`（角色 v2）。
 
@@ -333,11 +386,11 @@ $c = (Get-Content "$CARD_DIR\<名>.json" -Raw | ConvertFrom-Json).cards[0]
          + qwen_3_06b_base.safetensors（TE） + qwen_image_vae.safetensors
 ```
 
-**获取方式（<日期> 实测核对，别再猜脚本从哪来）**
+**获取方式（2026-10-22 实测核对，别再猜脚本从哪来）**
 
 | 件 | 从哪来 | 实测核对 |
 |---|---|---|
-| sd-scripts 整仓 | `git clone https://github.com/kohya-ss/sd-scripts`（默认分支 **`main`**；<日期> 头 `11d8cedd0c`） | 作者机器上**没有 `.git`**（是拷贝），所以无法 `git pull`，只能重新下 |
+| sd-scripts 整仓 | `git clone https://github.com/kohya-ss/sd-scripts`（默认分支 **`main`**；2026-10-20 头 `11d8cedd0c`） | 作者机器上**没有 `.git`**（是拷贝），所以无法 `git pull`，只能重新下 |
 | `anima_train_network.py` | 上游根目录 | 本机 20,957 B / sha `1a238aa1…`；上游 `main` 21,422 B / sha `1c525f70…` → **本机是较早的上游快照**，差的 465 B 是上游后加的 `BlockSwapConfig` 重构（`model.enable_block_swap(args.blocks_to_swap, accelerator.device)` → `model.enable_block_swap(args.blocks_to_swap, swap_config)`）。用哪版都能训；要 `blocks_to_swap` 的新选项就换上游新版 |
 | `anima_train_control_net_lllite.py` | 上游根目录 | **与上游 `main` 逐字节一致**（42,514 B / sha `87787221…`） |
 | `networks\convert_anima_lora_to_comfy.py` | 上游 `networks/` | **与上游 `main` 逐字节一致**（7,638 B / sha `a8d06edf…`） |
@@ -366,11 +419,11 @@ $c = (Get-Content "$CARD_DIR\<名>.json" -Raw | ConvertFrom-Json).cards[0]
 
 | 用途 | 放在 ComfyUI 的哪个目录 | 文件名 | 大小 | sha256 前 16 |
 |---|---|---|---|---|
-| 角色底模（也用于训练 ckpt） | `models\diffusion_models` | `anima-aesthetic-v1.1.safetensors` | 4,182,230,656 B | `3C1868387A3A1FF5` |
+| 角色底模（也用于训练 ckpt） | `models\diffusion_models` | `<底模>.safetensors` | 4,182,230,656 B | `3C1868387A3A1FF5` |
 | 文本编码器 | `models\text_encoders` | `qwen_3_06b_base.safetensors` | 1,192,135,096 B | `CD2A512003E2F9F3` |
 | VAE | `models\vae` | `qwen_image_vae.safetensors` | 253,806,246 B | `A70580F0213E6796` |
 
-模型本体按模型方仓的说明取（Anima：`circlestone-labs/Anima`；Qwen-Image 系：`Comfy-Org/Qwen-Image_ComfyUI` 的 `split_files`）。**这两个链接 <日期> 没能联网核对**（本机访问 HF 超时），所以以上表的大小 / sha 为准——下完先对一遍再训。
+模型本体按模型方仓的说明取（Anima：`circlestone-labs/Anima`；Qwen-Image 系：`Comfy-Org/Qwen-Image_ComfyUI` 的 `split_files`）。**这两个链接 2026-10-22 没能联网核对**（本机访问 HF 超时），所以以上表的大小 / sha 为准——下完先对一遍再训。
 
 `train.ps1` 关键参数（默认值）：`-Ckpt/-Vae/-Qwen3`、`-DatasetConfig`、`-OutDir`（必填）、`-Name`、
 `-Dim 32 -Alpha 16`、`-Reso 768`、`-Steps 1200 -SaveEvery 100 -SaveLast 400`、`-Lr 4e-5 -TeLr 2e-5`、
@@ -397,7 +450,7 @@ max_bucket_reso = 1024
 resolution = 1024
 batch_size = 1
   [[datasets.subsets]]
-  image_dir = "D:/<工作区>/素材区/<素材目录>"
+  image_dir = "D:/dsh/素材区/角色-<角色卡>-比例版-2026-10-19"
   num_repeats = 4
   caption_dropout_rate = 0.05
 ```
@@ -470,7 +523,7 @@ Test-Path "$COMFY_ROOT\models\loras\<卡里的 lora 值>"
 
 > 前置：训练脚本与依赖按 §11.9「获取方式」备好（全部来自 kohya-ss/sd-scripts 上游，无需私有件）；下面命令里的路径按 §0 换成你的。
 
-**1) 定一个比例基准图**。只能有一张，manual 的（`<基准图>.png`：八头身、长腿、小头、细五官）。所有"比例对不对"的争论都回到它与它的并排图。
+**1) 定一个比例基准图**。只能有一张，manual 的（`捏Ta-成稿-<角色卡>-站姿全身-1024x1496.png`：八头身、长腿、小头、细五官）。所有"比例对不对"的争论都回到它与它的并排图。
 
 **2) 凑数据（23 张就够）**
 
@@ -486,7 +539,7 @@ Test-Path "$COMFY_ROOT\models\loras\<卡里的 lora 值>"
 
 ```
 # 身份 + 服装（逐字固定）
-<角色触发词>, 1girl, solo, long black hair, blue eyes, glasses, <饰物>, 
+julin, 1girl, solo, long black hair, blue eyes, glasses, maple leaf hair ornament,
 beige trench coat, white shirt, blue necktie, black pleated skirt, above knee, white socks, black mary janes,
 # 取景（逐图不同）
 full body, feet visible
@@ -513,7 +566,7 @@ delicate facial features, elongated silhouette, detailed face
 ```powershell
 $env:PYTHONPATH='D:\paint\sd-scripts'
 & D:\paint\venv312\Scripts\python.exe D:\paint\sd-scripts\networks\convert_anima_lora_to_comfy.py `
-    <out>\<比例LoRA>.safetensors D:\paint\ComfyUI\models\loras\<LoRA>.safetensors
+    <out>\<比例LoRA>-v2-000006.safetensors D:\paint\ComfyUI\models\loras\<角色LoRA-v2>.safetensors
 ```
 
 转完**重启 ComfyUI**（启动时扫 loras 并缓存），卡里 `lora` 字段写文件名**带 `.safetensors`**。
@@ -566,6 +619,44 @@ $env:PYTHONPATH='D:\paint\sd-scripts'
 | 正则 | `noise_offset 0.05` + `min_snr_gamma 5` | 上一版两项都没有，画风跟着进 |
 
 **这三条本身就是防画风混入的设置。**
+
+### 12A.6 同义词过载：同一属性超过三个词必然走极端
+
+**实测（2026-10-29，anima-aesthetic-v1.1 + <画风卡> styleA 0.38）**。目标发色取自参考图实测值 `#6C90C8`（低饱和灰蓝，明度 65%）：
+
+| 正向发色词 | 实测出图色 | 明度 | 判定 |
+|---|---|---|---|
+| `blue + sky blue + medium blue` | `#1E4A8C` | 42% | 偏深一档 |
+| 再加 `soft blue` | 仍偏深 | — | 无效 |
+| `pale + powder + dusty + muted + desaturated + soft`（6 个） | `#C4E8F2` | 88% | 冲到冰蓝近白 |
+| 只留 `sky blue + medium blue + blue`（3 个） | `#BBCCD7` | 78% | 仍偏浅一档 |
+
+**规则**：一个属性只写 **色相 1 个 + 明度修饰 1 个**，同义词总数 **不超过 3**。第 4 个开始单调推向极端，第 6 个直接翻档。
+
+**同一条规律在别的属性上同构**：
+- 眼睛 `huge + very large` 两个 → 出**竖长猫眼**；单个 `big round eyes` → 出圆眼
+- 表情 `tiny + subtle + slight smile` 三个 → 出**歪嘴笑**；单个 `small smile` → 出正笑
+- 头发 `layered + feathered layers + jagged tips + spiky ends` 四个 → 出**碎短发**
+
+### 12A.7 属性互斥：浅色发与长发不能同时给
+
+**同一批实测**。发色目标 `#6C90C8`，发长目标“过腰长发”：
+
+| 长度词数量 | 发色实测 | 发长实测 |
+|---|---|---|
+| 0（`layered hair` 之类层次词） | `#BBCCD7` 浅 | 短发到下巴 |
+| 1（单个 `long hair`） | `#90A4B9` / `#4C6691` / `#F5F7FA`（种子间漂移极大） | 齐肩 |
+| 3（`very long + down to waist + framing face`） | 深海军蓝 | 长发过肩 |
+
+**只要出现长度词，发色就掉一个明度档。** 这是底模先验（浅色发↔短发、长发↔深色），不是提示词写法问题。
+
+**A 档遇到这种互斥时的处置**：
+1. 不要继续加词硬顶 —— 加词只会把属性推向更极端的另一端
+2. 出两张分别对齐：一张保发色丢发长，一张保发长丢发色
+3. 明确告诉用户这是模型先验互斥，转 B 档训件才能同时满足
+4. 可以试 img2img 从“对的那张”延长，但 denoise 低于 0.6 改不动结构、高于 0.6 会带走发色，通常不划算
+
+**判据**：如果同一 seed 下改一个词导致另一个正交属性同步变化，就是互斥，不是调参问题。
 
 ## 13. 从零训练画风 LoRA
 
@@ -643,7 +734,7 @@ num_repeats = 14          # 特写是崩得最厉害的一档，重复给足
 ## 15. 评测与取件（三件套共用）
 
 - **口径固定**：同 seed（20261014 / 20261018）、同提示词、同分辨率、同步数 CFG，**带与不带触发词各一组**，
-  **必须有一组"零 LoRA 底图"对照**——没有零对照的结论一律不成立（曾因此误判"画风 LoRA 自带角色身份"，后作废）。
+  **必须有一组"零 LoRA 底图"对照**——没有零对照的结论一律不成立（曾因此误判"julinst 自带角色身份"，后作废）。
 - **强度扫描**：0.3 / 0.5 / 0.7 + 目标档；epoch 取 2–3 个候选（e2/e5/e10）同场比。
 - **拼图看完整画幅**（`$DSH_HOME\skills\comfyui-cards\scripts\make-lora-sheet-full.py`；裁切版是同一个目录下的 `make-lora-sheet.py`），不要裁切后再比——裁切会掩盖取景漂移。
   用法：`python make-lora-sheet-full.py out.png "e2=a.png" "e10=b.png"`
@@ -691,7 +782,7 @@ LoRA 的 840 张量按模块可分三段，用途不同：
 
 词库的面板状态仍在 localStorage 的键 `dsh-comfyui-console/v1` → `USER`（`frags / capPol / capNote / order`），但 **0.7.60 起词库镜像到磁盘目录 `本地绘画\词库\`，以目录为准**（跟角色卡、风格卡同一套规则）。要给用户「一批词」，导出 JSON 让她点「导入」仍是最省事的路；也可以直接往 `词库\` 丢 `{分类}.json`。
 
-### 18.0 目录即真相（0.7.60 起，<日期>）
+### 18.0 目录即真相（0.7.60 起，2026-10-22）
 
 三类卡全部绑目录，**一张卡 = 一个文件**：
 
@@ -786,7 +877,7 @@ LoRA 的 840 张量按模块可分三段，用途不同：
 
 ```jsonc
 {
-  "kind": "dsh-dict-cards", "v": 1, "at": "<日期>T…Z",
+  "kind": "dsh-dict-cards", "v": 1, "at": "2026-10-22T…Z",
   "cards": [ { "cat": "姿势·极限", "cn": "站立军姿", "en": "standing at attention, arms behind back" } ],
   "notes": { "standing at attention, arms behind back": "站立军姿" },     // 胶囊中文备注
   "tagPol": { "censored": "neg", "text, watermark": "neg" }               // 胶囊词性（0.7.44+）
@@ -813,7 +904,7 @@ LoRA 的 840 张量按模块可分三段，用途不同：
 
 ```powershell
 # 模块级可见性（假 loader 跑真 bundle，打印 typeof；全 function/object 才算过）
-node <工作区>\日志\<调试脚本>.js D:\dshl\.dsh\plugins\dsh-comfyui-console\plugin\lib\client.js
+node D:\dsh\日志\probe-client-scope.js D:\dshl\.dsh\plugins\dsh-comfyui-console\plugin\lib\client.js
 
 # 目录绑定：三个 kind 都要 200，并返回各自目录
 Invoke-RestMethod 'http://127.0.0.1:8199/dir/list?kind=dict' -Headers @{ 'X-Console-Client' = '1' } | Select-Object ok, count, dir
@@ -822,12 +913,12 @@ Invoke-RestMethod 'http://127.0.0.1:8199/dir/list?kind=dict' -Headers @{ 'X-Cons
 (Get-ChildItem 'D:\dsh\本地绘画\词库' -Filter *.json | ForEach-Object { (Get-Content $_.FullName -Raw -Encoding UTF8 | ConvertFrom-Json).dictCards.Count }) -join ','
 
 # 组件渲染冒烟（编辑已有卡 / 新建卡 / 带词性输入行 / 三键）
-node <工作区>\日志\<冒烟脚本>.js  D:\dshl\.dsh\plugins\dsh-comfyui-console\plugin\lib\client.js
+node D:\dsh\日志\smoke-dictcard.js  D:\dshl\.dsh\plugins\dsh-comfyui-console\plugin\lib\client.js
 ```
 
 两条都过 + `check_contract.py` 15 项 PASS，再往生产目录同步。
 
-## 19. 换机器检查清单（路径依赖审计，<日期>）
+## 19. 换机器检查清单（路径依赖审计，2026-10-22）
 
 `sidecar_dirs.py` / `sidecar_cards.py` / `sidecar_pack.py` 里**没有任何写死的卡目录**：角色卡取 `config.json` 的 `cardsDir`，风格卡与词库由 `dirname(cardsDir)` 派生，LoRA 目录由 `comfyRoot` 派生。换机器真正要动的是 `config.json`。
 
@@ -923,7 +1014,7 @@ Invoke-RestMethod ('http://127.0.0.1:' + $cfg.sidecarPort + '/dir/list?kind=dict
 侧车每次解包都往 `plugin/work/unpack.log` 追加一行（同时打 stdout）：
 
 ```
-[unpack <日期> 21:20:11] 87.6 MB 0.16s auto=0 ok=True card=絉彩绘 v2 · 纯新件 err=
+[unpack 2026-10-22 21:20:11] 87.6 MB 0.16s auto=0 ok=True card=<画风卡> v2 · 纯新件 err=
 ```
 
 排查顺序：① 看这行有没有出现 —— 没出现＝请求没到侧车（前端/端口/侧车没起）；出现了且 `ok=False`，看 `err=`；② `127.0.0.1:8199` 是否在听；③ 面板消息里的 `已传 x%` 卡在一位数＝上传通道问题（防火墙/代理拦了 localhost POST）；④ `ok=True` 但面板不回＝前端异常，看 DevTools Console 与 `client-err.log`。
@@ -1028,7 +1119,7 @@ node tools/build_client.mjs
 $h = @{ 'X-Console-Token'=$tok; 'X-Console-Client'='1'; 'Origin'='http://127.0.0.1:10722' }
 ```
 
-token 在 `<工作区>\日志\<解析目录>\work\sidecar-token.txt`。
+token 在 `日志\comfyui-console-解析\work\sidecar-token.txt`。
 
 ### 22.2 自检
 

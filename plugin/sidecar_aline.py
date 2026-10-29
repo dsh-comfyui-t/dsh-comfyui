@@ -4,8 +4,8 @@
 从 preview/expander.py 原样搬来 32 个函数 / 691 行。
 不改逻辑，只补一层配置适配：A 线的键名和本地 sidecar_state 不一样。
 
-  A 线 comfyRoot           -> 指向 ComfyUI 目录本身（D:\\paint\\ComfyUI）
-  本地 comfyRoot           -> 指向父目录（D:\\paint），main.py 在 comfyRoot/ComfyUI/main.py
+  A 线 comfyRoot           -> 指向 ComfyUI 目录本身（<ComfyUI目录>）
+  本地 comfyRoot           -> 指向父目录（<ComfyUI父目录>），main.py 在 comfyRoot/ComfyUI/main.py
   A 线 outputDirectory     -> 本地 outputDir
   A 线 comfyPythonExe      -> 本地 pythonExe
 
@@ -37,7 +37,7 @@ CONFIG = os.path.join(HERE, 'config.json')
 
 
 def _aline_comfy_root():
-    """本地 comfyRoot 可能是父目录（D:\\paint），也可能是 ComfyUI 本身，两种都要认。"""
+    """本地 comfyRoot 可能是父目录（<ComfyUI父目录>），也可能是 ComfyUI 本身，两种都要认。"""
     r = str(_LOCAL_CFG.get('comfyRoot') or '').strip()
     if not r:
         return ''

@@ -181,7 +181,7 @@ const MODEL_DEFAULTS = {
 	clip: "qwen_3_06b_base.safetensors",
 	clipType: "qwen_image",
 	vae: "qwen_image_vae.safetensors",
-	unet: "anima-aesthetic-v1.1.safetensors",
+	unet: "<底模>.safetensors",
 	loras: [],
 };
 
@@ -7694,7 +7694,7 @@ const [outDraft, setOutDraft] = React.useState("");
 				catch (e) {
 					if (dead) return;
           setOnline(false);
-          setMsg("ComfyUI 未运行：点右上「启动 ComfyUI」手动启动（或双击 D:\\paint\\start-comfy.ps1）");
+          setMsg("ComfyUI 未运行：点右上「启动 ComfyUI」手动启动（或双击 <ComfyUI父目录>\\start-comfy.ps1）");
           return;
 				}
 				if (dead) return;
@@ -7730,7 +7730,7 @@ const [outDraft, setOutDraft] = React.useState("");
 		if (ckpt && list.indexOf(ckpt) >= 0) return ckpt;          // 眼下这个在新分支里有效 -> 优先保住
 		const saved = savedModelFor(anima);
 		if (saved && list.indexOf(saved) >= 0) return saved;       // 否则回到该分支上次用的
-		if (anima && list.indexOf("anima-aesthetic-v1.1.safetensors") >= 0) return "anima-aesthetic-v1.1.safetensors";
+		if (anima && list.indexOf("<底模>.safetensors") >= 0) return "<底模>.safetensors";
 		return list[0] || "";
 	};
 	/**
@@ -7755,8 +7755,8 @@ const [outDraft, setOutDraft] = React.useState("");
 		if (ckpt && modelList.indexOf(ckpt) >= 0) return;      // 当前值在本分支有效 → 不动（= 上次用的）
 		const saved = savedModelFor(isAnima);
 		if (saved && modelList.indexOf(saved) >= 0) { setCkpt(saved); return; }   // 恢复该分支上次用的
-		const prefer = (isAnima && unets.indexOf("anima-aesthetic-v1.1.safetensors") >= 0)
-			? "anima-aesthetic-v1.1.safetensors" : modelList[0];
+		const prefer = (isAnima && unets.indexOf("<底模>.safetensors") >= 0)
+			? "<底模>.safetensors" : modelList[0];
 		setCkpt(prefer);
 	}, [clipType, unets.length, ckpts.length]);
 
@@ -9911,12 +9911,13 @@ function libTab() {
 
 		/** 风格卡的模块划分：画风 / 线条 / 上色 / 光影 */
 		const STYLE_GROUPS = [
+		  ["proportion", "比例", ["chibi", "super deformed", "big head", "small body", "proportion", "head-to-body", "tall", "mature", "petite", "loli"]],
 		  ["style", "画风", ["illustration", "anime", "art style", " style", "painterly", "realistic", "sketch", "watercolor", "cel", "brush", "stroke", "texture"]],
 		  ["line", "线条", ["lineart", "line weight", "outline", "ink", "pencil", "line"]],
 		  ["color", "上色", ["color", "coloring", "palette", "tone", "shading", "gradient", "flat"]],
 		  ["light", "光影", ["light", "lighting", "shadow", "glow", "highlight", "rim", "cinematic"]],
 		];
-		const STYLE_ORDER = ["trigger", "style", "line", "color", "light", "extra"];
+		const STYLE_ORDER = ["trigger", "proportion", "style", "line", "color", "light", "extra"];
 		/** 风格标签的中文备注（点胶囊时显示） */
 		const STYLE_ZH = {
 		  "@mochizuki_kei": "画师触发", "mochizuki_kei style": "望月けい画风", "2d anime illustration": "2D 动漫插画",
@@ -9928,9 +9929,26 @@ function libTab() {
 		  "best quality": "最佳质量", "amazing quality": "惊异质量", "very aesthetic": "很美",
 		  "absurdres": "超高分辨率", "HDR": "HDR", "newest": "最新",
 		};
+		/** 比例预设：卡的 proportion 只存 preset 名，插入时展开成词（2026-10-29） */
+		const PROPORTION_PRESETS = [
+		  ["chibi", "Q版 3头身", ["chibi", "super deformed"]],
+		  ["half", "半身 5-6头身", ["portrait", "upper body"]],
+		  ["adult", "成年 7-8头身", ["tall", "mature proportions"]],
+		  ["none", "不锁比例", []],
+		  ["custom", "自定义", null],
+		];
+		/** 把 proportion 展开成词串：兼容老卡（数组）与新卡（{preset,custom}） */
+		function proportionTags(v) {
+		  if (!v) return "";
+		  if (Array.isArray(v)) return normPart(v).map((x) => String(x.t || "").trim()).filter(Boolean).join(", ");
+		  const preset = String((v || {}).preset || "");
+		  if (preset === "custom") return String((v || {}).custom || "").trim();
+		  const hit = PROPORTION_PRESETS.filter((x) => x[0] === preset)[0];
+		  return (hit && hit[2]) ? hit[2].join(", ") : "";
+		}
 		/** 把一整串风格标签拆进各模块（每项 {t,n}） */
 		function splitStyleTags(tags) {
-		  const parts = { trigger: "", style: [], line: [], color: [], light: [], extra: [] };
+		  const parts = { trigger: "", proportion: { preset: "none", custom: "" }, style: [], line: [], color: [], light: [], extra: [] };
 		  const toks = String(tags || "").split(",").map((x) => x.trim()).filter(Boolean);
 		  let first = true;
 		  for (const t of toks) {
@@ -9941,6 +9959,13 @@ function libTab() {
 		    first = false;
 		    if (!hit) hit = "extra";
 		    if (hit === "trigger") { parts.trigger = t; continue; }
+		    if (hit === "proportion") {
+		      const low2 = t.toLowerCase();
+		      if (low2.indexOf("chibi") >= 0 || low2.indexOf("deformed") >= 0) parts.proportion.preset = "chibi";
+		      else if (low2.indexOf("tall") >= 0 || low2.indexOf("mature") >= 0) parts.proportion.preset = "adult";
+		      else { parts.proportion.preset = "custom"; parts.proportion.custom = t; }
+		      continue;
+		    }
 		    parts[hit].push({ t: t, n: STYLE_ZH[t] || "" });
 		  }
 		  return parts;
@@ -9952,6 +9977,7 @@ function libTab() {
 		  if (trg) out.push(trg);
 		  for (const k of STYLE_ORDER) {
 		    if (k === "trigger") continue;
+		    if (k === "proportion") { const sp = proportionTags((p || {})[k]); if (sp) out.push(sp); continue; }
 		    const arr = normPart((p || {})[k]);
 		    const s = arr.map((x) => String(x.t || "").trim()).filter(Boolean).join(", ");
 		    if (s) out.push(s);
@@ -10217,7 +10243,7 @@ function writeCardToDisk(rec) {
     /**
      * 0.7.85：落盘曾经只写上面这份白名单 —— 卡 JSON 里白名单之外的字段（`id`、`schemaVersion`、
      * `loraNote`、`cover`、`packMode` …）会被**悄悄抹掉**：面板里还在，存一次盘就没了。
-     * 2026-10-22 实测 絉林.json 少了 `schemaVersion: 2` 与整条 `loraNote`（只有备份里还有）。
+     * 2026-10-22 实测 <角色卡>.json 少了 `schemaVersion: 2` 与整条 `loraNote`（只有备份里还有）。
      * 现在以「面板里那张卡」为底，白名单字段覆盖上去，其余原样保留。
      */
     const keep = Object.assign({}, rec || {});
@@ -10310,13 +10336,49 @@ function cardCoverOf(c) {
 
 	function delCard(c) {
 		if (c.builtin) { setMsg("内置卡不能删除，可以点 ✎ 修改它的封面与标签"); return; }
-		if (!window.confirm("确定删除角色卡「" + c.name + "」？")) return;
-		USER.cards = (USER.cards || []).filter((x) => x.id !== c.id);
-		saveUser();
-		setMsg("已删除角色卡「" + c.name + "」");
+		if (!window.confirm("确定删除角色卡「" + c.name + "」？\n\n会同时从磁盘文件里删掉这张卡；文件里只剩它一个时，连文件一起删。")) return;
+		// 0.7.91：同 delStyleCard —— mergeDiskCards 也是「磁盘为准」，只删内存刷一次就复活。
+		const nm = String(c.name || "").trim();
+		const _real = (USER.cards || []).filter((x) => x && String(x.id || "") === String(c.id || ""))[0] || {};
+		const _file0 = String(c.file || _real.file || "").trim();
+		const dropLocal = () => {
+			USER.cards = (USER.cards || []).filter((x) => x && (x.id !== c.id || String(x.name || "").trim() !== nm));
+			saveUser();
+		};
+		const finish = (d) => {
+			dropLocal();
+			setMsg("已删除角色卡「" + nm + "」" + (d.deletedFile ? " · 文件已删除"
+				: (d.noop ? " · 文件早已不在" : " · 从文件移除 " + String(d.removed || 0) + " 张")));
+			repaintAll();
+		};
+		const del1 = (path) => fetch(EXPANDER + "/dir/del", {
+			method: "POST",
+			headers: Object.assign({ "Content-Type": "application/json" }, CONSOLE_HEADERS),
+			body: JSON.stringify({ kind: "cards", path: path, name: nm, id: String(c.id || "") }),
+		}).then((r) => r.json()).then((d) => {
+			if (!d || !d.ok) throw new Error(String((d && d.error) || "侧车拒绝"));
+			return d;
+		});
+		const byName = () => fetch(EXPANDER + "/dir/list?kind=cards", { headers: CONSOLE_HEADERS })
+			.then((r) => r.json())
+			.then((j) => {
+				const lst = j.cards || j.items || [];
+				const hit = lst.filter((x) => String((x && x.name) || "").trim() === nm)[0];
+				if (!hit) throw new Error("磁盘上没有同名卡文件");
+				return String(hit.__file || hit.file || "");
+			});
+		try { clientLog("delCard", "name=" + nm + " file=" + (_file0 || "(空)") + " 有真实记录=" + (!!_real.file)); } catch (e) {}
+		Promise.resolve(_file0 || byName())
+			.then((path) => { if (!path) throw new Error("找不到对应文件"); return del1(path); })
+			.then(finish)
+			.catch((e) => {
+				dropLocal();
+				setMsg("已从面板删除「" + nm + "」，但磁盘没删掉：" + String((e && e.message) || e) + " —— 同步后会回来");
+				repaintAll();
+			});
 	}
 
-	/**
+/**
  * 0.7.87：封面「设了却没落盘」的根因修复。
  * 以前「选择图片…」「用最近一张出图」「清除封面」只改卡编辑器的内存态（setCardEdit / setStyleEdit），
  * 不按「保存」就整条丢掉 —— 表现就是「每次进控制台，卡片封面掉」。
@@ -10766,7 +10828,7 @@ h("button", { style: CARD_BTN, onClick: addCardLock }, "＋ 新增特征锁"),
 										h("div", { style: { display: "flex", gap: "8px", marginTop: "12px", alignItems: "center" } },
 											h("div", { style: { fontWeight: 600, fontSize: "12px", color: "var(--c-fg2)", margin: "12px 0 4px" } }, "资产与迁移（可选 · 让这张卡能跨机器、跨底模活下去）")),
 										h("div", { style: row }, h("span", { style: lab }, "底模"),
-											h("input", { style: inp, value: _bmText, placeholder: "逗号分隔，例如 anima-aesthetic-v1.1.safetensors", onChange: (e) => { set("baseModelsText", e.target.value); setCardChk(null); } })),
+											h("input", { style: inp, value: _bmText, placeholder: "逗号分隔，例如 <底模>.safetensors", onChange: (e) => { set("baseModelsText", e.target.value); setCardChk(null); } })),
 										h("div", { style: { fontSize: "11.5px", color: "var(--c-fg4)", margin: "-4px 0 8px" } }, "写清这张卡是在哪个底模上调出来的。换机或换底模之后，点「自检」就能知道还能不能用。"),
 										h("div", { style: row }, h("span", { style: lab }, "训练记录"),
 											h("textarea", { style: Object.assign({}, inp, { minHeight: "46px", fontFamily: "Consolas, monospace", lineHeight: "1.45" }), value: _trText, placeholder: '{"steps":3000,"rank":64,"datasetHash":"..."}', onChange: (e) => { set("trainingText", e.target.value); setCardChk(null); } })),
@@ -10893,15 +10955,55 @@ h("button", { style: CARD_BTN, onClick: addCardLock }, "＋ 新增特征锁"),
 		function editStyleCard(c) {
 		  const u = (USER.styleCards || []).filter((x) => x && x.id === c.id)[0];
 		  const parts = (u && u.parts) || splitStyleTags(c.tags);
-		  setStyleEdit({ id: c.id, name: c.name || "", note: c.note || "", cover: styleCoverOf(c), neg: normPart(c.neg), parts: parts, loras: normStyleLoras(c), ckpt: String(c.ckpt || ""), gen: Object.assign({}, c.gen || {}), isNew: false, builtin: !!c.builtin });
+		  setStyleEdit({ id: c.id, name: c.name || "", note: c.note || "", cover: styleCoverOf(c), neg: normPart(c.neg), parts: parts, loras: normStyleLoras(c), ckpt: String(c.ckpt || ""), gen: Object.assign({}, c.gen || {}), file: String((u && u.file) || c.file || ""), diskDir: String((u && u.diskDir) || c.diskDir || ""), isNew: false, builtin: !!c.builtin });
 		}
 		
 		function delStyleCard(c) {
 		  if (c.builtin) { setMsg("内置风格卡不能删除，可以点「编辑」改它的标签与封面"); return; }
-		  if (!window.confirm("确定删除风格卡「" + c.name + "」？")) return;
-		  USER.styleCards = (USER.styleCards || []).filter((x) => x.id !== c.id);
-		  saveUser();
-		  setMsg("已删除风格卡「" + c.name + "」");
+		  if (!window.confirm("确定删除风格卡「" + c.name + "」？\n\n会同时从磁盘文件里删掉这张卡；文件里只剩它一个时，连文件一起删。")) return;
+		  // 0.7.91：不再依赖记录上的 c.file —— 从 localStorage 恢复的老卡、导入未落盘的卡都没有这个字段，
+		  // 那样只能删内存，而 mergeDiskStyle 是「磁盘为准」，同步一次就复活。
+		  // 这里统一走「先按 name 去磁盘清单里找文件，再让侧车删」，file 有值也走同一条路，只有一处真相。
+		  const nm = String(c.name || "").trim();
+		  // 删除按钮传进来的是编辑器对象（editStyleCard 构造），历史版本里没有 file 字段 ——
+		  // 所以先从 USER 里的真实记录取，取不到再按 name 去磁盘清单查。
+		  const _real = (USER.styleCards || []).filter((x) => x && String(x.id || "") === String(c.id || ""))[0] || {};
+		  const _file0 = String(c.file || _real.file || "").trim();
+		  const dropLocal = () => {
+		    USER.styleCards = (USER.styleCards || []).filter((x) => x && (x.id !== c.id || String(x.name || "").trim() !== nm));
+		    saveUser();
+		  };
+		  const finish = (d) => {
+		    dropLocal();
+		    setMsg("已删除风格卡「" + nm + "」" + (d.deletedFile ? " · 文件已删除"
+		      : (d.noop ? " · 文件早已不在" : " · 从文件移除 " + String(d.removed || 0) + " 张")));
+		    repaintAll();
+		  };
+		  const del1 = (path) => fetch(EXPANDER + "/dir/del", {
+		    method: "POST",
+		    headers: Object.assign({ "Content-Type": "application/json" }, CONSOLE_HEADERS),
+		    body: JSON.stringify({ kind: "style", path: path, name: nm, id: String(c.id || "") }),
+		  }).then((r) => r.json()).then((d) => {
+		    if (!d || !d.ok) throw new Error(String((d && d.error) || "侧车拒绝"));
+		    return d;
+		  });
+		  const byName = () => fetch(EXPANDER + "/dir/list?kind=style", { headers: CONSOLE_HEADERS })
+		    .then((r) => r.json())
+		    .then((j) => {
+		      const lst = j.cards || j.items || [];
+		      const hit = lst.filter((x) => String((x && x.name) || "").trim() === nm)[0];
+		      if (!hit) throw new Error("磁盘上没有同名卡文件");
+		      return String(hit.__file || hit.file || "");
+		    });
+		  try { clientLog("delStyleCard", "name=" + nm + " file=" + (_file0 || "(空)") + " 有真实记录=" + (!!_real.file)); } catch (e) {}
+		  Promise.resolve(_file0 || byName())
+		    .then((path) => { if (!path) throw new Error("找不到对应文件"); return del1(path); })
+		    .then(finish)
+		    .catch((e) => {
+		      dropLocal();
+		      setMsg("已从面板删除「" + nm + "」，但磁盘没删掉：" + String((e && e.message) || e) + " —— 同步后会回来");
+		      repaintAll();
+		    });
 		}
 		
 		function pickStyleCoverFile(e) {
@@ -11276,7 +11378,7 @@ function applyStyleImport(raw) {
     if (!nm) continue;
     const tags = String(c.tags || joinStyleParts(c.parts || {})).trim();
     if (!tags) continue;
-    const rec = { id: "s" + String(Date.now()) + "_" + ok.length, name: nm, tags: tags, note: String(c.note || ""), cover: String(c.cover || ""), parts: (c.parts && typeof c.parts === "object") ? c.parts : splitStyleTags(tags), neg: normPart(c.neg), loras: normStyleLoras(c), ckpt: String(c.ckpt || ""), gen: Object.assign({}, c.gen || {}) };
+    const rec = { id: "s" + String(Date.now()) + "_" + ok.length, name: nm, tags: tags, note: String(c.note || ""), cover: String(c.cover || ""), parts: (c.parts && typeof c.parts === "object") ? c.parts : splitStyleTags(tags), neg: normPart(c.neg), loras: normStyleLoras(c), ckpt: String(c.ckpt || ""), gen: Object.assign({}, c.gen || {}), baseModels: (typeof _styleBm === "function" ? _styleBm(c) : (Array.isArray(c.baseModels) ? c.baseModels : [])), training: c.training || null, regression: c.regression || null };
     const hit = USER.styleCards.findIndex((x) => x && String(x.name || "").trim() === nm);
     if (hit >= 0) { rec.id = USER.styleCards[hit].id; if (!rec.cover && USER.styleCards[hit].cover) rec.cover = USER.styleCards[hit].cover; USER.styleCards[hit] = rec; updated++; }
     else { USER.styleCards.push(rec); added++; }
@@ -11472,6 +11574,26 @@ h("div", { style: row }, h("span", { style: lab }, "画风 LoRA"),
 		              h("span", { style: chipX, title: "移除这个 LoRA", onClick: () => set("loras", (d.loras || []).filter((x, j) => j !== i)) }, "×")))
 		            : h("span", { style: { fontSize: "12px", color: "var(--c-fg4)" } }, "还没挂 LoRA（只插文字）")),
 		        h("div", { style: { fontSize: "12px", color: "var(--c-fg4)" } }, "直插 = 清空 LoRA 后只挂这张卡；叠插 = 叠加到现有 LoRA 上（融合多张画风）· 触发词写最前 · 官方 LoRA 建议 0.35~0.5，自训 0.5~0.7"))),
+h("div", { style: row }, h("span", { style: lab }, "比例"),
+		      h("div", { style: { display: "flex", gap: "8px", flexWrap: "wrap", flex: 1, alignItems: "center" } },
+		        h("select", {
+		          style: Object.assign({}, inp, { flex: "0 0 170px" }),
+		          value: String((parts.proportion || {}).preset || "none"),
+		          title: "插入这张卡时按这个比例注入头身比词",
+		          onChange: function (e) {
+		            var cur = parts.proportion || {};
+		            setPart("proportion", { preset: e.target.value, custom: String(cur.custom || "") });
+		          },
+		        }, PROPORTION_PRESETS.map(function (pv) { return h("option", { key: pv[0], value: pv[0] }, pv[1]); })),
+		        String((parts.proportion || {}).preset || "none") === "custom"
+		          ? h("input", {
+		              style: Object.assign({}, inp, { flex: "1 1 260px" }),
+		              value: String((parts.proportion || {}).custom || ""),
+		              placeholder: "自定义头身比词，逗号分隔",
+		              onChange: function (e) { setPart("proportion", { preset: "custom", custom: e.target.value }); },
+		            })
+		          : h("span", { style: { fontSize: "12px", color: "var(--c-fg4)", flex: "1 1 220px" } },
+		              "插入时注入：" + (proportionTags(parts.proportion) || "（不注入）")))),
 mod("style", "画风"),
 		    mod("line", "线条"),
 		    mod("color", "上色"),
@@ -11842,7 +11964,7 @@ function presetTab() {
 				  try {
 				    const r = await jpost(EXPANDER + "/comfy/start", {}, 120000);
 				    if (!r || !r.ok) throw new Error((r && r.message) || "start 失败");
-				  } catch (e) { setOnline(false); setMsg("启动失败：" + errText(e) + "。也可双击 D:\\paint\\start-comfy.ps1"); return; }
+				  } catch (e) { setOnline(false); setMsg("启动失败：" + errText(e) + "。也可双击 <ComfyUI父目录>\\start-comfy.ps1"); return; }
 				  for (let i = 0; i < 60; i++) {
 				    try { await jget(COMFY + "/system_stats", 4000); break; }
 				    catch (e3) { await new Promise((r) => setTimeout(r, 2000)); }
