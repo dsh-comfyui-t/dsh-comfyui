@@ -28,7 +28,7 @@ const CLIENT = path.join(LIB, 'client.js');
 const IND = '\t\t';
 const TAIL_ANCHOR = '\n' + IND + 'exports.apply = apply;';
 const MARK_RE = /^\t\t\/\/ =+ [^\n]*来自 lib\/(\w+)\.js[^\n]*$/gm;
-const SOURCES = ['dict', 'presets', 'workflow', 'dictcard', 'online_models', 'app'];
+const SOURCES = ['dict', 'presets', 'workflow', 'dictcard', 'online_models', 'randomlib', 'app'];
 const EXPORT_RE = /^[ \t]*export\s+(default\s+)?/;
 
 const rd = (p) => fs.readFileSync(p, 'utf8');

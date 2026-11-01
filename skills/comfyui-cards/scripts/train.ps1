@@ -1,4 +1,4 @@
-# train.ps1 -- julst2 style LoRA retrain driver.
+# train.ps1 -- <画风卡> style LoRA retrain driver.
 #
 # Host rule (AGENTS.md sec.1 + handover 7.1): Windows PowerShell 5.1 decodes a
 # BOM-less .ps1 as GBK, so this file is PURE ASCII. Every path that may contain
@@ -8,7 +8,7 @@
 #   powershell -ExecutionPolicy Bypass -File train.ps1 -Smoke
 #   powershell -ExecutionPolicy Bypass -File train.ps1 -Steps 1200 -SaveEvery 100
 #   powershell -ExecutionPolicy Bypass -File train.ps1 -Steps 2000 `
-#       -ResumeFrom <OUTDIR>\julst2-001200.safetensors   (OUTDIR must be passed in; see -OutDir)
+#       -ResumeFrom <OUTDIR>\<画风卡>-001200.safetensors   (OUTDIR must be passed in; see -OutDir)
 #
 # The script never writes to existing weight files: the output name is derived
 # from -Name and a clobber assert runs before training starts.
@@ -20,7 +20,7 @@ param(
   [string]$TrainDataDir = '',
   [string]$DatasetConfig = '',
   [string]$OutDir      = '',
-  [string]$Name        = 'julst2',
+  [string]$Name        = '<画风卡>',
   [string]$ResumeFrom  = '',
   [string]$NetworkModule = 'networks.lora_anima',
   [int]$Dim            = 32,
@@ -114,7 +114,7 @@ $argList.Add('--save_model_as=safetensors')
 $argList.Add('--gradient_checkpointing')
 $argList.Add('--cache_latents')
 if (-not $RefreshLatents) { $argList.Add('--cache_latents_to_disk')
-# 8GB: freeze TE + cache TE outputs (DiT-only, same shape as julinst)
+# 8GB: freeze TE + cache TE outputs (DiT-only, same shape as <画风LoRA>)
 $argList.Add('--network_train_unet_only')
 $argList.Add('--cache_text_encoder_outputs')
 $argList.Add('--cache_text_encoder_outputs_to_disk') }
@@ -132,7 +132,7 @@ $argList.Add('--persistent_data_loader_workers')
 $argList.Add('--sdpa')
 $argList.Add('--log_with=tensorboard')
 
-Write-Host '=== julst2 retrain pre-flight ==='
+Write-Host '=== <画风卡> retrain pre-flight ==='
 $argList | ForEach-Object { Write-Host ('  ' + $_) }
 Write-Host ''
 Write-Host ("stdout log: " + $stdout)

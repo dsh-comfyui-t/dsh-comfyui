@@ -4,7 +4,7 @@
 从 preview/expander.py 原样搬来 32 个函数 / 691 行。
 不改逻辑，只补一层配置适配：A 线的键名和本地 sidecar_state 不一样。
 
-  A 线 comfyRoot           -> 指向 ComfyUI 目录本身（<ComfyUI目录>）
+  A 线 comfyRoot           -> 指向 ComfyUI 目录本身（<ComfyUI根>）
   本地 comfyRoot           -> 指向父目录（<ComfyUI父目录>），main.py 在 comfyRoot/ComfyUI/main.py
   A 线 outputDirectory     -> 本地 outputDir
   A 线 comfyPythonExe      -> 本地 pythonExe
@@ -495,7 +495,7 @@ def _read_safetensors_metadata(path):
 
 
 
-def _infer_model_base(metadata):
+def _infer_model_base(metadata, filename=''):
     values = []
     for key in ('modelspec.architecture', 'ss_base_model_version', 'ss_sd_model_name',
                 'ss_base_model', 'base_model', 'modelspec.title'):
@@ -503,9 +503,24 @@ def _infer_model_base(metadata):
         if value is not None:
             values.append(str(value))
     joined = ' '.join(values).lower()
+    # 文件名单独归一，只用在「元数据看不出来」的模型上（DiT 类常没有 __metadata__）
+    fname = re.sub(r'\.(safetensors|ckpt|pt|bin)$', '', str(filename or '').lower())
+
+    def word(tok):
+        """按词边界匹配，避免 'animagine' 被当成 'anima'。"""
+        return re.search(r'(^|[^a-z0-9])' + tok + r'([^a-z0-9]|$)', joined) is not None
+
+    def fname_starts(tok):
+        """文件名前缀/分词匹配：anima-base / anima_aesthetic 这类。"""
+        return re.search(r'(^|[/\\])' + tok + r'([-_][a-z0-9]|$)', fname) is not None
+
+    # MOSS-Image：本地这几个 int8 量化件都不带 __metadata__，只能认文件名
+    if word('moss') or 'moss' in fname:
+        return 'MOSS-Image'
     # Anima：modelspec.architecture 常见写作 'anima-preview/lora'、'Anima/lora' 等，
-    # 大小写与子版本五花八门，统一归一成 'Anima'，否则会被拆成好几个分类
-    if 'anima' in joined:
+    # 大小写与子版本五花八门，统一归一成 'Anima'，否则会被拆成好几个分类。
+    # 词边界 + 文件名模式双保险：animagine-xl 这类名字不会被误吞。
+    if word('anima') or fname_starts('anima'):
         return 'Anima'
     if 'illustrious' in joined:
         return 'Illustrious / SDXL'
@@ -670,7 +685,7 @@ def _model_detail(kind, name, root_id=None):
         'kind': kind, 'root_id': _model_roots(kind).index(root), 'name': _model_public_name(root, source).replace('\\', '/'),
         'filename': os.path.basename(source), 'folder': os.path.dirname(_model_public_name(root, source)).replace('\\', '/'),
         'size': int(stat.st_size), 'size_text': _human_file_size(stat.st_size),
-        'base_type': _infer_model_base(metadata), 'extension': os.path.splitext(source)[1].lower(),
+        'base_type': _infer_model_base(metadata, os.path.basename(source)), 'extension': os.path.splitext(source)[1].lower(),
         'source': cached, 'preview': _model_preview_info(kind, name, root_id), 'previews': _model_previews_info(kind, name, root_id),
         'loading': dict(_model_header_info(source)[1]),
         'metadata': {k: str(metadata[k])[:500] for k in ('modelspec.title','modelspec.architecture','modelspec.author','modelspec.usage_hint','modelspec.trigger_phrase') if k in metadata},

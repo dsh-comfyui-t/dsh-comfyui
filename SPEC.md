@@ -84,7 +84,7 @@
 {
   "id": "lqh",                                  // 必填，文件名一致
   "name": "@local/dsh-comfyui-console-lqh",     // 必填，互不相同，且是最终 package.json.name
-  "label": "涟崎桦版",                           // 必填，面板显示
+  "label": "<角色卡-2>版",                           // 必填，面板显示
   "design": "lqh",                              // 必填，对应 lib/designs/<design>.js
   "default": true,                              // 可选，至多一份为 true
   "differs": "一句话说清和别的差在哪",             // 必填，人读

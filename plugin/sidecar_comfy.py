@@ -18,6 +18,8 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
+from startup_progress import StartupCancelled
+
 from sidecar_state import (
     AUTO_UNLOAD_SECONDS,
     CFG,
@@ -59,6 +61,40 @@ class Comfy:
         self.lock = threading.Lock()
         self.last_activity = time.time()
         self.unloaded_at = 0.0
+
+    # ---------- 启动进度 / 取消（2026-10-31 新增）----------
+    #
+    # start() 原来是纯同步阻塞，前端只能干等。这里给它挂一个可选的 progress
+    # 回调对象，实现两个方法即可：
+    #     phase(text, pid=None)   报告当前阶段
+    #     cancelled() -> bool     是否已被要求停止
+    # 传 None 时行为与旧版完全一致（其它调用点不受影响）。
+    #
+    # 取消只回收「本次启动自己拉起的」进程：已在跑的 ComfyUI 走 serving() 提前
+    # 返回「已在运行」，根本不会进到可取消的路径，所以外部服务不会被误杀。
+
+    @staticmethod
+    def _phase(progress, text, pid=None):
+        if progress is None:
+            return
+        try:
+            progress.phase(text, pid)
+        except Exception:
+            pass
+
+    @staticmethod
+    def _cancelled(progress):
+        if progress is None:
+            return False
+        try:
+            return bool(progress.cancelled())
+        except Exception:
+            return False
+
+    @classmethod
+    def _check_cancel(cls, progress):
+        if cls._cancelled(progress):
+            raise StartupCancelled('已停止启动')
 
     @staticmethod
     def port_open(port=COMFY_PORT, timeout=0.6):
@@ -279,46 +315,66 @@ class Comfy:
             return None, 'Popen 失败: %s' % e
         return proc, ''
 
-    def start(self):
+    def start(self, progress=None):
         """确保 ComfyUI 在跑。带自愈：僵尸进程清掉、进程秒退自动重试一次。
 
         2026-10-18 用户反馈「每次重启都会拉起失败，需要再点一次」——
         根因是上一轮进程没退干净（端口还占着或应答不了），旧实现只探端口，
         于是把僵尸当「已在运行」，或者新进程绑定失败直接退出。
+
+        progress 不为 None 时（2026-10-31）：每进入一个阶段回调 phase()，
+        并在每个等待循环里 poll 一次 cancelled()，被取消就抛 StartupCancelled。
+        传 None 与旧行为一模一样。
         """
         if not MANAGED:
             return False, ('远程模式（backendMode=%s，地址 %s）：本插件不管理 ComfyUI 进程。'
                            '要能起停，把 config.json 的 comfyRoot 指向本地 ComfyUI 安装目录；'
                            '只想连远程就保持现状。' % (BACKEND_MODE, COMFY_BASE))
         self.touch()
+        self._phase(progress, '正在检测是否已在运行…')
         if self.serving(2):
             return True, '已在运行'
         if self.port_open():
             # 端口占着但不应答：给它 20 秒自证，还不行就当僵尸杀掉
+            self._phase(progress, '端口已被占用但暂无应答，等它自证（最多 20 秒）…')
             for _ in range(20):
                 time.sleep(1)
+                self._check_cancel(progress)
                 if self.serving(2):
                     return True, '已在运行'
             pid = self.pid_on_port()
             if pid:
                 print('[comfy] 端口被占但无应答，清理僵尸 PID %s' % pid, flush=True)
+                self._phase(progress, '清理占用端口的僵尸进程 PID %s…' % pid, pid)
                 self._kill_pid(pid)
             self._wait_port_free(20)
+            self._check_cancel(progress)
 
         last = ''
         # 先把所有跑着 main.py 的进程清掉（端口探不到它们，但资产库锁在它们手里）
+        self._phase(progress, '正在清理残留的 ComfyUI 进程…')
         strays = self._kill_strays()
         if strays:
             print('[comfy] 清掉 %d 个残留 ComfyUI 进程: %s' % (len(strays), strays), flush=True)
+            self._phase(progress, '已清理 %d 个残留进程' % len(strays))
             self._wait_port_free(15)
         for attempt in (1, 2):
+            self._check_cancel(progress)
             if self.serving(2):
                 return True, '已在运行'
-            proc, m = self._launch()
+            self._phase(progress, '正在拉起 ComfyUI（第 %d 次尝试）…' % attempt)
+            # 有 progress 时走 spawn()：取消检查与 Popen 在同一个临界区里完成。
+            # 不这样做，用户点了停止之后仍可能冒出一个迟到的进程。
+            if progress is not None and hasattr(progress, 'spawn'):
+                proc, m = progress.spawn(self._launch)
+            else:
+                proc, m = self._launch()
             if proc is None:
                 return False, m
+            self._phase(progress, '进程已创建，等待端口就绪…', getattr(proc, 'pid', None))
             for _ in range(45):
                 time.sleep(1)
+                self._check_cancel(progress)
                 if self.serving(2):
                     return True, '已拉起（日志: comfy-stderr.log）'
                 if proc.poll() is not None:
@@ -328,6 +384,7 @@ class Comfy:
                 last = '45 秒内端口不应答'
             if attempt == 1:
                 print('[comfy] 第 1 次拉起失败（%s），清端口后重试一次' % last, flush=True)
+                self._phase(progress, '第 1 次拉起失败（%s），清理后重试…' % last)
                 pid = self.pid_on_port()
                 if pid:
                     self._kill_pid(pid)

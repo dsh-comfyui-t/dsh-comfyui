@@ -129,8 +129,33 @@ let OPEN_CONN_SINK = null;
  *  OPEN_MODEL_PICKER_SINK(kind, currentName) 打开弹窗；选完由 A 线反向回调 MODEL_PICKED_SINK(name)
  *  把名字写回生成页自己的 ckpt（两边是两套 state，靠 USER.last 只共享初值，必须显式回传）。 */
 let OPEN_MODEL_PICKER_SINK = null;
+/** 0.7.130：清掉「当前挂着的角色卡插入状态」——lockCards（生图时按锁剔词的）+ INSERTED（卡片蓝框、
+ *  再点解除）。历史页「套用此图生成设置」跨组件拿不到 Console 闭包里的 lockCards：
+ *  套用了新提示词却留着上一张角色卡的禁词锁，出图时 stabilizePrompt 会拿旧锁把新词剔掉，
+ *  表现就是「同样的提示词，换一张卡再出图构图就不对」。 */
+let CLEAR_CARD_STATE_SINK = null;
 let MODEL_PICKED_SINK = null;
 function MSG(text) { try { if (MSG_SINK) MSG_SINK(String(text)); } catch (e) { /* ignore */ } }
+/** 自动适配的取证通道。
+ *
+ *  为什么不只用 MSG：setMsg 是 PreviewConsole 的 state，模型库弹窗关掉后它那条提示行
+ *  不一定还挂在视口里，用户很容易「什么都看不到」。这里同时打控制台并留一份到
+ *  localStorage，事后可以：
+ *      localStorage.getItem('dsh-adapt-log')
+ *  直接读出完整的判定轨迹，不用盯着界面猜。 */
+function DIAG(text) {
+	const line = String(text);
+	try { console.warn("[适配] " + line); } catch (e) { /* ignore */ }
+	try { MSG(line); } catch (e) { /* ignore */ }
+	try {
+		const KEY = "dsh-adapt-log";
+		const old = window.localStorage.getItem(KEY);
+		const arr = old ? JSON.parse(old) : [];
+		arr.push(new Date().toISOString().slice(11, 19) + "  " + line);
+		while (arr.length > 40) arr.shift();
+		window.localStorage.setItem(KEY, JSON.stringify(arr));
+	} catch (e) { /* ignore */ }
+}
 const LS_KEY = "dsh-comfyui-console/v1";
 /** 存档结构版本：字段改名/改语义时 +1，并在 STATE_MIGRATIONS 里补一条迁移。老数据一律保留。 */
 const STATE_VERSION = 2;
@@ -181,9 +206,44 @@ const MODEL_DEFAULTS = {
 	clip: "qwen_3_06b_base.safetensors",
 	clipType: "qwen_image",
 	vae: "qwen_image_vae.safetensors",
-	unet: "<底模>.safetensors",
+	unet: "anima-aesthetic-v1.1.safetensors",
 	loras: [],
 };
+
+/**
+ * UNet 族 → 该族要求的空 latent 节点。
+ *
+ * ⚠️ 2026-10-31：原来 buildGraph 无条件用 EmptyLatentImage（4 通道 latent）。
+ *    MOSS-Image 在 FLUX.2 latent space 里跑，要用 EmptyFlux2LatentImage —— 这个节点名
+ *    取自本仓 presets.js 里现成的 `moss-sft` / `moss-base` 条目（那边的 `latent` 字段
+ *    就是 EmptyFlux2LatentImage），不是猜的。用 EmptyLatentImage 会在 KSampler 接
+ *    latent 时通道不匹配。qwen_image（Anima）沿用 4 通道不变。
+ */
+const UNET_LATENT_NODE = {
+	qwen_image: "EmptyLatentImage",
+	moss_image: "EmptyFlux2LatentImage",
+};
+function latentNodeFor(clipType, override) {
+	if (override) return String(override);
+	return UNET_LATENT_NODE[String(clipType || "")] || "EmptyLatentImage";
+}
+
+/**
+ * 哪些「编码器类型」代表底模取自 diffusion_models（走 UNETLoader）而不是 checkpoints。
+ *
+ * ⚠️ 2026-10-31：原来这两条链的判据写死成 `clipType === "qwen_image"`，等于把
+ *    「这个底模是不是 UNet 型（单文件 DiT + 外挂文本编码器）」错等价成「是不是 qwen_image」。
+ *    MOSS-Image 正是 UNet 型（moss_image_* 放 diffusion_models，Qwen3.5-9B 作外挂 TE，
+ *    FLUX.2 VAE 单独加载），选它时会掉进 CheckpointLoaderSimple 分支，表现是
+ *    「底模不在 checkpoints 里」或 ComfyUI 回 400。
+ *
+ * 加新模型族只需往这个数组补一行。CLIPLoader 的合法 type 值本身是从
+ * ComfyUI `/object_info/CLIPLoader` 动态枚举的，这里只负责「走哪条链」。
+ */
+const UNET_CLIP_TYPES = ["qwen_image", "moss_image"];
+function isUnetClipType(t) {
+	return UNET_CLIP_TYPES.indexOf(String(t || "")) >= 0;
+}
 
 const USER = migrateState(Object.assign({
 	presets: [],       // [{name, cat, pos, neg, w, h, steps, cfg, sampler, scheduler, ckpt, loras}]
@@ -267,7 +327,7 @@ function zhFillParts(parts) {
 // 都在内层作用域里 —— 以前只要 tags 为空（导出时没写 tags、只有 parts 的卡包就是这样）
 // 就会抛 ReferenceError，整条导入链路静默死掉：「导入瞬间结束、绘图台里没有、消息卡在正在解析」。
 // 这里给它一份自带的顶层实现，不再依赖内层函数。
-const CF_ORDER = ["trigger", "base", "hair", "eyes", "glasses", "outfit", "extra"];
+const CF_ORDER = ["trigger", "base", "hair", "eyes", "glasses", "outfit", "proportion", "extra"];
 function cfNormPart(v) {
   if (Array.isArray(v)) return v.map((x) => (typeof x === "string")
     ? { t: x, n: zhOf(x) || x }
@@ -282,6 +342,7 @@ function cfTagsOf(parts) {
   if (trg) out.push(trg);
   for (const k of CF_ORDER) {
     if (k === "trigger") continue;
+    if (k === "proportion") { const sp = (typeof proportionTags === "function") ? proportionTags(p[k]) : ""; if (sp) out.push(sp); continue; }
     const s = cfNormPart(p[k]).map((x) => String(x.t || "").trim()).filter(Boolean).join(", ");
     if (s) out.push(s);
   }
@@ -1148,8 +1209,11 @@ function parseJsonField(text, fallback) {
 }
 /** 卡上的底模字段：编辑中的文本域优先，其次是已存的数组 */
 function _cardBm(d) {
-	const t = (d && d.baseModelsText != null) ? d.baseModelsText
-		: (d && Array.isArray(d.baseModels) ? d.baseModels.join(", ") : "");
+	// 0.7.130：以前 baseModelsText 只要不是 null 就优先，于是空字符串会把已有数组吃掉
+	// （编辑器没带值 → 输入框空 → 保存即清空底模）。改成"非空文本才优先"。
+	const txt = (d && d.baseModelsText != null) ? String(d.baseModelsText).trim() : "";
+	const arr = (d && Array.isArray(d.baseModels)) ? d.baseModels.join(", ") : "";
+	const t = txt || arr;
 	return String(t).split(",").map((x) => x.trim()).filter(Boolean);
 }
 /** 风格卡的底模：新字段 baseModels 优先，老的 ckpt 兜底（1.0 的风格卡只有 ckpt） */
@@ -1180,7 +1244,7 @@ function bmBadge(c) {
 		};
 	}
 	if (fam) return { text: fam, full: "适配底模：" + fam, muted: false };
-	return { text: "未标注底模", full: "这张卡还没填适配底模。点「编辑」→「适配底模」补上，之后右上角就会显示模型名。", muted: true };
+	return { text: "未标注底模", full: "这张卡还没填底模。点「编辑」→「底模」补上，之后右上角就会显示模型名。", muted: true };
 }
 
 /** 把「拖文件进来」统一成一条通道。
@@ -1465,12 +1529,15 @@ function looksLikeUpscaler(name) {
 /** 拼 ComfyUI API 格式的工作流 */
 function buildGraph(o) {
 	const g = {};
-	// Anima 链：底模是 UNET（不是 checkpoint），文本编码器必须用 qwen_image。
-	// 面板「CLIP 类型」选到 qwen_image 时走这一支；其余情况维持原行为。
-	const animaUNet = String(o.clipType || "") === "qwen_image";
+	// UNet 链：底模是单文件 DiT（UNETLoader 读 diffusion_models），文本编码器外挂。
+	// 判据是「这个编码器类型是否属于 UNet 族」（UNET_CLIP_TYPES），不是只认 qwen_image ——
+	// MOSS-Image 也是这一族（moss_image_* DiT + Qwen3.5-9B TE + FLUX.2 VAE）。
+	const animaUNet = isUnetClipType(o.clipType);
 	if (animaUNet) {
 		g["1"] = { class_type: "UNETLoader", inputs: { unet_name: o.unet || o.ckpt || MODEL_DEFAULTS.unet, weight_dtype: "default" } };
-		g["2"] = { class_type: "CLIPLoader", inputs: { clip_name: o.clip, type: "qwen_image" } };
+		// type 必须跟着面板选的那个走：qwen_image 与 moss_image 的 TE 实现不同，
+		// 写死会让 CLIPLoader 用错编码器（MOSS 会被当成 Qwen-Image，回 400 或出噪声）。
+		g["2"] = { class_type: "CLIPLoader", inputs: { clip_name: o.clip, type: o.clipType || "qwen_image" } };
 	} else {
 		g["1"] = { class_type: "CheckpointLoaderSimple", inputs: { ckpt_name: o.ckpt } };
 		// checkpoint 自带 CLIP，直接取 ["1",1]。原来这里无条件另建 CLIPLoader，
@@ -1484,7 +1551,7 @@ function buildGraph(o) {
 	let vaeSrc = animaUNet ? null : ["1", 2];
 	if (o.vae) { g["3"] = { class_type: "VAELoader", inputs: { vae_name: o.vae } }; vaeSrc = ["3", 0]; }
 	if (!vaeSrc) throw new Error("当前底模需要外部 VAE，请在「VAE」里选一个");
-	if (animaUNet && !o.clip) throw new Error("当前底模需要外部文本编码器（qwen），请在「文本编码器」里选一个");
+	if (animaUNet && !o.clip) throw new Error("当前底模需要外部文本编码器（" + (o.clipType || "qwen") + "），请在「文本编码器」里选一个");
 	let modelSrc = ["1", 0], clipSrc = g["2"] ? ["2", 0] : ["1", 1];
 	(o.loras || []).forEach((L, i) => {
 		const id = String(10 + i);
@@ -1496,7 +1563,7 @@ function buildGraph(o) {
 	});
 	g["4"] = { class_type: "CLIPTextEncode", inputs: { text: o.pos, clip: clipSrc } };
 	g["5"] = { class_type: "CLIPTextEncode", inputs: { text: o.neg, clip: clipSrc } };
-	g["6"] = { class_type: "EmptyLatentImage", inputs: { width: o.w, height: o.h, batch_size: 1 } };
+	g["6"] = { class_type: latentNodeFor(o.clipType, o.latent), inputs: { width: o.w, height: o.h, batch_size: 1 } };
 	// 身份控制：ComfyUI 原生 ModelPatchLoader + AnimaLLLiteApply（控制图与权重已由 sidecar staging 到它能读的目录）
 	let modelForSampler = modelSrc;
 	if (o.lllite && o.lllite.image && o.lllite.patch) {
@@ -1742,9 +1809,11 @@ const COND = {
 		const d = (card && card.conditioning && card.conditioning.default) || "";
 		return (d && presets.indexOf(d) >= 0) ? d : (presets[0] || "");
 	},
-	async resolve(card, canvas) {
+	/** force=true：忽略卡里的 conditioning.enabled，供生成页的「身份控制」开关临时启用。
+	 *  卡文件保持 enabled=false（场景出图默认不挂 LLLite），开关只影响本次会话的出图。 */
+	async resolve(card, canvas, force) {
 		const cond = (card && card.conditioning) || {};
-		if (!cond || !cond.enabled) { this.set({ status: "off", reason: "未启用条件图" }, card && card.name); return null; }
+		if (!cond || (!cond.enabled && !force)) { this.set({ status: "off", reason: "未启用条件图" }, card && card.name); return null; }
 		const presets = Object.keys(cond.presets || {});
 		const framing = COND.pickOf(card, presets);
 		try {
@@ -2314,8 +2383,10 @@ async function fetchAllSavedOutputs(request, endpoint, pageSize=5000, signal=nul
     throw new Error("输出图片数量超过本次扫描支持的分页上限");
 }
 
-function savedOutputUrl(path) {
-    return EXPANDER + "/outputs/view?path=" + encodeURIComponent(path);
+function savedOutputUrl(path, version) {
+    /* 0.7.131：加 version 参数（通常是 mtime）当缓存版本号，避免原图被覆盖后仍显示旧图。 */
+    const base = EXPANDER + "/outputs/view?path=" + encodeURIComponent(path);
+    return version ? base + "&v=" + encodeURIComponent(String(version)) : base;
 }
 
 const MODEL_PROFILES={
@@ -2333,6 +2404,11 @@ const MODEL_PROFILES={
  "flux-dev":{label:"FLUX.1 Dev",family:"flux",negative:false,style:"natural",latent:"EmptySD3LatentImage",modes:["checkpoint","diffusion"],clipType:"flux",encoders:2,guidance:true,modelOnlyLora:true,recommended:{steps:20,cfg:1,guidance:3.5,sampler:"euler",scheduler:"simple",w:1024,h:1024}},
  "flux-schnell":{label:"FLUX.1 Schnell",family:"flux",negative:false,style:"natural",latent:"EmptySD3LatentImage",modes:["checkpoint","diffusion"],clipType:"flux",encoders:2,modelOnlyLora:true,recommended:{steps:4,cfg:1,sampler:"euler",scheduler:"simple",w:1024,h:1024}},
  "flux-krea":{label:"FLUX.1 Krea Dev",family:"flux",negative:false,style:"natural",latent:"EmptySD3LatentImage",modes:["checkpoint","diffusion"],clipType:"flux",encoders:2,guidance:true,modelOnlyLora:true,recommended:{steps:20,cfg:1,guidance:4.5,sampler:"euler",scheduler:"simple",w:1024,h:1024}},
+ // MOSS-Image：5B single-stream DiT（放 diffusion_models）+ Qwen3.5-9B 文本编码器 + FLUX.2 VAE，
+ // 三者都不复用 Anima 那套。以下字段照抄本仓 presets.js 的 moss-sft 条目（那边是 A 线工作台口径）：
+ // latent = EmptyFlux2LatentImage、sizeStep 16、25 步 / cfg 2.5 / er_sde + simple。
+ // 官方文档另给 50 步 / CFG 3 / euler 一组，SFT 上 25 步已经够用。
+ "moss-image":{label:"MOSS-Image SFT",family:"moss",negative:true,style:"natural",latent:"EmptyFlux2LatentImage",modes:["diffusion"],clipType:"moss_image",modelOnlyLora:true,sizeStep:16,slgNode:"SkipLayerGuidanceDiTSimple",recommended:{steps:25,cfg:2.5,sampler:"er_sde",scheduler:"simple",w:1024,h:1024}},
 };
 /** 由底模元数据里的 base_type 文本推出 MODEL_PROFILES 的 key。
  *  生成页要让"选底模 → 文本编码器自动适配"，而 A 线原本是让用户手动选模型类型（profile）。
@@ -2341,6 +2417,7 @@ const MODEL_PROFILES={
 function profileKeyFromModelBase(baseType){
  const t=String(baseType||"").toLowerCase().replace(/[\s._\-/]+/g,"");
  if(!t)return "";
+ if(/moss/.test(t))return "moss-image";
  if(/krea/.test(t))return "flux-krea";
  if(/flux/.test(t))return /schnell|flux1s$|fluxs$/.test(t)?"flux-schnell":"flux-dev";
  if(/sd3\.?5|sd35/.test(t))return /turbo/.test(t)?"sd35-turbo":/medium/.test(t)?"sd35-medium":"sd35-large";
@@ -2361,6 +2438,7 @@ function profileKeyFromModelBase(baseType){
 function profileKeyFromModelName(name){
  const t=String(name||"").toLowerCase().replace(/\.(safetensors|ckpt|pt|pth|bin|gguf|sft)$/,"");
  if(!t||/anima/.test(t))return "";
+ if(/moss/.test(t))return "moss-image";
  if(/flux/.test(t))return /schnell/.test(t)?"flux-schnell":"flux-dev";
  if(/sd3|sd_?3/.test(t))return "sd3-medium";
  if(/xl/.test(t))return "sdxl";
@@ -2373,12 +2451,18 @@ function profileKeyFromModelName(name){
  *  buildGraph 已经改成取 ["1",1] / ["1",2]，不需要外挂文件。
  *  只有拿不到内置件的家族（anima 必须外挂 qwen 编码器）才在这里给出文件名线索。 */
 const PROFILE_CLIP_HINT = {
-	anima: [/qwen/i],
+	// Anima 的 TE 是 Qwen3 0.6B（qwen_3_06b_base）。原来写 /qwen/i 太宽 ——
+	// 2026-10-31 装进 MOSS 的 qwen3.5_9b 之后，切到 Anima 会先命中 9B 那个，编码器直接选错。
+	anima: [/qwen_?3?[._\-]?0?6b/i, /_06b/i],
+	// MOSS 的 TE 是 Qwen3.5-9B（float/int8/w4a8 三种量化版），文件名以 qwen3.5 打头
+	moss: [/qwen_?3[._\-]?5/i, /9b/i],
 	sd3: [/t5xxl/i, /t5/i, /clip_l/i],
 	flux: [/t5xxl/i, /t5/i, /clip_l/i],
 };
 const PROFILE_VAE_HINT = {
 	anima: [/qwen[_-]?image[_-]?vae/i, /qwen.*vae/i],
+	// FLUX.2 VAE；小体积版 flux2-vae_small 同源，优先大的
+	moss: [/flux2?[_-]?vae\.safetensors$/i, /flux2?[_-]?vae/i],
 	sdxl: [/sdxl[._-]?vae/i],
 	sd15: [/vae-ft-mse/i, /840000/i],
 	"sd2": [/840000/i, /vae/i],
@@ -3994,6 +4078,10 @@ const UI_CSS = `
 .dsh-comfy-ui .cc-output-icon-btn[data-cc-tooltip]::after{top:calc(100% + 7px);bottom:auto;z-index:190}
 .dsh-comfy-ui .cc-output-icon-btn:is(:hover,:focus-visible){z-index:5}
 .dsh-comfy-ui .cc-output-refresh{margin-left:2px;border:1px solid var(--cc-border);background:var(--cc-control)}
+.dsh-comfy-ui .cc-output-refresh-text{flex:0 0 auto;display:inline-flex;align-items:center;gap:5px;height:29px;margin-left:auto;padding:0 10px;border:1px solid var(--cc-border);border-radius:7px;background:var(--cc-control);color:var(--cc-text);font:inherit;font-size:11.5px;font-weight:600;cursor:pointer;white-space:nowrap;transition:background .12s ease,border-color .12s ease,color .12s ease}
+.dsh-comfy-ui .cc-output-refresh-text:is(:hover,:focus-visible){border-color:var(--cc-accent);background:var(--cc-accent-bg);color:var(--cc-accent-text)}
+.dsh-comfy-ui .cc-output-refresh-text:disabled{opacity:.6;cursor:progress}
+.dsh-comfy-ui .cc-output-refresh-text+.cc-output-counter{margin-left:0}
 .dsh-comfy-ui .cc-output-counter{margin-left:auto;flex:0 0 auto;display:inline-flex;align-items:center;gap:6px;padding:4px 8px;border-radius:999px;background:var(--cc-control);font-size:10px;color:var(--cc-muted);white-space:nowrap}
 .dsh-comfy-ui .cc-output-quality{flex:0 0 auto;display:inline-flex;align-items:center;gap:4px;margin-left:2px;min-width:0;padding:3px 4px 3px 7px;border:1px solid var(--cc-border);border-radius:8px;background:var(--cc-control);font-size:10px;color:var(--cc-muted)}
 .dsh-comfy-ui .cc-output-quality-label{white-space:nowrap;margin-right:1px}
@@ -4058,6 +4146,16 @@ const UI_CSS = `
 .dsh-comfy-ui .cc-output-card-sub{display:flex;justify-content:space-between;align-items:center;gap:7px;min-width:0;font-size:9px;color:rgba(255,255,255,.78)}
 .dsh-comfy-ui .cc-output-card-state{display:inline-flex;align-items:center;gap:4px;white-space:nowrap}
 .dsh-comfy-ui .cc-output-card-state::before{content:"";width:5px;height:5px;border-radius:50%;background:currentColor;opacity:.9}
+/* 0.7.130：历史卡片右上角按钮组（打开位置 / 删除）。平时隐藏，悬停或键盘聚焦才出现，
+   避免盖住画面；触屏没有 hover，所以用 @media (hover:none) 常显。 */
+.dsh-comfy-ui .cc-output-card-actions{position:absolute;top:8px;right:8px;z-index:3;display:flex;gap:6px;opacity:0;transition:opacity .14s ease}
+.dsh-comfy-ui .cc-output-card:hover .cc-output-card-actions,.dsh-comfy-ui .cc-output-card:focus-within .cc-output-card-actions{opacity:1}
+.dsh-comfy-ui .cc-output-card-act{display:inline-flex;align-items:center;justify-content:center;width:29px;height:29px;padding:0;border:1px solid rgba(255,255,255,.22);border-radius:7px;background:rgba(14,16,20,.6);color:#fff;cursor:pointer;transition:background .14s ease,border-color .14s ease,transform .06s ease;-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
+.dsh-comfy-ui .cc-output-card-act:hover,.dsh-comfy-ui .cc-output-card-act:focus-visible{background:var(--cc-accent);border-color:var(--cc-accent);color:#fff}
+.dsh-comfy-ui .cc-output-card-act.is-danger:hover,.dsh-comfy-ui .cc-output-card-act.is-danger:focus-visible{background:var(--cc-bad,#c0392b);border-color:var(--cc-bad,#c0392b);color:#fff}
+.dsh-comfy-ui .cc-output-card-act:active{transform:translateY(1px)}
+.dsh-comfy-ui .cc-output-card-act:focus-visible{opacity:1;outline:2px solid var(--cc-accent);outline-offset:2px}
+@media (hover:none){.dsh-comfy-ui .cc-output-card-actions{opacity:1}}
 .dsh-comfy-ui .cc-output-empty{display:flex;min-height:190px;align-items:center;justify-content:center;flex-direction:column;gap:8px;border:1px dashed var(--cc-border);border-radius:10px;color:var(--cc-muted);text-align:center;padding:20px}
 .dsh-comfy-ui .cc-output-empty strong{font-size:12px;color:var(--cc-text)}
 .dsh-comfy-ui .cc-output-load-sentinel{display:flex;justify-content:center;align-items:center;gap:8px;min-height:34px;padding:10px;color:var(--cc-muted);font-size:10px}
@@ -4357,6 +4455,179 @@ function floating(node) {
     }
     return node;
 }
+
+/** ComfyUI 启动按钮（2026-10-31）。
+ *
+ *  原来的「连接 ComfyUI」是一个普通按钮：点下去 setStarting(true)，然后同步等
+ *  `/comfy/start` 最多 125 秒，期间只有「处理中…」四个字，看不到卡在哪一步，
+ *  也没有任何叫停的办法。
+ *
+ *  这个组件把那段等待变成可见、可停的：
+ *    · 启动中显示转圈；鼠标移上去变成「■ 停止启动」，点一下取消本次启动
+ *    · 悬浮或聚焦时在按钮下方展开 console 浮层：阶段文字、PID、耗时、
+ *      本次后台的 stdout/stderr（按偏移增量拉，自动跟随到底部）
+ *    · 浮层可滚动、可选中复制；鼠标移进浮层不会收起（离开按钮有 160ms 宽限）
+ *
+ *  进度来源是 sidecar 的 `/comfy/startup?attempt=`，取消走
+ *  `/comfy/startup/cancel`。两个端点只对带 attempt 的启动有效，
+ *  不影响其它地方同步调用 `/comfy/start` 的老路径。
+ */
+function ComfyStartupButton({ starting, online, session, stopping, onConnect, onStop }) {
+    const [open, setOpen] = React.useState(false);
+    const [hover, setHover] = React.useState(false);
+    const [data, setData] = React.useState(null);
+    const [error, setError] = React.useState("");
+    const anchor = React.useRef(null);
+    const panel = React.useRef(null);
+    const consoleRef = React.useRef(null);
+    const follow = React.useRef(true);
+    const closeTimer = React.useRef(null);
+    const [position, setPosition] = React.useState(null);
+
+    const active = !!(starting && session);
+
+    // 浮层定位：挂在按钮正下方，右侧对齐但不出屏
+    const locate = () => {
+        const r = anchor.current && anchor.current.getBoundingClientRect();
+        if (!r) return;
+        const w = Math.min(560, Math.max(240, window.innerWidth - 16));
+        setPosition({ top: r.bottom + 6, left: Math.max(8, Math.min(r.right - w, window.innerWidth - w - 8)), width: w });
+    };
+    const show = () => {
+        clearTimeout(closeTimer.current);
+        if (session) { locate(); setOpen(true); }
+    };
+    const hide = () => {
+        clearTimeout(closeTimer.current);
+        closeTimer.current = setTimeout(() => setOpen(false), 160);
+    };
+
+    // 换了一次启动就重置浮层里的旧内容
+    React.useEffect(() => {
+        setData(null); setError(""); follow.current = true;
+    }, [session && session.id]);
+
+    // 每秒拉一次进度；启动结束后停掉轮询
+    React.useEffect(() => {
+        if (!session) return;
+        let dead = false, pending = false;
+        const tick = async () => {
+            if (dead || pending) return;
+            pending = true;
+            try {
+                const r = await jget(EXPANDER + "/comfy/startup?attempt=" + encodeURIComponent(session.id), 6000);
+                if (dead) return;
+                if (r && r.snapshot) { setData(r.snapshot); setError(""); }
+                else if (r && r.message) setError(r.message);
+            } catch (e) {
+                if (!dead) setError("读取启动进度失败：" + errText(e));
+            } finally { pending = false; }
+        };
+        tick();
+        const timer = starting ? setInterval(tick, 1000) : null;
+        return () => { dead = true; clearInterval(timer); };
+    }, [session && session.id, starting]);
+
+    // 日志跟随到底部（用户手动往上翻就不再抢滚动条）
+    React.useEffect(() => {
+        if (follow.current && consoleRef.current) {
+            consoleRef.current.scrollTop = consoleRef.current.scrollHeight;
+        }
+    }, [data && data.logs && data.logs.stdout, data && data.logs && data.logs.stderr, open]);
+
+    React.useEffect(() => {
+        if (!open) return;
+        const dismiss = (e) => { if (e.key === "Escape") { setOpen(false); anchor.current && anchor.current.focus(); } };
+        window.addEventListener("keydown", dismiss);
+        return () => window.removeEventListener("keydown", dismiss);
+    }, [open]);
+
+    React.useEffect(() => () => clearTimeout(closeTimer.current), []);
+
+    const elapsed = (() => {
+        if (!data) return 0;
+        const base = data.startedAt ? data.startedAt * 1000 : Date.now();
+        return Math.max(0, Math.floor((Date.now() - base) / 1000));
+    })();
+
+    const logText = [
+        data && data.logs && data.logs.stdout ? "[stdout]\n" + data.logs.stdout : "",
+        data && data.logs && data.logs.stderr ? "[stderr]\n" + data.logs.stderr : "",
+    ].filter(Boolean).join("\n\n");
+
+    const spinner = h("span", { className: "cc-icon-spinner", "aria-hidden": true }, h(PromptIcon, { name: "spinner", size: 15 }));
+
+    const label = stopping ? "正在停止…"
+        : active ? (hover ? "停止启动" : "启动中…")
+        : starting ? "正在关闭…"
+        : online ? "关闭 ComfyUI" : "连接 ComfyUI";
+    return h(React.Fragment, null,
+        h("button", {
+            ref: anchor, type: "button", "data-cc-guide": "connection-action",
+            style: Object.assign({}, S.btn2, { display: "inline-flex", alignItems: "center", gap: 7, fontWeight: 700, minWidth: 132 }),
+            disabled: stopping || (!active && (starting || online === null)),
+            onMouseEnter: () => { setHover(true); show(); },
+            onMouseLeave: () => { setHover(false); hide(); },
+            onFocus: () => { setHover(true); show(); },
+            onBlur: (e) => {
+                const to = e.relatedTarget;
+                if (!(anchor.current && anchor.current.contains(to)) && !(panel.current && panel.current.contains(to))) hide();
+            },
+            onClick: active ? onStop : onConnect,
+            "aria-label": stopping ? "正在停止启动" : active ? "停止启动" : online ? "关闭 ComfyUI" : "连接 ComfyUI",
+            "aria-expanded": !!(open && position && session),
+            title: session ? undefined : online
+                ? "完全关闭 ComfyUI：终止生成与排队任务、结束进程并释放模型显存"
+                : "尝试启动并连接本机 ComfyUI",
+        },
+            stopping ? spinner
+                : active ? (hover ? h(PromptIcon, { name: "stop", size: 15 }) : spinner)
+                : starting ? spinner
+                : h(OfflineComfyMark, { size: 15 }),
+            label),
+
+        (open && position && session) ? floating(h("div", {
+            ref: panel, className: "dsh-comfy-floating", role: "region", "aria-label": "ComfyUI 启动进度",
+            onMouseEnter: show, onMouseLeave: hide, onFocus: show, onBlur: (e) => {
+                const to = e.relatedTarget;
+                if (!(anchor.current && anchor.current.contains(to)) && !(panel.current && panel.current.contains(to))) hide();
+            },
+            style: {
+                position: "fixed", top: position.top, left: position.left, width: position.width,
+                zIndex: 2147482000,
+                background: "var(--cc-bg, #1b1b1f)", color: "var(--cc-fg, #e8e8ea)",
+                border: "1px solid var(--cc-line, #34343a)", borderRadius: 10, padding: 12,
+                boxShadow: "0 18px 48px rgba(0,0,0,.45)", fontSize: 12, lineHeight: 1.5,
+            },
+        },
+            h("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 } },
+                h("strong", null, "ComfyUI · 启动进度"),
+                h("span", { style: { color: "var(--cc-muted)", fontVariantNumeric: "tabular-nums" } },
+                    "已用 " + elapsed + " 秒")),
+            h("div", { role: "status", style: { color: "var(--cc-muted)", marginTop: 6 } },
+                stopping ? "正在停止本次启动进程…" : (data && data.phase) || "正在准备启动…",
+                data && data.pid ? " · PID " + data.pid : ""),
+            error ? h("div", { role: "status", style: { color: "#ff8a80", marginTop: 6 } }, error) : null,
+            h("pre", {
+                ref: consoleRef, tabIndex: 0, "aria-label": "后台输出",
+                onScroll: (e) => {
+                    const el = e.currentTarget;
+                    follow.current = el.scrollHeight - el.scrollTop - el.clientHeight < 24;
+                },
+                style: {
+                    margin: 0, marginTop: 8, padding: 10, minHeight: 100, maxHeight: 260,
+                    overflow: "auto", whiteSpace: "pre-wrap", overflowWrap: "anywhere",
+                    background: "var(--cc-bg2, #141417)", border: "1px solid var(--cc-line, #34343a)",
+                    borderRadius: 8, fontSize: 11, lineHeight: 1.45, color: "var(--cc-fg2, #d0d0d4)",
+                },
+            }, logText || "（暂无输出）"),
+            h("div", { style: { display: "flex", justifyContent: "space-between", gap: 10, marginTop: 8 } },
+                h("span", { style: { color: "var(--cc-muted)" } }, "实时后台输出（stdout / stderr 各保留 32 KiB）"),
+                (data && data.ok === true) ? h("span", { style: { color: "#8fd18f" } }, "✔ 已就绪")
+                    : (data && data.ok === false) ? h("span", { style: { color: "#ff8a80" } }, "✘ " + (data.message || "失败"))
+                    : null))) : null);
+}
+
 
 function CompatibilityCheck({S}) {
     const [report,setReport]=React.useState(null);
@@ -5514,6 +5785,11 @@ function PreviewConsole(props) {
     const [pathConfig, setPathConfig] = React.useState({outputDirectory:"",tempDirectory:"",extraModelPathsConfig:[]});
 	const [connNotice, setConnNotice] = React.useState("");
 	const [starting, setStarting] = React.useState(false);
+	// 2026-10-31：带 attempt 的启动会话。有值时按钮变成「启动中…」，可悬浮停止，
+	// 下方浮层轮询 /comfy/startup 显示阶段与后台日志。
+	const [startSession, setStartSession] = React.useState(null);
+	const [stoppingStart, setStoppingStart] = React.useState(false);
+	const launchAttempt = React.useRef(null);
 	const operationRef = React.useRef(false);
 	const onlineRef = React.useRef(null);
 	onlineRef.current = online;
@@ -5580,6 +5856,15 @@ function PreviewConsole(props) {
     const modelTaskRef=React.useRef(null);
 
     const [modelLibraryError,setModelLibraryError]=React.useState("");
+    /**
+     * 底模扁平清单：底模选择场景下不再走文件夹树，直接列全机所有底模。
+     *
+     * 2026-10-31：模型库与生成面板是两个独立组件，这里没有 unets 状态，
+     * 所以自己从 ComfyUI 的两个 loader 枚举取一次，合并成扁平列表。
+     * 每项 {name, source:"diffusion"|"checkpoint", size}。
+     */
+    const [flatBaseModels,setFlatBaseModels]=React.useState([]);
+    const [flatBaseLoading,setFlatBaseLoading]=React.useState(false);
     const [modelFolderBusy,setModelFolderBusy]=React.useState(false);
     const [modelActiveFolder,setModelActiveFolder]=React.useState({root_id:0,path:""});
     const [modelDropTarget,setModelDropTarget]=React.useState("");
@@ -6051,8 +6336,32 @@ function PreviewConsole(props) {
                 return;
             }
             setMsg("正在通过本机启动脚本启动 ComfyUI…");
-            const r = await jpost(EXPANDER + "/comfy/start", {mode}, 125000);
+            // 2026-10-31：带 attempt 提交，启动改在 sidecar 的后台线程里跑，
+            // 前端拿得到阶段文字和后台日志，也能中途叫停。
+            // 提交后自己在这儿轮询到结束，保持「等到真正就绪才刷新模型列表」的老语义。
+            const _aid = (typeof crypto !== "undefined" && crypto.randomUUID)
+                ? crypto.randomUUID()
+                : "att-" + Date.now() + "-" + Math.random().toString(16).slice(2);
+            launchAttempt.current = { id: _aid, startedAt: Date.now() };
+            setStartSession(launchAttempt.current);
+            const r = await jpost(EXPANDER + "/comfy/start", { mode, attempt: _aid }, 30000);
             if (!r?.ok) throw new Error(r?.message || "启动失败");
+            if (r.started) {
+                const deadline = Date.now() + 120000;
+                let snap = null;
+                while (Date.now() < deadline) {
+                    await new Promise((res) => setTimeout(res, 1000));
+                    try {
+                        const sp = await jget(EXPANDER + "/comfy/startup?attempt=" + encodeURIComponent(_aid), 6000);
+                        snap = sp && sp.snapshot;
+                    } catch (e) { /* sidecar 忙，下一轮再问 */ }
+                    if (snap && snap.finishedAt) break;
+                }
+                if (!snap || !snap.finishedAt) throw new Error("启动超时（120 秒内没有结果）");
+                if (snap.cancelled) { setMsg("已停止启动"); return; }
+                if (!snap.ok) throw new Error(snap.message || "启动失败");
+                setMsg(snap.message || "已启动");
+            }
             if(mode==="browser"){
                 // 原脚本直启时由脚本/ComfyUI 自己开网页；只有 sidecar 明确报告失败才兜底。
                 if(r.browserOpened===false){ await openBrowser(); }
@@ -6067,6 +6376,23 @@ function PreviewConsole(props) {
             if (onlineRef.current !== true) setOnline(false);
         } finally {
             operationRef.current = false; setStarting(false);
+            // 启动会话结束，按钮回到常态、浮层轮询停掉
+            launchAttempt.current = null;
+            setStartSession(null);
+        }
+    }
+    /** 停止本次启动：只终止这次启动拉起的进程树，已在跑的外部服务不受影响。 */
+    async function stopStartup() {
+        const attempt = launchAttempt.current;
+        if (!attempt) return;
+        setStoppingStart(true);
+        try {
+            const r = await jpost(EXPANDER + "/comfy/startup/cancel", { attempt: attempt.id }, 30000);
+            setMsg(r?.message || (r?.ok ? "已请求停止启动" : "停止启动失败"));
+        } catch (e) {
+            setMsg("停止启动失败：" + errText(e));
+        } finally {
+            setStoppingStart(false);
         }
     }
     function changeStartScript(value) {
@@ -6155,6 +6481,36 @@ function PreviewConsole(props) {
         setModelLibraryData({roots:[],folders:[],models:[]});setModelLibraryError("");
         setCreatingModelFolder(false);setNewModelFolderName("");setModelDropTarget("");setModelTreeOpen({});setModelCreateFolder("");
     }
+    /** 底模选择场景：kind 为 all / unet / checkpoint / diffusion / ckpt 之一 */
+    const isBaseModelPick=()=>{
+        // ⚠️ 从底模卡进来时 componentPicker 被 openModelLibrary 置成 null，
+        //    所以主判据只能是 modelLibraryKind；componentPicker 仅作补充。
+        const k=String(modelLibraryKind||"").toLowerCase();
+        if(k==="all"||k==="unet"||k==="checkpoint"||k==="diffusion"||k==="ckpt")return true;
+        const pk=String((componentPicker&&componentPicker.kind)||"").toLowerCase();
+        return pk==="all"||pk==="unet"||pk==="checkpoint"||pk==="diffusion"||pk==="ckpt";
+    };
+    /**
+     * 拉全机底模清单（diffusion_models + checkpoints 合并）。
+     * 直接问 ComfyUI 的两个 loader 枚举，和绘图台底模下拉同源，不用扫文件系统。
+     */
+    async function loadFlatBaseModels(){
+        setFlatBaseLoading(true);
+        const out=[];
+        try{
+            try{
+                const u=await jget(COMFY+"/object_info/UNETLoader",20000);
+                comboOptions(u,"UNETLoader","unet_name").filter(x=>!/^put_/.test(x)).forEach(n=>out.push({name:n,source:"diffusion"}));
+            }catch(e){}
+            try{
+                const c=await jget(COMFY+"/object_info/CheckpointLoaderSimple",20000);
+                comboOptions(c,"CheckpointLoaderSimple","ckpt_name").filter(x=>!/^put_/.test(x)).forEach(n=>out.push({name:n,source:"checkpoint"}));
+            }catch(e){}
+        }finally{
+            setFlatBaseModels(out);
+            setFlatBaseLoading(false);
+        }
+    }
     function openModelLibrary(kind=null,preferred=""){
         setComponentPicker(null);setModelPins(readModelPins());navigateModelFolder(kind,0,"",preferred||"");setShowModelLibrary(true);
     }
@@ -6197,9 +6553,11 @@ function PreviewConsole(props) {
 
     React.useEffect(()=>{
         if(!showModelLibrary)return;
+        // 底模场景不走目录树，也就不必扫文件系统：直接问 ComfyUI 要两个 loader 的枚举。
+        if(isBaseModelPick()){loadFlatBaseModels();return;}
         const timer=setTimeout(()=>loadModelLibrary(modelLibraryKind),modelLibraryQuery?180:0);
         return()=>{clearTimeout(timer);modelLibraryLoadRef.current?.abort();modelLibraryLoadRef.current=null;};
-    },[showModelLibrary,modelLibraryKind,modelActiveFolder.root_id,modelActiveFolder.path,modelLibraryQuery]);
+    },[showModelLibrary,modelLibraryKind,modelActiveFolder.root_id,modelActiveFolder.path,modelLibraryQuery,componentPicker&&componentPicker.kind]);
     React.useEffect(()=>{if(showModelLibrary)loadModelDetail(modelLibraryFocus);},[showModelLibrary,modelLibraryKind,modelLibraryFocus]);
     function visibleLibraryModels(){const q=modelLibraryQuery.trim().toLowerCase();return (modelLibraryData.models||[]).filter(x=>{
         if(q)return String(x.name).toLowerCase().includes(q);
@@ -6329,8 +6687,12 @@ function PreviewConsole(props) {
         if(saved){setClip(saved.clip||"");setClipType(saved.clipType||"stable_diffusion");setVae(saved.vae||"");setSelLoras((saved.loras||[]).map(x=>({...x})));setSteps(saved.steps??steps);setCfg(saved.cfg??cfg);setSampler(saved.sampler||sampler);setScheduler(saved.scheduler||scheduler);setW(saved.w||w);setHh(saved.h||hh);setSizeMultiplier(preciseSizeMultiplier(saved.sizeMultiplier));}
         else{setClip("");setVae("");setSelLoras(cur=>cur.map(x=>({...x,enabled:false})));}
         setMsg(saved?"已恢复该主模型的配置":"已选择主模型；请确认类型和组件，原 LoRA 已保留为暂停状态");
-        // 在模型库点「使用」选中 checkpoint 时，把名字回传给生成页那份 ckpt（两套 state）。
-        if(mode==="checkpoint"&&typeof MODEL_PICKED_SINK==="function"){try{MODEL_PICKED_SINK(name);}catch(e){/* 生成页未挂载时忽略 */}}
+        // 在模型库点「使用」选中底模时，把名字回传给生成页那份 ckpt（两套 state）。
+        //
+        // ⚠️ 2026-10-31：原来只有 mode==="checkpoint" 才回传，于是选 diffusion 类底模
+        //    （Anima / MOSS，住在 diffusion_models 里）时生成页根本收不到，界面看着
+        //    像是「点了使用但没反应」。两条链都要回传。
+        if(typeof MODEL_PICKED_SINK==="function"){try{MODEL_PICKED_SINK(name);}catch(e){/* 生成页未挂载时忽略 */}}
         return true;
     }
 
@@ -6462,6 +6824,42 @@ function PreviewConsole(props) {
     }
     function backModelFolder(){if(!componentPicker)navigateModelFolder();}
     function renderModelTree(){
+        // —— 底模场景：扁平清单，不显示文件夹 ——
+        //
+        // 2026-10-31：底模分成 diffusion_models 与 checkpoints 两个目录，用户要记
+        // 「哪个目录放哪类模型」才能找到东西，而点底模卡时 kind 又被写死成 checkpoint，
+        // 于是 MOSS 这类放在 diffusion_models 的底模根本不出现在列表里。
+        // 这里改成一次性列出两边全部底模，选完由 applyFocusedModel 回写并触发自动适配。
+        if(isBaseModelPick()){
+            const q=modelLibraryQuery.trim().toLowerCase();
+            const list=flatBaseModels.filter(x=>!q||x.name.toLowerCase().includes(q));
+            const rowFor=(x)=>{
+                const kind=x.source==="diffusion"?"diffusion":"checkpoint";
+                const item={name:x.name,file:x.name,kind,root_id:0,is_model:true};
+                const key=libraryItemKey(item),selected=modelLibrarySelection.includes(key),focused=modelLibraryFocus&&modelLibraryFocus.name===x.name&&(modelLibraryFocus.kind||"")===kind;
+                return h("button",{type:"button",key:"flat:"+kind+":"+x.name,
+                    className:"cc-model-tree-row"+((selected||focused)?" is-selected":""),
+                    "aria-pressed":!!(selected||focused),
+                    title:x.name+"（"+kind+"）",
+                    onClick:()=>{setModelLibraryFocus(item);setModelLibrarySelection([key]);}},
+                    h("span",{className:"cc-model-tree-icon"},h(PromptIcon,{name:"file",size:14})),
+                    h("span",{className:"cc-model-tree-name"},
+                        h("span",null,x.name),
+                        h("small",null,kind==="diffusion"?"diffusion_models · UNETLoader":"checkpoints · CheckpointLoader")),
+                    h("span",{className:"cc-model-tree-meta"},kind==="diffusion"?"diffusion":"ckpt"));
+            };
+            return h("div",{className:"cc-model-tree","data-cc-guide":"model-library-left"},
+                h("div",{className:"cc-model-tree-nav"},
+                    h("span",{className:"cc-model-tree-root","aria-label":"底模清单"},(componentPicker&&componentPicker.label)||"全部底模"),
+                    h("button",{type:"button",className:"cc-library-icon",style:S.btn2,"aria-label":"刷新底模清单","data-cc-tooltip":"刷新底模清单","aria-busy":flatBaseLoading,onClick:loadFlatBaseModels},
+                        flatBaseLoading?h(PromptIcon,{name:"spinner",size:16}):h(PromptIcon,{name:"refresh",size:16}))),
+                h("div",{className:"cc-model-tree-scroll"},
+                    flatBaseLoading
+                        ? h("div",{className:"cc-model-library-loading",role:"status"},h("span",{className:"cc-icon-spinner"},h(PromptIcon,{name:"spinner",size:14})),"正在读取底模清单…")
+                        : list.length
+                            ? list.map(rowFor)
+                            : h("div",{className:"cc-model-library-empty"},q?"没有匹配的底模":"本机没有底模")));
+        }
         const q=modelLibraryQuery.trim().toLowerCase(),catalog=!modelLibraryKind;
         const folders=(modelLibraryData.folders||[]).filter(x=>!catalog||!q||x.name.toLowerCase().includes(q));
         const files=(modelLibraryData.models||[]).filter(x=>!catalog||!q||(x.file||x.name).toLowerCase().includes(q));
@@ -6542,7 +6940,9 @@ function PreviewConsole(props) {
                 modelLibraryError?h("div",{role:"status",style:modelLibraryError==="已停止读取目录"?S.dim:S.bad,className:"cc-model-library-message"},modelLibraryError):null,
                 modelLibraryData.warnings?.length?h("div",{role:"status",style:S.warn,className:"cc-model-library-message"},modelLibraryData.warnings.join("；")):null,
                 h("div",{className:"cc-model-library-body"},renderModelTree(),renderModelInspector()),
-                h("div",{className:"cc-model-library-hint"},"目录内单击展开 · Ctrl/⌘ 多选 · Shift 连选 · 拖动模型或文件夹移动")));
+                h("div",{className:"cc-model-library-hint"},isBaseModelPick()
+                    ? "全部底模已合并列出（diffusion_models + checkpoints）· 单击选中 → 右侧「使用」→ 自动加载配套编码器与 VAE"
+                    : "目录内单击展开 · Ctrl/⌘ 多选 · Shift 连选 · 拖动模型或文件夹移动")));
     }
 
 
@@ -6591,7 +6991,7 @@ function PreviewConsole(props) {
         try{
             const items=await fetchAllSavedOutputs(jget, EXPANDER+"/outputs?request_id="+encodeURIComponent(ctl.requestId),5000,ctl.signal);
             if(ctl.signal.aborted||outputRequestRef.current!==ctl)return;
-            const saved=items.map(x=>({...x,saved:true,source:"output",url:savedOutputUrl(x.path)}));
+            const saved=items.map(x=>({...x,saved:true,source:"output",url:savedOutputUrl(x.path, x.mtime)}));
             setSavedOutputItems(saved);outputLoadedRef.current=true;outputLoadedAtRef.current=Date.now();
         }catch(e){if(!ctl.signal.aborted&&outputRequestRef.current===ctl)setMsg("读取输出失败："+errText(e));}
         finally{if(outputRequestRef.current===ctl){outputRequestRef.current=null;outputLoadingRef.current=false;setOutputLoading(false);}}
@@ -6612,7 +7012,12 @@ function PreviewConsole(props) {
     }
     function outputPreviewSrc(item){
         if(!item?.path||outputPreviewQuality==="original")return item?.url||"";
-        return EXPANDER+"/outputs/thumb?path="+encodeURIComponent(item.path)+"&quality="+encodeURIComponent(outputPreviewQuality);
+        /* 0.7.131：把 mtime 拼进 URL 当版本号。侧车的 /outputs/thumb 带 `Cache-Control:
+           private, max-age=300`，而 URL 里只有 path+quality——同名文件被重新生成/覆盖时
+           URL 一字不变，浏览器 5 分钟内继续拿旧缩略图，卡片上的图就和文件对不上。
+           侧车自己的缓存 key 含 mtime_ns，问题只出在浏览器这一层。 */
+        const _v = item.mtime || item.createdAt || 0;
+        return EXPANDER+"/outputs/thumb?path="+encodeURIComponent(item.path)+"&quality="+encodeURIComponent(outputPreviewQuality)+"&v="+encodeURIComponent(String(_v));
     }
     React.useEffect(()=>{
         if(tab!=="output"||typeof IntersectionObserver==="undefined")return;
@@ -6681,7 +7086,7 @@ function PreviewConsole(props) {
             });
         }catch(e){setMsg("图片信息读取失败："+errText(e));}
     }
-    function applyOutputParams(item){if(expandPhaseRef.current!=="idle"){setMsg("请先完成或停止 AI 操作");return;}const p=item?.params?{...item.params,...(item.params.generationInputs||{})}:null;if(!p){setMsg("这张图片缺少可读取的 ComfyUI 生成参数，当前设置未改变");return;}if(p.pos!==undefined)updatePrompt({pos:p.pos||"",neg:p.negativeApplied===false?promptRef.current.neg:p.neg||""});if(p.ckpt||p.modelConfig){restoreModelSetup(p);}else{if(p.clip)setClip(p.clip);if(p.vae)setVae(p.vae);}if(p.clipType)setClipType(p.clipType);if(Array.isArray(p.loras))setSelLoras(p.loras);setW(p.baseW||p.w||w);setHh(p.baseH||p.h||hh);setSizeMultiplier(preciseSizeMultiplier(p.sizeMultiplier));if(p.steps)setSteps(p.steps);if(p.cfg!==undefined)setCfg(p.cfg);if(p.sampler)setSampler(p.sampler);if(p.scheduler)setScheduler(p.scheduler);if(p.usedSeed!==undefined||p.seed!==undefined)setSeed(p.usedSeed??p.seed);setSeedMode(p.seedMode||"lock");if(p.postControls||p.upscale!==undefined)setPostControls(normalizePost(p));if(p.upscale!==undefined)setUpscale(!!p.upscale);if(p.upscaleModel)setUpscaleModel(p.upscaleModel);if(p.upscaleFactor)setUpscaleFactor(p.upscaleFactor);setOutputDetail(null);switchTab("gen");setMsg("已用该图片的生成参数替换当前设置");}
+    function applyOutputParams(item){if(expandPhaseRef.current!=="idle"){setMsg("请先完成或停止 AI 操作");return;}const p=item?.params?{...item.params,...(item.params.generationInputs||{})}:null;if(!p){setMsg("这张图片缺少可读取的 ComfyUI 生成参数，当前设置未改变");return;}/* 0.7.130：套用历史参数 = 完全还原这张图的状态，先把上一张卡挂着的插入与禁词锁清掉，否则 stabilizePrompt 会拿旧锁把新提示词里的词当禁词剔掉（<角色卡>的裙长闸 / 体型锁最明显，表现为「同样的词换个卡构图就不对」）。*/if(CLEAR_CARD_STATE_SINK){try{CLEAR_CARD_STATE_SINK();}catch(e){}}if(p.pos!==undefined)updatePrompt({pos:p.pos||"",neg:p.negativeApplied===false?promptRef.current.neg:p.neg||""});if(p.ckpt||p.modelConfig){restoreModelSetup(p);}else{if(p.clip)setClip(p.clip);if(p.vae)setVae(p.vae);}if(p.clipType)setClipType(p.clipType);if(Array.isArray(p.loras))setSelLoras(p.loras);setW(p.baseW||p.w||w);setHh(p.baseH||p.h||hh);setSizeMultiplier(preciseSizeMultiplier(p.sizeMultiplier));if(p.steps)setSteps(p.steps);if(p.cfg!==undefined)setCfg(p.cfg);if(p.sampler)setSampler(p.sampler);if(p.scheduler)setScheduler(p.scheduler);if(p.usedSeed!==undefined||p.seed!==undefined)setSeed(p.usedSeed??p.seed);setSeedMode(p.seedMode||"lock");if(p.postControls||p.upscale!==undefined)setPostControls(normalizePost(p));if(p.upscale!==undefined)setUpscale(!!p.upscale);if(p.upscaleModel)setUpscaleModel(p.upscaleModel);if(p.upscaleFactor)setUpscaleFactor(p.upscaleFactor);setOutputDetail(null);switchTab("gen");setMsg("已用该图片的生成参数替换当前设置");}
     function outputModelsFor(item){
         const p=item?.params||{},rows=Array.isArray(p.models)?p.models.map(x=>({...x})):[],seen=new Set(rows.map(x=>(x.kind||'')+'|'+(x.name||'')));
         const add=(kind,name,detail='')=>{name=String(name||'').trim();if(!name)return;const key=kind+'|'+name;if(seen.has(key))return;seen.add(key);rows.push({kind,name,detail});};
@@ -6745,9 +7150,24 @@ function PreviewConsole(props) {
     }
     function renderOutputPage(){
         const rows=filteredOutputs(),visible=rows.slice(0,outputVisible),active=outputFilterCount(outputFilter);
+        // 0.7.130：历史卡片右上角加「打开图片位置」，直接调侧车 /outputs/manage
+        // （详情页的「打开所在位置」按钮早就有了，但网格里每张图都得先点进详情才能用，
+        //  找一张刚出的图要多两步）。stopPropagation 是必须的，否则会连带打开详情浮层。
+        // 0.7.130：卡片右上角按钮组（打开位置 / 删除）。删除复用详情页的 manageOutput(item,"delete")，
+        // 它自带 confirm 且删完会 loadOutputs 刷新；这里只负责阻止冒泡，别让点击穿透到卡片的 openOutputDetail。
+        const cardBtn=(x,icon,title,action,danger)=>h("button",{type:"button",
+            className:"cc-output-card-act"+(danger?" is-danger":""),
+            title, "aria-label":title,
+            onClick:e=>{e.stopPropagation();e.preventDefault();manageOutput(x,action);},
+            onKeyDown:e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();e.stopPropagation();manageOutput(x,action);}}},
+            h(PromptIcon,{name:icon,size:15}));
+        const revealBtn=(x)=>h("div",{className:"cc-output-card-actions"},
+            x.path?cardBtn(x,"folder","在资源管理器中打开图片位置","open",false):null,
+            cardBtn(x,"trash",x.path?"永久删除这张图片":"从本次会话移除这条记录","delete",true));
         const card=(x,index=0)=>h("article",{key:outputKey(x),className:"cc-output-card",tabIndex:0,onClick:()=>openOutputDetail(x),onKeyDown:e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();openOutputDetail(x);}}},
+            revealBtn(x),
             h("img",{src:outputPreviewSrc(x),
-                onError:e=>{if(!e.currentTarget.dataset.fallback&&x.url&&e.currentTarget.src!==x.url){e.currentTarget.dataset.fallback="1";e.currentTarget.src=x.url;}},
+                onError:e=>{/* 0.7.131：原来靠 dataset.fallback 防重入，但 React 复用节点时标记会留到下一张图，导致后续加载失败时不再回退。改成比对当前 src。 */const im=e.currentTarget;if(!x.url||!im.src||im.src===x.url)return;im.src=x.url;},
                 loading:index<8?"eager":"lazy",decoding:"async",fetchPriority:index<4?"high":"low",alt:x.filename||"输出图片"}),
             h("div",{className:"cc-output-card-meta"},
                 h("span",{className:"cc-output-card-name"},x.filename||"Temp 输出"),
@@ -6773,6 +7193,13 @@ function PreviewConsole(props) {
                     h("div",{className:"cc-output-quality",role:"group","aria-label":"预览画质"},
                         h("span",{className:"cc-output-quality-label"},"预览画质"),
                         ...qualityOptions.map(o=>h("button",{key:o.value,type:"button",className:"cc-output-quality-btn","aria-pressed":outputPreviewQuality===o.value,title:o.title,onClick:()=>changeOutputPreviewQuality(o.value)},o.label))),
+                    /* 0.7.131：带文字的刷新按钮。原来只有一个 31px 的纯图标按钮，还挤在横向
+                       可滚动的工具栏里（overflow-x:auto + nowrap），窗口一窄就被推到可视区外，
+                       看上去就像历史页根本没有刷新功能。这里在计数器左侧补一个带文字的按钮，
+                       点击强制重扫磁盘（force:true 绕过 60 秒缓存）。 */
+                    h("button",{type:"button",className:"cc-output-refresh-text",title:"重新扫描输出目录，把新出的图拉进来",disabled:outputLoading,onClick:()=>loadOutputs({force:true,silent:false})},
+                        outputLoading?h(PromptIcon,{name:"spinner",size:14}):h(PromptIcon,{name:"refresh",size:14}),
+                        h("span",null,outputLoading?"刷新中…":"刷新")),
                     h("span",{className:"cc-output-counter"},rows.length===outputItems.length?(rows.length+" 张"):(rows.length+" / "+outputItems.length+" 张"))),
                 h("div",{className:"cc-output-control-row","data-cc-guide":"output-controls"},
                     h("div",{className:"cc-output-search-field"},h(PromptIcon,{name:"search",size:15}),h("input",{type:"search",value:outputFilter.name,placeholder:"搜索文件名…","aria-label":"搜索文件名",autoComplete:"off",spellCheck:false,onChange:e=>updateOutputFilter("name",e.target.value)}),outputFilter.name?h("button",{type:"button",className:"cc-output-search-clear","aria-label":"清除文件名搜索",onClick:()=>updateOutputFilter("name","")},h(PromptIcon,{name:"x",size:14})):null),
@@ -6814,12 +7241,13 @@ function PreviewConsole(props) {
 				status, renderTaskSummary()),
 			h("div", { style: { display: "flex", gap: "6px", flexWrap: "wrap", justifyContent: "flex-end", minWidth: 0 } },
 				comfyUpdate?.available?h("button",{type:"button",className:"cc-update-btn",title:"ComfyUI 有新版本可用",onClick:()=>{setUpdateError("");setUpdateOpen(true);}},"可更新"):null,
-				h("button", {type:"button", "data-cc-guide":"connection-action",
-                    style:Object.assign({}, S.btn2, {display:"inline-flex",alignItems:"center",gap:7,fontWeight:700}),
-                    disabled:starting || online === null, onClick:connectionAction,
-                    title:online ? "完全关闭 ComfyUI：终止生成与排队任务、结束进程并释放模型显存" : "尝试启动并连接本机 ComfyUI"},
-                    h(OfflineComfyMark, {size:15}),
-                    starting ? "处理中…" : online ? "关闭 ComfyUI" : "连接 ComfyUI"),
+				h(ComfyStartupButton, {
+					starting, online,
+					session: startSession,
+					stopping: stoppingStart,
+					onConnect: connectionAction,
+					onStop: stopStartup,
+				}),
                 h("button", {type:"button",style:Object.assign({},S.btn2,{display:"inline-flex",alignItems:"center",gap:6}),
                     onClick:()=>openModelLibrary(),"aria-label":"打开模型库","data-cc-tooltip":"打开模型库"},
                     h(PromptIcon,{name:"folder",size:14})," 模型库"),
@@ -7263,6 +7691,61 @@ function Console() {
 	};
 	const [online, setOnline] = React.useState(null);
 	const [conn, setConn] = React.useState(0);
+	// ---- 启动过程（顶栏「启动 ComfyUI」→ 转圈 + 停止启动）----
+	// 2026-11-01：原来是一个同步 jpost("/comfy/start", {}, 120000)，点完只有一行文字，
+	// 按钮本身不变，看起来"什么都没发生"。改成后端后台线程 + attempt 轮询：
+	// 点下去立刻换成红底「■ 停止启动」，每 800ms 拿一次阶段文字，结束时复原。
+	const [launchAtt, setLaunchAtt] = React.useState(null);
+	const [launchPhase, setLaunchPhase] = React.useState("");
+	const launchAttRef = React.useRef(null);
+	const launchLive = React.useRef(false);
+	launchAttRef.current = launchAtt;
+	React.useEffect(() => () => { launchLive.current = false; }, []);
+	const stopLaunch = React.useCallback(async () => {
+		const aid = launchAttRef.current;
+		launchLive.current = false;
+		setLaunchAtt(null); setLaunchPhase("");
+		if (!aid) return;
+		try { await jpost(EXPANDER + "/comfy/startup/cancel", { attempt: aid }, 15000); } catch (e) {}
+		setMsg("已停止启动"); setOnline(null); setConn((c) => c + 1);
+	}, []);
+	const beginLaunch = React.useCallback(async () => {
+		if (launchAttRef.current) return;
+		const aid = (typeof crypto !== "undefined" && crypto.randomUUID)
+			? crypto.randomUUID()
+			: "att-" + Date.now() + "-" + Math.random().toString(16).slice(2);
+		launchLive.current = true;
+		setLaunchAtt(aid); setLaunchPhase("正在准备启动…");
+		setOnline(null); setMsg("正在启动 ComfyUI…");
+		try {
+			const r = await jpost(EXPANDER + "/comfy/start", { mode: "background", attempt: aid }, 30000);
+			if (!r || !r.ok) throw new Error((r && r.message) || "start 失败");
+		} catch (e) {
+			if (!launchLive.current) return;
+			launchLive.current = false; setLaunchAtt(null); setLaunchPhase("");
+			setOnline(false); setMsg("启动失败：" + errText(e));
+			return;
+		}
+		const deadline = Date.now() + 180000;
+		let snap = null;
+		while (launchLive.current && Date.now() < deadline) {
+			await new Promise((res) => setTimeout(res, 800));
+			if (!launchLive.current) return;
+			try {
+				const sp = await jget(EXPANDER + "/comfy/startup?attempt=" + encodeURIComponent(aid), 6000);
+				snap = (sp && sp.snapshot) || null;
+			} catch (e) { continue; }
+			if (snap && snap.phase) { setLaunchPhase(snap.phase); setMsg(snap.phase); }
+			if (snap && snap.finishedAt) break;
+		}
+		if (!launchLive.current) return;
+		launchLive.current = false; setLaunchAtt(null); setLaunchPhase("");
+		if (snap && snap.cancelled) { setMsg("已停止启动"); setOnline(null); setConn((c) => c + 1); return; }
+		if (!snap || !snap.finishedAt) { setOnline(false); setMsg("启动超时（180 秒内没有结果）"); return; }
+		if (!snap.ok) { setOnline(false); setMsg("启动失败：" + (snap.message || "?")); return; }
+		setMsg(snap.message || "ComfyUI 已启动");
+		setOnline(null); setConn((c) => c + 1);
+	}, []);
 
 	// 元数据
 	const [ckpts, setCkpts] = React.useState([]);
@@ -7279,7 +7762,12 @@ function Console() {
 	const [ckpt, setCkpt] = React.useState(L.ckpt || "");
 	// 模型库（A 线弹窗）里点「使用」选中底模后，名字经模块级钩子回到这里。
 	React.useEffect(() => {
-		MODEL_PICKED_SINK = (name) => { if (name) setCkpt((cur) => (cur === name ? cur : name)); };
+		MODEL_PICKED_SINK = (name) => {
+			// 诊断：确认模型库的「使用」真的把名字回传到了这一侧。
+			// 看不到这句 = 生成页没挂载（停在别的 tab）或 chooseMainModel 没调到钩子。
+			DIAG("[诊断1] 收到底模 " + String(name));
+			if (name) setCkpt((cur) => (cur === name ? cur : name));
+		};
 		return () => { MODEL_PICKED_SINK = null; };
 	}, []);
 	const [clip, setClip] = React.useState(L.clip || MODEL_DEFAULTS.clip);
@@ -7294,52 +7782,191 @@ function Console() {
 	React.useEffect(() => {
 		if (!ckpt) return;
 		let dead = false;
+		// 诊断：effect 每次触发都把现场打出来，能直接看出是列表没到齐还是提前 return。
+		try {
+			DIAG("[诊断2] effect 触发 底模=" + ckpt + " | unets=" + unets.length + " ckpts=" + ckpts.length
+				+ " clips=" + clips.length + " vaes=" + vaes.length + " | 已适配=" + (adaptedCkptRef.current || "无"));
+		} catch (e) { }
 		const FAMILY_CLIP_TYPE = {
 			sdxl: "stable_diffusion", sd15: "stable_diffusion", sd2: "stable_diffusion", legacy: "stable_diffusion",
-			flux: "flux", sd3: "sd3", anima: "qwen_image",
+			flux: "flux", sd3: "sd3", anima: "qwen_image", moss: "moss_image",
 		};
 		(async () => {
 			try {
-				const d = await jget(EXPANDER + "/models/detail?kind=checkpoint&name=" + encodeURIComponent(ckpt), 15000);
+				// ⚠️ 2026-10-31：kind 直接按底模实际所在目录定，不再拿 clipType 猜。
+				//    原来猜的方向是「先有 clipType 才知道去哪个目录读元数据」，而 clipType
+				//    又要靠这次适配来定 —— 循环依赖，切到 moss_image 时必然读错目录、
+				//    拿到 d=null 然后静默放弃适配。
+				//
+				//    侧车的 kind 词表见 sidecar_aline.py 的 _MODEL_DIR_KEYS：
+				//    diffusion_models 对应的 key 是 "diffusion"，不是 "unet"
+				//    （传 "unet" 会被 /models/detail 直接退 400）。
+				const _kind = unets.indexOf(ckpt) >= 0 ? "diffusion" : "checkpoint";
+				let d = null;
+				try {
+					d = await jget(EXPANDER + "/models/detail?kind=" + _kind + "&name=" + encodeURIComponent(ckpt), 15000);
+				} catch (e0) { d = null; }
+				if (!d) {
+					const _alt = _kind === "diffusion" ? "checkpoint" : "diffusion";
+					try {
+						d = await jget(EXPANDER + "/models/detail?kind=" + _alt + "&name=" + encodeURIComponent(ckpt), 15000);
+					} catch (e1) { d = null; }
+				}
 				if (dead) return;
 				const key = profileKeyFromModelBase(d && d.base_type) || profileKeyFromModelName(ckpt);
 				const p = key ? MODEL_PROFILES[key] : null;
-				if (!p) return;
+				// 注意：「未命中 profile」不等于出错。Anima 的 A 线 profile 用 stable_diffusion
+				// 编码器，而本地面板要 qwen_image，套错会把底模当 checkpoint 送进去直接 400，
+				// 所以 profileKeyFromModelBase 对 anima 故意返回空 —— 让它走下面按目录判链的兜底分支。
+				const _dirSide = unets.indexOf(ckpt) >= 0 ? "diffusion_models" : "checkpoints";
+				DIAG("[诊断3] base_type=" + ((d && d.base_type) || "读不到")
+					+ " → key=" + (key || "空")
+					+ " → " + (p ? "命中 " + (p.label || key) : "按目录判链"
+						+ "（" + _dirSide + " ⇒ " + (unets.indexOf(ckpt) >= 0 ? "UNet 链" : "Checkpoint 链") + "，正常）"));
+				// 元数据读不到、文件名也猜不出家族时，至少把链切对：
+				// 底模在 diffusion_models 里就必须走 UNet 链，否则 ComfyUI 会拿它去
+				// CheckpointLoaderSimple，直接报找不到该 checkpoint。
+				if (!p) {
+					const wantUnet = unets.indexOf(ckpt) >= 0;
+					// ⚠️ 时序：clips / vaes 是异步填的，effect 第一次跑时可能还是空数组。
+					//    这时挑不到编码器就不能记 ref，否则列表到齐后 effect 重跑会被拦，
+					//    编码器永远是空的。只有该设的都设上了才落 ref。
+					const fam2 = wantUnet ? (/moss/i.test(ckpt) ? "moss" : "anima") : "";
+					const c2 = fam2 ? pickByHints(clips, PROFILE_CLIP_HINT[fam2]) : "";
+					const v2 = fam2 ? pickByHints(vaes, PROFILE_VAE_HINT[fam2]) : "";
+					const ready = wantUnet ? (!!c2 && !!v2) : (clips.length > 0 || vaes.length > 0 || ckpts.length > 0);
+					if (adaptedCkptRef.current === ckpt && ready) return;
+					if (!ready) return;   // 列表还没到齐，等下一次 effect
+					adaptedCkptRef.current = ckpt;
+					// ⚠️ 2026-10-31：这里原来是
+					//        if (wantUnet) return isUnetClipType(cur) ? cur : "qwen_image";
+					//    同一处病根：isUnetClipType 只分「UNet / 非 UNet」，不区分
+					//    qwen_image 与 moss_image。从 MOSS 换成 Anima 时 cur 还是 moss_image，
+					//    判定为「已经在 UNet 链上」就原样保留 —— 于是选 Anima 显示 moss_image。
+					//    兜底分支本来就已经按文件名算出了 fam2，直接用它定具体类型。
+					const wantType = wantUnet ? (fam2 === "moss" ? "moss_image" : "qwen_image") : "";
+					setClipType((cur) => {
+						if (wantUnet) return cur === wantType ? cur : wantType;
+						return isUnetClipType(cur) ? (ckpts.length ? "stable_diffusion" : cur) : cur;
+					});
+					// 链切对了还得把配套件带上，否则首次使用时光有底模、编码器空着提交必 400。
+					// 家族按文件名粗分：含 moss 的走 MOSS 那套（Qwen3.5-9B + FLUX.2 VAE），
+					// 其余 UNet 族按 Anima（Qwen3 0.6B + Qwen-Image VAE）。
+					if (wantUnet) {
+						if (c2) setClip((cur) => (cur === c2 ? cur : c2));
+						if (v2) setVae((cur) => (cur === v2 ? cur : v2));
+						try { MSG("已按底模切换加载链 → " + (fam2 === "moss" ? "MOSS-Image" : "Anima（qwen_image）") + (c2 ? "、编码器 " + c2 : "") + (v2 ? "、VAE " + v2 : "")); } catch (e) { /* ignore */ }
+					} else {
+						// checkpoint 自带 CLIP 与 VAE，外挂件必须清空，否则会盖掉内置的
+						setClip((cur) => (cur === "" ? cur : ""));
+						setVae((cur) => (cur === "" ? cur : ""));
+					}
+					return;
+				}
 				const fam = p.family;
 				// 同一个底模只适配一次：之后用户手改编码器/VAE 不被反复覆盖。
-				if (adaptedCkptRef.current === ckpt) return;
+				// 同样要等列表到齐，否则 MOSS 这种需要外挂编码器的会被空列表卡住。
+				const needEnc = fam === "anima" || fam === "moss";
+				const cNeed = needEnc ? pickByHints(clips, PROFILE_CLIP_HINT[fam]) : "";
+				const vNeed = pickByHints(vaes, PROFILE_VAE_HINT[fam]);
+				const ready2 = needEnc ? !!cNeed : true;
+				if (adaptedCkptRef.current === ckpt && ready2) return;
+				if (needEnc && !ready2) return;   // 等 clips 到齐再适配
 				adaptedCkptRef.current = ckpt;
 				const notes = [];
 				const next = p.clipType || FAMILY_CLIP_TYPE[fam] || "";
-				if (next && next !== "qwen_image") {
+				// UNet 族（qwen_image / moss_image）必须显式切过去，否则会留在 checkpoint 链上。
+				//
+				// ⚠️ 2026-10-31：这里原来有一句「同族内不覆盖用户细分选择」：
+				//        if (isUnetClipType(cur) === isUnetClipType(next)) return cur;
+				//    但 isUnetClipType 只回答「是不是 UNet 链」，qwen_image 与 moss_image
+				//    都算 true，于是 Anima → MOSS 这一跳被判成「同族」直接 return，
+				//    编码器类型永远停在 qwen_image —— 这正是「编码器类型还是不变」。
+				//    profile 已经明确给出该用的具体类型，按它切就行，不需要这层拦。
+				if (next) {
 					setClipType((cur) => (cur === next ? cur : next));
-					notes.push("类型 " + next);
+					if (next !== clipType) notes.push("类型 " + next);
 				}
 				// VAE：按家族线索从 vaes 里挑；checkpoint 系没有线索就走内置（清空）。
 				const v = pickByHints(vaes, PROFILE_VAE_HINT[fam]);
 				setVae((cur) => {
 					if (v) return cur === v ? cur : v;
-					return fam === "anima" ? cur : "";   // checkpoint 系用内置 VAE
+					return fam === "anima" || fam === "moss" ? cur : "";   // checkpoint 系用内置 VAE
 				});
 				if (v) notes.push("VAE " + v);
-				// 编码器：anima 必须外挂 qwen 编码器；checkpoint 系清空走内置 CLIP。
-				if (fam === "anima") {
-					const c = pickByHints(clips, PROFILE_CLIP_HINT.anima);
+				// 编码器：anima / moss 这类 UNet 族必须外挂文本编码器；checkpoint 系清空走内置 CLIP。
+				//
+				// ⚠️ 2026-10-31：原来只有 fam === "anima" 这一支，MOSS 选完底模后
+				//    「文本编码器」还空着，直接提交会因为 CLIPLoader 拿不到 clip 而 400。
+				if (fam === "anima" || fam === "moss") {
+					const c = pickByHints(clips, PROFILE_CLIP_HINT[fam]);
 					if (c) { setClip((cur) => (cur === c ? cur : c)); notes.push("编码器 " + c); }
 				} else {
 					setClip((cur) => (cur === "" ? cur : ""));
 				}
 				if (notes.length) {
 					try { MSG("已按底模自动适配：" + (p.label || key) + " → " + notes.join("、") +
-						(fam === "anima" ? "" : "（编码器与 VAE 走 checkpoint 内置）")); } catch (e) { /* ignore */ }
+						(fam === "anima" || fam === "moss" ? "" : "（编码器与 VAE 走 checkpoint 内置）")); } catch (e) { /* ignore */ }
 				}
 			} catch (e) { /* 读不到元数据就保持现状，不猜 */ }
 		})();
 		return () => { dead = true; };
-	}, [ckpt, vaes, clips]);
+	}, [ckpt, vaes, clips, unets.length, ckpts.length]);
 	const [selLoras, setSelLoras] = React.useState((L.loras && L.loras.length) ? L.loras : MODEL_DEFAULTS.loras);
 	const [pos, setPos] = React.useState(L.pos || "");
 	const [neg, setNeg] = React.useState(L.neg || "");
+	/* 随机系统账本：记录每个槽位当前由随机按钮写进提示词的那段文本。
+	   再按任意一个随机按钮时，先把这些旧值逐词剥掉，再写新值 —— 这就是「再按一次换掉旧的随机词」。
+	   用户自己敲的词不在账上，永远不会被删。用 ref 而不是 state：它只影响下一次点击的替换口径，
+	   不需要触发重渲染。
+
+	   落盘到 localStorage：账本一旦只活在内存里，刷新页面或重启 dsh web 就清零，
+	   上一次随机写进去的词会被当成"用户手写"永久保护起来 —— 按一次多攒一套姿势，
+	   攒到五六套时模型只能在冲突里折中，每张图看起来都一个样。 */
+	const rndBySlot = React.useRef(null);
+	if (rndBySlot.current === null) {
+		let saved = null;
+		try { saved = JSON.parse(window.localStorage.getItem("dsh.comfy.rndBySlot") || "null"); } catch (e) { saved = null; }
+		rndBySlot.current = (saved && typeof saved === "object") ? saved : {};
+	}
+	const rndSaveLedger = (obj) => {
+		try { window.localStorage.setItem("dsh.comfy.rndBySlot", JSON.stringify(obj || {})); } catch (e) { /* 隐私模式下写不了就算了 */ }
+	};
+	/* 每个槽位「历史上被随机按钮写过的所有词」的集合。
+	   三个随机按钮每次按下都会用它把残留一起剥掉：账本只记当前一轮，
+	   而老版本留下的堆积、换了浏览器、清了 localStorage 这些情况账本都是空的，
+	   只有这份历史能认出「哪些词当初是随机来的」，才不会越按越乱。 */
+	const rndSeen = React.useRef(null);
+	if (rndSeen.current === null) {
+		let savedSeen = null;
+		try { savedSeen = JSON.parse(window.localStorage.getItem("dsh.comfy.rndSeen") || "null"); } catch (e) { savedSeen = null; }
+		rndSeen.current = (savedSeen && typeof savedSeen === "object") ? savedSeen : {};
+	}
+	const rndSaveSeen = (obj) => {
+		try { window.localStorage.setItem("dsh.comfy.rndSeen", JSON.stringify(obj || {})); } catch (e) { /* 同上 */ }
+	};
+	/* 上一次抽到的姿势族。90 条姿势里「站」占 21%、「躺」14%、「坐」13%，纯均匀抽的话
+	   三张里至少两张同族的概率是 41.6%，肉眼看就是"一直一个姿势"。所以抽之前先排除上一族。
+	   记两族而不是一族：只排一族时，三张里「A B A」这种首尾撞车仍占 18.7%。 */
+	const rndLastPoseFam = React.useRef([]);
+	/* 分镜同理：距离（全身/中景/特写…）和角度（仰/俯/侧/背/过肩）各记最近两族。
+	   62 条分镜里「全身+正面」占大头，纯均匀抽三张出来很容易看起来是同一个机位。 */
+	const rndLastFrameDist = React.useRef([]);
+	const rndLastFrameAngle = React.useRef([]);
+	/* 光影同理：30 段分冷/暖/硬/柔/特效/对比六族，连着两张都用「霓虹溢光」等于没换。 */
+	const rndLastLightFam = React.useRef([]);
+	/* 场景同理：190 段分十族，不分族的话「森林→森林→山谷」看起来就是野外一路到头。 */
+	const rndLastSceneFam = React.useRef([]);
+	/* 道具同理：157 段分束缚/军事/血腥/兵器/音乐/食物/电子/工具/自然/织物/杂项，
+	   不分族的话手枪完了还是手枪、茶杯完了还是茶杯。 */
+	const rndLastPropFam = React.useRef([]);
+	/* 外观 / 表情 / 附加特征 / 服饰 / 画风：这五个槽位原来只有纯均匀抽取，
+	   池子再大也会连撞（100 段外观里「长发」占一半，三张全是长发很常见）。 */
+	const rndLastLookFam = React.useRef([]);
+	const rndLastMoodFam = React.useRef([]);
+	const rndLastExtraFam = React.useRef([]);
+	const rndLastOutfitFam = React.useRef([]);
+	const rndLastStyleFam = React.useRef([]);
 	/* 插入登记的订阅：卡片的蓝框靠它重渲染 */
 	const [insVer, setInsVer] = React.useState(0);
 	React.useEffect(() => INSERTED.sub(() => setInsVer((v) => v + 1)), []);
@@ -7380,6 +8007,8 @@ function Console() {
 		const hadCond = !!(rec.cond && COND.cardName === rec.name);
 		if (hadCond) COND.clear();
 		INSERTED.del(rec.id);
+		// 开关开着但已经没有可挂条件图的卡了 → 一起关掉，别让下一次出图带着空的 plan 跑
+		try { if (llliteOn && !llliteCards().length) { setLllliteOn(false); COND.clear(); } } catch (e) { }
 		setMsg("已解除「" + rec.name + "」· 撤回 " + (_p.n + _n.n) + " 条词" + (loraN ? " · 摘下 " + loraN + " 支 LoRA" : "") + (hadCond ? " · 条件图已解绑" : ""));
 	}
 	/** 全部清空：确认一次，解除所有插入 + 清干净所有会污染下一次出图的东西 */
@@ -7464,7 +8093,33 @@ function Console() {
 	const [cardSel, setCardSel] = React.useState("");
 	const [condVer, setCondVer] = React.useState(0);
 	const [llliteT, setLllliteT] = React.useState({ assets: {}, weights: {} });
+	/* 0.7.130：生成页的身份控制开关。卡里 conditioning.enabled 默认 false（场景出图不该被
+	   控制图锁住姿态和背景），需要锁脸/锁衣服时在面板上临时打开，只影响本次会话。 */
+	const [llliteOn, setLllliteOn] = React.useState(false);
+	const [lllitePick, setLlllitePick] = React.useState("");
 	React.useEffect(() => COND.subscribe(() => setCondVer((v) => v + 1)), []);
+	/** 当前插入的角色卡里，带 conditioning.presets 的那些（面板据此决定要不要显示开关） */
+	function llliteCards() {
+		const ids = INSERTED.chars().map((r) => String(r.id || ""));
+		return (USER.cards || []).filter((c) => c && c.conditioning && c.conditioning.presets
+			&& Object.keys(c.conditioning.presets).length
+			&& ids.indexOf(String(c.id || c.name || "")) >= 0);
+	}
+	/** 开关切换：开 → 临时 resolve（绕过卡里的 enabled）；关 → 清空 plan，节点整段不进图 */
+	async function toggleLllite(next, card, preset) {
+		const target = card || llliteCards()[0];
+		if (!next || !target) { setLllliteOn(false); COND.clear(); return; }
+		setLllliteOn(true);
+		const cond = target.conditioning || {};
+		const keys = Object.keys(cond.presets || {});
+		const key = String(target.id || target.name || "");
+		if (preset && keys.indexOf(preset) >= 0) COND.picks[key] = preset;
+		else if (lllitePick && keys.indexOf(lllitePick) >= 0) COND.picks[key] = lllitePick;
+		setLlllitePick(COND.pickOf(target, keys));
+		const r = await COND.resolve(target, [Number(w), Number(hh)], true);
+		if (r && r.status === "resolved") setMsg("身份控制已开启（" + (COND.pickOf(target, keys)) + " · 强度 " + r.strength + "）");
+		else setMsg("身份控制开启失败：" + ((r && (r.reason || r.status)) || "未知原因"));
+	}
 	/** 角色卡「插入」的二级菜单：存当前打开菜单的卡 id */
 	const [insMenu, setInsMenu] = React.useState("");
 	/** 风格卡：选中 / 编辑中的草稿 / 插入二级菜单 */
@@ -7483,6 +8138,14 @@ function Console() {
 	const [dictQ, setDictQ] = React.useState("");
 	/** 词库插入目标：正向 or 负面 */
 	const [target, setTarget] = React.useState("pos");
+	/** 词库二级视图：分类词库 / 提示词段构建 */
+	const [segOn, setSegOn] = React.useState(false);
+	/** 段构建：槽位 → 该段完整键名 */
+	const [segSel, setSegSel] = React.useState({});
+	/** 段构建：正在挑选的槽位 */
+	const [segOpen, setSegOpen] = React.useState("style");
+	/** 段构建：评级 */
+	const [segRating, setSegRating] = React.useState("rating:questionable");
 	const [presetName, setPresetName] = React.useState("");
 	const [presetCat, setPresetCat] = React.useState("默认");
 	/** ComfyUI 工作流导入 */
@@ -7712,38 +8375,82 @@ const [outDraft, setOutDraft] = React.useState("");
   /* 2026-10-20 去掉「从磁盘同步」：不再自动把磁盘卡并回浏览器存档 */
 
 
-	// 底模分两条链：Anima（编码器类型 qwen_image）走 UNETLoader 读 diffusion_models，
-	// 其余走 CheckpointLoaderSimple 读 checkpoints。两边的名字不能互相投递——
-	// 混投会被 ComfyUI 校验拦成 HTTP 400（2026-10-20 实测：animagine-xl-3.1 被塞进 UNETLoader）。
-	const isAnima = String(clipType || "") === "qwen_image";
-	const modelList = isAnima ? unets : ckpts;
-	const modelBad = !!ckpt && modelList.length > 0 && modelList.indexOf(ckpt) < 0;
-	/** 某分支上次用的底模（USER.last.byType 里按 qwen_image / ckpt 各存一份） */
+	// 底模分两条链：UNet 族（编码器类型在 UNET_CLIP_TYPES 里，如 qwen_image / moss_image）
+	// 走 UNETLoader 读 diffusion_models，其余走 CheckpointLoaderSimple 读 checkpoints。
+	// 两边的名字不能互相投递——混投会被 ComfyUI 校验拦成 HTTP 400
+	// （2026-10-20 实测：animagine-xl-3.1 被塞进 UNETLoader）。
+	//
+	// ⚠️ 2026-10-31：判定方向反过来了。原来是「先看 clipType 决定去哪个目录找底模」，
+	//    于是选 moss_image 要先滚 30 项类型下拉，模型库还会落错目录。
+	//    现在改成「看底模落在哪个目录决定走哪条链」——选了 diffusion_models 里的文件
+	//    就是 UNet 链，选了 checkpoints 里的就是 ckpt 链，clipType 随后自动跟上。
+	//    ckpt 为空（首次进入）时才退回按 clipType 猜。
+	const ckptIsUnet = !!ckpt && unets.indexOf(ckpt) >= 0;
+	const isAnima = ckpt ? ckptIsUnet : isUnetClipType(clipType);
+	const modelList = ckptIsUnet ? unets : ckpts;
+	/** 跨目录的合并列表：扁平选择界面用，也用作「这个名字本机认不认」的判据 */
+	const allModels = unets.concat(ckpts);
+	/** 只在这名字两个目录都没有时算错——跨目录选底模是本设计的正常行为，不是错误 */
+	const modelBad = !!ckpt && allModels.length > 0 && allModels.indexOf(ckpt) < 0;
+	/** 底模卡上那句提示的来源标签 */
+	const ckptSourceLabel = ckptIsUnet ? "diffusion" : "checkpoint";
+	/**
+	 * 某分支上次用的底模（USER.last.byType 里按 unet / ckpt 各存一份）。
+	 * 2026-10-31：原来 UNet 那格叫 "qwen_image"，于是 qwen_image 与 moss_image 抢同一个槽，
+	 * 切换一次就把对方的选择覆盖掉。改成中性 key "unet"，老存档回退读旧 key。
+	 */
 	const savedModelFor = (anima) => {
 		const bt = (USER.last && USER.last.byType) || {};
-		return bt[anima ? "qwen_image" : "ckpt"] || "";
+		if (!anima) return bt["ckpt"] || "";
+		return bt["unet"] || bt["qwen_image"] || "";
 	};
-	/** 切分支时挑底模：本分支上次用的 > 当前值（若在新列表里）> anima 默认 > 列表第一个 */
+	/**
+	 * UNet 族各自的文件名线索：切到某个族时，优先在这个族里挑长得像的底模。
+	 *
+	 * ⚠️ 2026-10-31：pickModelFor 原来无条件优先 anima-aesthetic-v1.1.safetensors，
+	 *    于是选 moss_image 时会把 Anima 的底模塞进 UNETLoader —— 名字对但权重错，
+	 *    ComfyUI 会拿 Anima 的权重去跑 MOSS 的文本编码器和 FLUX.2 VAE，出来是噪声。
+	 */
+	const UNET_MODEL_HINTS = {
+		qwen_image: [/anima/i, /qwen/i],
+		moss_image: [/moss/i],
+	};
+	/** 按 clipType 在该族的底模列表里挑一个像样的；挑不到返回 "" */
+	const pickUnetByHint = (type, list) => {
+		const hints = UNET_MODEL_HINTS[String(type || "")] || [];
+		for (const re of hints) {
+			const hit = list.find((x) => re.test(String(x || "")));
+			if (hit) return hit;
+		}
+		return "";
+	};
+	/** 切分支时挑底模：本分支上次用的 > 当前值（若在新列表里）> 该族线索命中 > 列表第一个 */
 	const pickModelFor = (type) => {
-		const anima = String(type) === "qwen_image";
+		const anima = isUnetClipType(type);
 		const list = anima ? unets : ckpts;
 		if (ckpt && list.indexOf(ckpt) >= 0) return ckpt;          // 眼下这个在新分支里有效 -> 优先保住
 		const saved = savedModelFor(anima);
 		if (saved && list.indexOf(saved) >= 0) return saved;       // 否则回到该分支上次用的
-		if (anima && list.indexOf("<底模>.safetensors") >= 0) return "<底模>.safetensors";
+		if (anima) {
+			// 先把本族线索命中的用上；moss_image 不会再被塞 Anima 的权重
+			const byHint = pickUnetByHint(type, list);
+			if (byHint) return byHint;
+			const animaDefault = pickUnetByHint("qwen_image", list);
+			if (animaDefault) return animaDefault;
+		}
 		return list[0] || "";
 	};
 	/**
 	 * ⚠️ 2026-10-21：本机 diffusion_models 是空的（UNETLoader.unet_name 0 条），
 	 *    但 0.6.0 的 MODEL_DEFAULTS.clipType 就是 qwen_image，于是面板一上来停在
 	 *    Anima 分支、底模下拉空空如也，看起来像"模型没法选"。
-	 *    这里在「qwen_image 分支没有底模、而 checkpoints 有」时自动切到别的编码器类型。
+	 *    这里在「UNet 分支没有底模、而 checkpoints 有」时自动切到别的编码器类型。
 	 *    将来真往 diffusion_models 放了模型（unets 不为空），这条就不再触发。
 	 */
 	React.useEffect(() => {
-		if (String(clipType || '') !== 'qwen_image') return;
+		if (!isUnetClipType(clipType)) return;
 		if (unets.length > 0 || ckpts.length === 0) return;
-		const alt = (clipTypes || []).filter((x) => x !== 'qwen_image')[0];
+		const alt = (clipTypes || []).filter((x) => !isUnetClipType(x))[0];
 		if (alt && alt !== clipType) {
 			setClipType(alt);
 			MSG('没有 diffusion_models 底模，编码器类型已自动切到 ' + alt + '（走 checkpoints）');
@@ -7755,15 +8462,16 @@ const [outDraft, setOutDraft] = React.useState("");
 		if (ckpt && modelList.indexOf(ckpt) >= 0) return;      // 当前值在本分支有效 → 不动（= 上次用的）
 		const saved = savedModelFor(isAnima);
 		if (saved && modelList.indexOf(saved) >= 0) { setCkpt(saved); return; }   // 恢复该分支上次用的
-		const prefer = (isAnima && unets.indexOf("<底模>.safetensors") >= 0)
-			? "<底模>.safetensors" : modelList[0];
+		// 同一族里再按该族线索挑（moss_image 挑 moss*，qwen_image 挑 anima*）；
+		// 原来这里写死 anima-aesthetic，选 moss_image 时会塞给 UNETLoader 一个 Anima 权重。
+		const prefer = (isAnima ? pickUnetByHint(clipType, modelList) : "") || modelList[0];
 		setCkpt(prefer);
 	}, [clipType, unets.length, ckpts.length]);
 
 	// 参数变了就记住（下次进来还在）
 	React.useEffect(() => {
 		const byType = Object.assign({}, (USER.last && USER.last.byType) || {});
-		if (ckpt) byType[isAnima ? "qwen_image" : "ckpt"] = ckpt;
+		if (ckpt) byType[isAnima ? "unet" : "ckpt"] = ckpt;
 		USER.last = Object.assign({}, USER.last || {}, { ckpt, clip, clipType, vae, loras: selLoras, pos, neg, w, h: hh, steps, cfg, sampler, scheduler, prefix, upscale, upscaleModel, upscaleFactor, theme, seed, lockSeed, viewKey, byType, sizeMultiplier, seedMode });
 		saveUser();
 	}, [ckpt, vae, clip, clipType, selLoras, pos, neg, w, hh, steps, cfg, sampler, scheduler, prefix, upscale, upscaleModel, upscaleFactor, theme, sizeMultiplier, seedMode]);
@@ -7790,9 +8498,8 @@ const [outDraft, setOutDraft] = React.useState("");
 	async function doGen() {
 		if (!ckpt) { setMsg("先选一个底模"); return; }
 		if (modelBad) {
-			setMsg(isAnima
-				? "底模「" + ckpt + "」是 checkpoint，qwen_image（Anima）分支要用 diffusion_models 里的模型（当前可用的：" + (unets.join(" / ") || "无") + "）"
-				: "底模「" + ckpt + "」不在 checkpoints 里，换一个或把编码器类型改成 qwen_image");
+			setMsg("底模「" + ckpt + "」在 diffusion_models 和 checkpoints 里都找不到。"
+				+ "当前可用的底模：" + (allModels.join(" / ") || "无（先把权重放进 models 目录）"));
 			return;
 		}
 		touch();
@@ -7802,6 +8509,12 @@ const [outDraft, setOutDraft] = React.useState("");
 		if (_stab.moved) setMsg("特征锁：把 " + _stab.moved + " 个词从正向移到了负向（稳定角色特征）");
 		if (_mc.n >= 2) setMsg("多角色模式：已挂 " + _mc.n + " 张角色卡 · 人数标签 " + _mc.n + "girls · 人物类数量负向已放行");
 		// 身份控制：resolved 先把控制图/权重摆进 ComfyUI 目录，再接线；其余状态明说不静默
+		// 面板开关开着但 plan 还没落定（刚插入卡 / 改过画布尺寸 / 上个会话残留）时补解析一次
+		if (llliteOn && (!COND.plan || COND.plan.status === "off")) {
+			const _cs = llliteCards();
+			if (_cs.length) { try { await COND.resolve(_cs[0], [Number(w), Number(hh)], true); } catch (e) { } }
+			else { setLllliteOn(false); }
+		}
 		const _cp = COND.plan;
 		let _extra = null, _wire = null;
 		if (_cp && _cp.status === "resolved") {
@@ -7886,6 +8599,41 @@ const [outDraft, setOutDraft] = React.useState("");
 			if (zh && en) map[zh] = map[zh] ? (map[zh] + ", " + en) : en;
 		}
 		for (const p of NL_EXTRA) if (p[0] && p[1]) map[p[0]] = map[p[0]] ? (map[p[0]] + ", " + p[1]) : p[1];
+		// 随机资料库也接进中文反查：把「RS-51 松林空地 → pine clearing, tall grass…」
+		// 「RQ-12 跪伏抬头 → kneeling, head raised…」这类条目剥掉编号转成中文键。
+		// 这样离线规则能认的就不只是 NL_EXTRA 里手写的那几百个词，而是整个资料库近千条。
+		const RL = (typeof RND_LIB === "object" && RND_LIB) ? RND_LIB : null;
+		if (RL) {
+			for (const slot of Object.keys(RL)) {
+				const pool = RL[slot];
+				if (!pool || typeof pool !== "object") continue;
+				for (const key of Object.keys(pool)) {
+					const en = String(pool[key] || "").trim();
+					if (!en) continue;
+					const zh = String(key).replace(/^[A-Z]{2,3}-\d+\s*/, "").trim();
+					if (!zh || zh === slot) continue;
+					// 全名走正常合并；再挂两三个尾部核心词当别名，
+					// 这样用户说「山林」也能命中「秋季山林」，不必把整条条目名背下来。
+					// 别名只在没被占用时占位，绝不覆盖 NL_EXTRA / 词库里已有的词，
+					// 否则「黄昏」会被一堆场景名的尾巴挤成几十段。
+					const alts = [zh];
+					if (zh.length >= 4) {
+						alts.push(zh.slice(-3), zh.slice(-2));   // 尾部：「秋季山林」→「山林」
+						alts.push(zh.slice(0, 2));               // 头部：「跪伏叩首」→「跪伏」
+					} else if (zh.length === 3) { alts.push(zh.slice(-2), zh.slice(0, 2)); }
+					for (let ai = 0; ai < alts.length; ai++) {
+						const a = alts[ai];
+						if (a.length < 2) continue;
+						const prev = map[a];
+						if (!prev) { map[a] = en; continue; }
+						if (ai === 0) {
+							// 同名条目（好几个「烛光」）合并成多行标签，封顶 10 段
+							if (prev.split(", ").length < 10 && prev.indexOf(en) < 0) map[a] = prev + ", " + en;
+						}
+					}
+				}
+			}
+		}
 		return map;
 	}
 
@@ -7960,6 +8708,16 @@ function normLocks(list) {
 
 /** 已插入的角色卡（生图时用它们的锁稳定特征） */
 let lockCards = [];
+// 供历史页调用：把「当前挂着的卡」全部解除。清 INSERTED 同时给卡片去蓝框，
+// 再清 lockCards 让下一次出图不再套用任何禁词锁。
+CLEAR_CARD_STATE_SINK = () => {
+	lockCards = [];
+	try {
+		Object.keys(INSERTED.map).forEach((k) => { delete INSERTED.map[String(k)]; });
+		INSERTED.save();
+		INSERTED.emit();
+	} catch (e) { }
+};
 
 
 	/** 离线规则引擎：不联网，词库反查 + 英文原样保留 */
@@ -9029,39 +9787,46 @@ h("div", { style: Object.assign({}, box, gpos("1", "4"), { alignSelf: "stretch",
 h("div", { style: narrow
 		      ? { display: "flex", flexDirection: "column", gap: "8px", minWidth: 0 }
 		      : { alignSelf: "stretch", alignContent: "flex-start", position: "sticky", top: 0, zIndex: 2, display: "flex", flexDirection: "column", gap: "8px", minHeight: 0, minWidth: 0, background: "var(--c-card)" } },
-		    h("div", { style: Object.assign({}, box, { minWidth: 0, flex: "1 1 auto" }) },
+		    h("div", { style: Object.assign({}, box, { minWidth: 0, flex: "0 0 auto", gap: "4px" }) },
 		    		    h("span", { style: hd }, "底模 / 编码器 / LoRA"),
-		    		    h("div", { style: Object.assign({}, S.field, { gap: "6px" }) },
-		    		    	h("span", { style: S.label }, isAnima ? "底模（Diffusion · Anima）" : "底模（Checkpoint）"),
+		    		    h("div", { style: Object.assign({}, S.field, { gap: "3px" }) },
+		    		    	h("span", { style: S.label }, "底模（" + ckptSourceLabel + "）"),
 		    		    	h("button", { type: "button", "aria-label": "选择底模",
 		    		    		title: ckpt ? ("当前底模：" + ckpt + "；点击打开模型库更换") : "点击打开模型库选择底模",
 		    		    		style: { display: "flex", alignItems: "center", gap: "8px", width: "100%", minWidth: 0, boxSizing: "border-box",
-		    		    			padding: "5px 8px 5px 5px", textAlign: "left", cursor: "pointer", color: "inherit", font: "inherit",
+		    		    			padding: "2px 8px 2px 4px", textAlign: "left", cursor: "pointer", color: "inherit", font: "inherit",
 		    		    			border: "1px solid " + (modelBad ? "var(--c-bad)" : "rgba(127,127,127,.32)"),
 		    		    			borderRadius: "8px", background: "rgba(127,127,127,.06)" },
 		    		    		onClick: () => {
 		    		    			// 走 A 线模型库：弹窗经 portal 到 body，pvhost 收起时也看得见；
-		    		    			// 在里面点「使用」选中 checkpoint，名字再由 MODEL_PICKED_SINK 回到这里。
-		    		    			if (typeof OPEN_MODEL_PICKER_SINK === "function") OPEN_MODEL_PICKER_SINK("checkpoint", ckpt);
+		    		    			// 在里面点「使用」选中底模，名字再由 MODEL_PICKED_SINK 回到这里。
+		    		    			//
+		    		    			// ⚠️ 2026-10-31：kind 原来写死 "checkpoint"，于是不管编码器类型是
+		    		    			//    qwen_image 还是 moss_image，模型库永远落进 checkpoints 目录，
+		    		    			//    用户能看到 meinaMix / SDXL，却怎么也找不到 diffusion_models 里的
+		    		    			//    MOSS。改成按当前底模实际所在目录传；还没选底模时传 "all"，
+		    		    			//    模型库会给出跨目录的扁平底模列表。
+		    		    			if (typeof OPEN_MODEL_PICKER_SINK === "function") {
+		    		    				const k = !ckpt ? "all" : (unets.indexOf(ckpt) >= 0 ? "unet" : "checkpoint");
+		    		    				OPEN_MODEL_PICKER_SINK(k, ckpt);
+		    		    			}
 		    		    			else setTab("pv-online");
 		    		    		} },
-		    		    		h(LocalCkptThumb, { kind: "checkpoint", name: ckpt, width: 40, height: 52 }),
+		    		    		h(LocalCkptThumb, { kind: ckptIsUnet ? "unet" : "checkpoint", name: ckpt, width: 40, height: 52 }),
 		    		    		h("span", { style: { display: "flex", flexDirection: "column", gap: "1px", minWidth: 0, flex: "1 1 auto", overflow: "hidden" } },
 		    		    			h("strong", { title: ckpt, style: { fontSize: "12.5px", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, shortLora(ckpt) || "选择底模"),
 		    		    			h("small", { title: ckpt, style: { fontSize: "11px", opacity: .62, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, ckpt || "点击打开模型库")))),
 		    		    modelBad ? h("div", { style: { fontSize: "11.5px", lineHeight: 1.45, color: "var(--c-bad)" } },
-		    		    	isAnima
-		    		    		? "「" + ckpt + "」在 checkpoints 里，不是 Anima 底模。编码器类型 qwen_image 要 diffusion_models 的模型，否则 ComfyUI 会退 400。"
-		    		    		: "「" + ckpt + "」不在 checkpoints 里；编码器类型不是 qwen_image 时只能走 checkpoint 底模。") : null,
-		    		    h("label", { style: S.field }, h("span", { style: S.label }, "文本编码器"), h("select", { style: Object.assign({}, S.sel, { width: "100%" }), value: clip, onChange: (e) => setClip(e.target.value) },
+		    		    	"「" + ckpt + "」在 diffusion_models 和 checkpoints 里都找不到，请重新选一个底模。") : null,
+		    		    h("label", { style: Object.assign({}, S.field, { gap: "2px" }) }, h("span", { style: Object.assign({}, S.label, { fontSize: "11.5px" }) }, "文本编码器"), h("select", { style: Object.assign({}, S.sel, { width: "100%", padding: "3px 7px" }), value: clip, onChange: (e) => setClip(e.target.value) },
 		    		    	h("option", { value: "" }, "（跟随底模内置 CLIP）"), opt(clips, clip))),
-		    		    h("label", { style: S.field }, h("span", { style: S.label }, "编码器类型"), h("select", { style: Object.assign({}, S.sel, { width: "100%" }), value: clipType, onChange: (e) => {
+		    		    h("label", { style: Object.assign({}, S.field, { gap: "2px" }) }, h("span", { style: Object.assign({}, S.label, { fontSize: "11.5px" }) }, "编码器类型"), h("select", { style: Object.assign({}, S.sel, { width: "100%", padding: "3px 7px" }), value: clipType, onChange: (e) => {
 		    		    	const v = e.target.value;
 		    		    	setClipType(v);
 		    		    	const next = pickModelFor(v);
 		    		    	if (next) setCkpt(next);
 		    		    } }, opt(clipTypes, clipType))),
-		    		    h("label", { style: S.field }, h("span", { style: S.label }, "VAE"), h("select", { style: Object.assign({}, S.sel, { width: "100%" }), value: vae, onChange: (e) => setVae(e.target.value) },
+		    		    h("label", { style: Object.assign({}, S.field, { gap: "2px" }) }, h("span", { style: Object.assign({}, S.label, { fontSize: "11.5px" }) }, "VAE"), h("select", { style: Object.assign({}, S.sel, { width: "100%", padding: "3px 7px" }), value: vae, onChange: (e) => setVae(e.target.value) },
 		    		    	h("option", { value: "" }, "（跟随底模内置 VAE）"), opt(vaes, vae))),
 		    		    h("div", { style: { display: "flex", alignItems: "center", gap: "6px", marginTop: "auto", flexWrap: "wrap" } },
 		    		    	h("span", { style: Object.assign({}, S.label, { fontSize: "12.5px" }), title: "点右边按钮弹出二级菜单" }, "LoRA"),
@@ -9071,6 +9836,28 @@ h("div", { style: narrow
 		    		    				h("b", { style: { fontWeight: 600, color: "var(--c-accent)" } }, Number(x.model).toFixed(2))))
 		    		    		: h("span", { style: { fontSize: "12.5px", color: "var(--c-warn)" } }, "未选"),
 		    		    	h("button", { style: Object.assign({}, S.btn2, { padding: "4px 10px", fontSize: "12.5px" }), onClick: () => setLoraOpen(true), title: "打开 LoRA 二级菜单" }, "选择（" + selLoras.length + "/" + loras.length + "）"))),
+		    		    /* 0.7.130：身份控制（LLLite）开关。只在插入的卡带 conditioning.presets 时出现。
+		    		       平时关着——控制图是「纯角色线稿」，开着会把背景削掉、姿态锁成正立；
+		    		       需要锁脸锁衣服（定妆照、角色一致性对照）时勾开，只影响本次会话。 */
+		    		    (() => {
+		    		      const cs = llliteCards();
+		    		      if (!cs.length) return null;
+		    		      const card = cs[0];
+		    		      const keys = Object.keys(card.conditioning.presets || {});
+		    		      const act = llliteOn ? { borderColor: "var(--c-accent)", color: "var(--c-accent-fg)", background: "rgba(90,160,235,.18)" } : {};
+		    		      return h("div", { style: { display: "flex", alignItems: "center", gap: "6px", marginTop: "2px", flexWrap: "wrap" } },
+		    		        h("span", { style: Object.assign({}, S.label, { fontSize: "12.5px" }), title: "用控制图锁定这张角色卡的脸和服饰；代价是背景会被削掉、姿态锁成正立，场景出图请保持关闭" }, "身份控制"),
+		    		        h("button", { type: "button", style: Object.assign({}, S.btn2, { padding: "4px 10px", fontSize: "12.5px" }, act), "aria-pressed": !!llliteOn, onClick: () => toggleLllite(!llliteOn, card) }, llliteOn ? "开" : "关"),
+		    		        llliteOn ? h("select", { style: Object.assign({}, S.sel, { width: "auto", padding: "3px 7px", fontSize: "12.5px" }), value: lllitePick, title: "控制图档位（按画布比例选）", onChange: (e) => toggleLllite(true, card, e.target.value) },
+		    		          ...keys.map((k) => h("option", { key: k, value: k }, k))) : null,
+		    		        h("span", { style: { fontSize: "11.5px", color: "var(--c-fg4)" } }, cs.length > 1 ? ("共 " + cs.length + " 张卡可选 · 用最近插入的「" + (card.name || card.id) + "」") : ""));
+		    		    })(),
+		    		    // 三个随机按钮（0.7.124）：塞在整块压缩后腾出的空间里，横排一行，不改外层布局
+		    		    // 用 auto-fit + 74px 下限：右栏窄到放不下三个时自动折成两行，不会把「随机全部」切掉
+		    		    h("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(74px, 1fr))", gap: "5px", marginTop: "2px" } },
+		    		      h("button", { type: "button", style: Object.assign({}, S.btn2, { padding: "4px 6px", fontSize: "12px", fontWeight: 600, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }), title: "从词库抽一套角色：外观（发色/发型/瞳色/体型）+ 情绪 + 附加特征 + 服饰 + 道具。画风/动作/场景/取景保持不变", onClick: rndRoleOnly }, "随机角色"),
+		    		      h("button", { type: "button", style: Object.assign({}, S.btn2, { padding: "4px 6px", fontSize: "12px", fontWeight: 600, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }), title: "只换画面侧：表情 + 道具 + 动作 + 场景 + 取景/分镜。发色瞳色服饰与画风全部保持不变", onClick: rndSegOnly }, "随机画面"),
+		    		      h("button", { type: "button", style: Object.assign({}, S.btn2, { padding: "4px 6px", fontSize: "12px", fontWeight: 600, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", borderColor: "var(--c-accent)", color: "var(--c-accent-fg)" }), title: "十路全抽：画风 + 外观 + 情绪 + 附加特征 + 服饰 + 道具 + 动作 + 场景 + 取景 + 光影", onClick: rndAllBoth }, "随机全部")),
 		    h("div", { style: Object.assign({}, box, { minWidth: 0, flex: "0 0 auto" }) },
 		    		    h("span", { style: Object.assign({}, hd, { flexShrink: 0 }) }, "图片的高宽 / 参数"),
 		    		    h("div", { ref: pRef, style: { display: "grid", gridTemplateColumns: pCols2 === 1 ? "minmax(0,1fr)" : "repeat(2, minmax(0,1fr))", gap: "8px", alignItems: "start", flexShrink: 0, minHeight: 0 } },
@@ -9401,6 +10188,737 @@ function mergeCsvTags(cur, add) {
 }
 
 /** 词库（新版）：方形小卡片点选 → 底部提示词胶囊 */
+// ==================== 词库 · 提示词段构建（二级视图）====================
+function segTextNow() {
+	const sel = segSel || {};
+	if (sel.preset && SEG.blocks.preset && SEG.blocks.preset[sel.preset]) {
+		return SEG.quality + ", " + segRating + ", " + SEG.blocks.preset[sel.preset];
+	}
+	const segText = SEG.order.map((k) => (k !== "preset" && sel[k] ? SEG.blocks[k][sel[k]] : "")).filter(Boolean).join(", ");
+	return SEG.quality + ", " + segRating + (segText ? ", " + segText : "");
+}
+function copySeg() {
+	const text = segTextNow();
+	try {
+		if (navigator.clipboard && navigator.clipboard.writeText) {
+			navigator.clipboard.writeText(text).then(
+				() => setMsg("已复制到剪贴板"),
+				() => setMsg("剪贴板被拦，请手动选中预览框复制"));
+		} else { setMsg("剪贴板不可用，请手动选中预览框复制"); }
+	} catch (e) { setMsg("剪贴板被拦，请手动选中预览框复制"); }
+}
+function randomSeg() {
+	const next = {};
+	SEG.order.forEach((k) => {
+		const ks = Object.keys(SEG.blocks[k] || {});
+		if (ks.length) next[k] = ks[Math.floor(Math.random() * ks.length)];
+	});
+	setSegSel(next);
+	setMsg("随机了一套，不满意再按一次");
+}
+
+// ===== 生成页三个随机按钮（0.7.124）：随机角色 / 随机画面 / 随机全部 =====
+// 数据来源分两处：
+//   RND_LIB（lib/randomlib.js，独立资料库）—— look 外观 + mood 情绪
+//   SEG（lib/dict.js 词库）—— style / outfit / prop / pose / scene / frame
+// 「人物」槽位（character）是固定白发红瞳的 20 种表情，和 look 抢同一批发色瞳色 tag，
+// 抽 look 时一律删掉 character，避免两套头发眼睛叠在一起。
+function rndPick(arr) {
+	return (arr && arr.length) ? arr[Math.floor(Math.random() * arr.length)] : null;
+}
+function rndHas(obj, k) {
+	return !!(obj && k && Object.prototype.hasOwnProperty.call(obj, k));
+}
+// 合并池：同一槽位把 SEG 词库与 RND_LIB 资料库并起来抽，两边各管各的，互不覆盖。
+// SEG 缺这一路时（比如 look / mood / extra 只有 RND_LIB 有）也能正常返回。
+function rndPool(k) {
+	return Object.assign({}, (SEG.blocks || {})[k] || {}, (RND_LIB || {})[k] || {});
+}
+// 前缀：质量词 + 分级。只加一次（逐词去重保证重复按不会再塞一遍）
+function rndPrefix() {
+	return [SEG.quality, segRating].map((v) => String(v || "").trim()).filter(Boolean).join(", ");
+}
+// 只取指定槽位的文本，没抽到的槽位跳过
+function rndSlotText(sel, slots) {
+	const parts = [];
+	(slots || []).forEach((k) => {
+		const pool = rndPool(k);
+		if (rndHas(pool, sel[k])) parts.push(pool[sel[k]]);
+	});
+	return parts.join(", ");
+}
+// 拼提示词：quality, rating, style, look, mood, extra, outfit, prop, pose, scene, frame
+function rndText(sel) {
+	const parts = [];
+	const push = (v) => { const s = String(v || "").trim(); if (s) parts.push(s); };
+	push(SEG.quality);
+	push(segRating);
+	["style", "look", "mood", "extra", "outfit", "prop", "pose", "scene", "frame"].forEach((k) => {
+		const pool = rndPool(k);
+		if (rndHas(pool, sel[k])) push(pool[sel[k]]);
+	});
+	return parts.join(", ");
+}
+// 从某个池里抽一个 key；pool 是 {key: value} 或直接给 keys 数组
+function rndKey(pool) {
+	const ks = Object.keys(pool || {});
+	return ks.length ? rndPick(ks) : "";
+}
+// 附加特征（兽耳/角/眼镜/纹身…）：不是每张图都要带，留 1/3 概率抽到「无」。
+// 带兽耳和带恶魔角是两种完全不同的角色，强行每次都加会让随机池失去一半多样性。
+function rndExtra() {
+	const ks = Object.keys((RND_LIB || {}).extra || {});
+	if (!ks.length) return "";
+	if (Math.random() < 0.34) return "";
+	return rndFamPick("extra", rndExtraFamily, rndLastExtraFam);
+}
+// 姿势族：把 90 条姿势按「基础身体姿态」归类，用于换族抽取。
+// 顺序有意义——先匹配更具体的（跑/跳/蹲/跪/躺/趴），最后才是「站」这种兜底大类，
+// 否则 "sitting on the ground" 会被 stand 之类的宽规则先吃掉。
+// 外观族：按「头发怎么处理」分。发型是这三个槽位里视觉差最大的维度，
+// 同色系换个发型出来的完全是另一个角色。顺序先特殊后兜底。
+const RND_LOOK_FAM = [
+	{ k: "双", re: /\btwin tails|twin braids|twintails|side ponytail|double\b/i },
+	{ k: "编", re: /\bbraid|braided\b/i },
+	{ k: "卷", re: /\bcurly|wavy|drill hair\b/i },
+	{ k: "束", re: /\bponytail|hair bun|updo|messy bun|half updo\b/i },
+	{ k: "短", re: /\bshort (hair|bob|platinum|blue|red|white|silver|black|orange|pink|teal|dark|green|ash|messy|spiky)|bob cut|bob hair|pixie cut|undercut|bowl cut|short hair\b/i },
+	{ k: "长", re: /\blong|medium\b/i },
+];
+function rndLookFamily(v) {
+	const s = String(v || "");
+	for (let i = 0; i < RND_LOOK_FAM.length; i++) if (RND_LOOK_FAM[i].re.test(s)) return RND_LOOK_FAM[i].k;
+	return "长";
+}
+// 表情族：正 / 负 / 怒 / 冷 / 强。表情连着两张同族，出来的就是同一张脸的情绪。
+const RND_MOOD_FAM = [
+	{ k: "正", re: /\bsmile|happy|joy|grin|amused|content|grateful|relieved|hopeful|peaceful|gentle|warm|tender|affection|giddy|satisfied|proud|innocent|triumphant|confident|smug\b/i },
+	{ k: "负", re: /\bsad|cry|tear|sorrow|grief|despair|lonely|regret|ashamed|pained|hurt|broken|horrified|fear|scared|vulnerable|grieving|wistful|melancholic|embarrass|tired|exhausted|shy|blush\b/i },
+	{ k: "怒", re: /\banger|angry|rage|furious|irritated|annoyed|hostile|predatory|threat|intimidat|defiant|challenging|scorn|disgust|mocking\b/i },
+	{ k: "冷", re: /\bexpressionless|blank|deadpan|stoic|cold|unimpressed|distant|neutral|absent-minded|dazed|silent|calm|serene|sleepy|lazy|half-closed\b/i },
+	{ k: "强", re: /\bsurprised|shock|amazed|excited|panic|desperate|manic|wild|intense|focused|determined|mesmerized|flustered|nervous|anticipation|confused|thinking|curious|surprised\b/i },
+	{ k: "其它", re: /./ },
+];
+function rndMoodFamily(v) {
+	const s = String(v || "");
+	for (let i = 0; i < RND_MOOD_FAM.length; i++) if (RND_MOOD_FAM[i].re.test(s)) return RND_MOOD_FAM[i].k;
+	return "其它";
+}
+// 附加特征族：兽 / 超自然 / 饰品 / 伤痕 / 穿孔刺青 / 面具服饰 / 其它
+// 兽耳连出两次和「兽耳→角→伤痕」是完全不同的观感。
+const RND_EXTRA_FAM = [
+	{ k: "兽", re: /\bear|tail|fang|paw\b/i },
+	{ k: "超自然", re: /\bhorn|wing|halo|antlers|spectral|glowing|runic|rune|crystal|scales|gills|split tongue\b/i },
+	{ k: "伤痕", re: /\bscar|bandage|bandaid|stitch|burn|bruise|wound|claw marks|eyebags\b/i },
+	{ k: "穿孔", re: /\bpiercing|tattoo|serial number\b/i },
+	{ k: "服饰", re: /\bglasses|sunglasses|mask|veil|hood|hat|beret|cap|headscarf|eyepatch|monocle|harness|armband|thigh strap|anklet|body chain|collar\b/i },
+	{ k: "饰品", re: /\bearring|necklace|pendant|choker|crown|tiara|hairband|hair clip|hairpin|flower crown|jewelry\b/i },
+	{ k: "其它", re: /\bblush marks|freckles|mole|pale skin|nail polish\b/i },
+];
+function rndExtraFamily(v) {
+	const s = String(v || "");
+	for (let i = 0; i < RND_EXTRA_FAM.length; i++) if (RND_EXTRA_FAM[i].re.test(s)) return RND_EXTRA_FAM[i].k;
+	return "其它";
+}
+// 服饰族：制服 / 民族 / 战斗 / 泳装内衣 / 日常 / 礼服 / 功能 / 其它
+const RND_OUTFIT_FAM = [
+	{ k: "制服", re: /\bserafuku|school uniform|blazer|office lady|police|flight attendant|nurse|maid|miko|gakuran|teacher|cheerleader|gym uniform|apron|lab coat|medical coat|scrubs|cassock|nun habit|military dress\b/i },
+	{ k: "民族", re: /\byukata|kimono|qipao|hanfu|sari|hanbok|abaya|chinese clothes|japanese\b/i },
+	{ k: "战斗", re: /\bcamouflage|multicam|plate carrier|combat shirt|ghillie|body armor|plate armor|power armor|riot|bomb suit|tactical|exoskeleton|hazmat|wetsuit|spacesuit|plug suit|racing suit|fencing|riding habit|firefighter\b/i },
+	{ k: "泳装内衣", re: /\bswimsuit|bikini|underwear|bra|panties|babydoll|negligee|lingerie|garter|thighhighs|bodysuit|leotard|towel|bandages only|latex\b/i },
+	{ k: "礼服", re: /\bgown|tuxedo|tailcoat|evening|backless|wedding dress|prom dress|fur stole|lolita|gothic\b/i },
+	{ k: "功能", re: /\braincoat|rain poncho|down jacket|hoodie|track suit|jersey|overalls|mechanic|cargo pants|techwear|bomber jacket|trench coat|cloak|sweater|cardigan|knit|leather jacket|ragged clothes|military coat\b/i },
+	{ k: "日常", re: /\bcamisole|t-shirt|shirt|skirt|jeans|shorts|dress|pajamas|robe|suit|vest|chiffon\b/i },
+];
+function rndOutfitFamily(v) {
+	const s = String(v || "");
+	for (let i = 0; i < RND_OUTFIT_FAM.length; i++) if (RND_OUTFIT_FAM[i].re.test(s)) return RND_OUTFIT_FAM[i].k;
+	return "其它";
+}
+// 画风族：绘画 / 摄影 / 动漫画 / 3D / 图形 / 复古。
+// 画风是所有槽位里改观感最狠的一个 —— 连出两次同族比什么都明显。
+const RND_STYLE_FAM = [
+	{ k: "绘画", re: /\bpainterly|watercolor|oil painting|impressionist|baroque|charcoal|engraving|ink wash|sumi-e|pastel|gouache|thick paint|pencil sketch|graphite\b/i },
+	{ k: "摄影", re: /\bphotograph|film|kodak|infrared|long exposure|double exposure|bokeh|grain|soft focus|harsh lighting|neon lights\b/i },
+	{ k: "动漫画", re: /\banime|manga|cel shading|screencap|shoujo|shounen|lineart|moé|chibi\b/i },
+	{ k: "3D", re: /\b3d|render|cg|low poly|voxel\b/i },
+	{ k: "图形", re: /\bpop art|minimalist|poster|collage|paper cutout|pixel|vector|graphic|halftone|muted colors|vivid colors|monochrome|duotone|morandi\b/i },
+	{ k: "复古", re: /\bretro|vintage|ukiyo-e|art deco|art nouveau|90s|steampunk|vaporwave|cyberpunk|dark gothic\b/i },
+];
+function rndStyleFamily(v) {
+	const s = String(v || "");
+	for (let i = 0; i < RND_STYLE_FAM.length; i++) if (RND_STYLE_FAM[i].re.test(s)) return RND_STYLE_FAM[i].k;
+	return "其它";
+}
+// 通用换族抽取：避开最近两族。poolName 对应 rndPool 的键，famFn 是该池的分族函数。
+function rndFamPick(poolName, famFn, histRef) {
+	const pool = rndPool(poolName);
+	const ks = Object.keys(pool);
+	if (!ks.length) return "";
+	const hist = Array.isArray(histRef.current) ? histRef.current : [];
+	let cand = ks;
+	if (hist.length) {
+		const strict = ks.filter((k) => hist.indexOf(famFn(pool[k])) < 0);
+		if (strict.length) cand = strict;
+		else {
+			const last = hist[hist.length - 1];
+			const one = ks.filter((k) => famFn(pool[k]) !== last);
+			if (one.length) cand = one;
+		}
+	}
+	const pick = rndPick(cand);
+	if (pick) histRef.current = [famFn(pool[pick])].concat(hist.slice(0, 1));
+	return pick;
+}
+const RND_POSE_FAM = [
+	{ k: "悬吊", re: /\bsuspend|hanging|inverted|levitating|floating|weightless|underwater\b/i },
+	{ k: "跑",   re: /\brun(ning)?\b|sprint|charging|run toward|crouched start|striding|fleeing|pursuing|vaulting over|being dragged|breaking free|walking fast\b/i },
+	{ k: "跳",   re: /\bjump(ing)?\b|leaping|midair|mid-air|airborne|leap|falling|free fall|dropping|landing\b/i },
+	{ k: "爬",   re: /\bcrawl|on all fours|climbing|on elbows|hands and knees\b/i },
+	{ k: "跪",   re: /\bkneel(ing)?\b|\bseiza\b|prostrating|wariza|straddling|riding\b/i },
+	{ k: "躺",   re: /\blying\b|\bon (back|stomach|side)\b|\bsupine\b|reclining\b/i },
+	{ k: "蹲",   re: /\bsquat(ting)?\b|\bcrouch(ing)?\b|deep squat|low stance|curled up in corner\b/i },
+	{ k: "趴",   re: /\bprone\b|\blying on stomach\b|bent over|bending over|draped over|hands on ground|flat on ground|body flat|diving low\b/i },
+	{ k: "坐",   re: /\bsit(ting)?\b|crossed legs|cross-legged|on chair|on floor|dangling|hand on own cheek\b/i },
+	{ k: "靠",   re: /\bleaning\b|\bagainst wall\b|against tree|on railing\b/i },
+	// 站是兜底大类：上半身的手势、情绪、扭身全归这里，所以它排在最后、判据最宽
+	{ k: "站",   re: /\bstand(ing)?\b|\bsalute\b|upright|facing viewer|facing off|selfie|stretching|head back|looking down|finger to mouth|hand in hair|looking back|turning|tiptoes|reaching up|hands together|holding hands|finger heart|outstretched arms|from behind|hands on (own )?head|hand on own forehead|twisting torso|raising hand|fighting stance|hugging|embrace|carrying over shoulder|bridal carry|pushing away|wading|covering face|arms spread wide|arms crossed over chest|stepping back|hugging self|arms limp|hands in pockets|crossed arms|arms behind back\b/i },
+];
+function rndPoseFamily(v) {
+	const s = String(v || "");
+	for (let i = 0; i < RND_POSE_FAM.length; i++) {
+		if (RND_POSE_FAM[i].re.test(s)) return RND_POSE_FAM[i].k;
+	}
+	return "其它";
+}
+// 换族抽姿势：排掉最近两族的候选，让连按三张必然是三种基础姿态。
+// 池子 90 条、11 个族，排掉两族后还剩至少 7 族可选，实际不会走到兜底；
+// 万一某个族的条目被删到极少，兜底也只退一步（只排最近一族），保证总能抽到东西。
+function rndPoseKey() {
+	const pool = rndPool("pose");
+	const ks = Object.keys(pool);
+	if (!ks.length) return "";
+	const hist = Array.isArray(rndLastPoseFam.current) ? rndLastPoseFam.current : [];
+	let cand = ks;
+	if (hist.length) {
+		const excl2 = ks.filter((k) => hist.indexOf(rndPoseFamily(pool[k])) < 0);
+		if (excl2.length) {
+			cand = excl2;
+		} else {
+			const last = hist[hist.length - 1];
+			const excl1 = ks.filter((k) => rndPoseFamily(pool[k]) !== last);
+			if (excl1.length) cand = excl1;
+		}
+	}
+	const pick = rndPick(cand);
+	if (pick) {
+		const f = rndPoseFamily(pool[pick]);
+		rndLastPoseFam.current = [f].concat(hist.slice(0, 1));
+	}
+	return pick;
+}
+// 分镜族：距离 + 角度两个维度。
+// 距离决定"画面里装多少"，角度决定"从哪看"——两者都换，机位才真的变。
+// 规则顺序是先具体后宽泛（极特写 → 近景 → 胸上 → 中景 → 全身 → 远景 → 大远景），
+// 否则 "full length shot, wide framing" 会被 wide shot 先吃掉。
+const RND_FRAME_DIST = [
+	{ k: "极特写", re: /\bextreme close-up\b|\bmacro shot\b|\beyes focus\b|\beye focus\b|\blips focus\b|\bfeet focus\b|\biris detail\b/i },
+	{ k: "近景",   re: /\bclose-up\b|\bface focus\b|\bportrait\b|\bnape\b/i },
+	{ k: "胸上",   re: /\bupper body\b|\bchest up\b|\bcollarbone\b/i },
+	{ k: "中景",   re: /\bmedium shot\b|\bcowboy shot\b|\bwaist up\b|\bknee-up\b|\bmid-thigh\b|\bthree-quarter body\b/i },
+	{ k: "全身",   re: /\bfull length shot\b|\bfull body\b|\bpanorama\b/i },
+	{ k: "远景",   re: /\bwide shot\b|\bdistant figure\b/i },
+	{ k: "大远景", re: /\bextreme wide\b|\bscenery focus\b|\bsmall figure\b/i },
+];
+// 「正面」「构图类」不算特殊角度，返回空串 —— 它们不参与角度换族，
+// 否则 62 条里一半以上都是 front view，一排除就没得抽了。
+const RND_FRAME_ANGLE = [
+	{ k: "仰视", re: /\blow angle\b|\bfrom below\b|\bworm'?s eye\b/i },
+	{ k: "俯视", re: /\bhigh angle\b|\bfrom above\b|\btop-down\b|\boverhead\b|\bcctv\b/i },
+	{ k: "过肩", re: /\bover the shoulder\b/i },
+	{ k: "背面", re: /\bfrom behind\b|\bback view\b|\bback of head\b/i },
+	{ k: "侧视", re: /\bside view\b|\bprofile\b|\bthree-quarter view\b|\bfrom side\b/i },
+];
+function rndFrameDist(v) {
+	const s = String(v || "");
+	for (let i = 0; i < RND_FRAME_DIST.length; i++) {
+		if (RND_FRAME_DIST[i].re.test(s)) return RND_FRAME_DIST[i].k;
+	}
+	// 没写距离的（三分法 / 框中框 / 荷兰角 / 鱼眼…）归「构图」：
+	// 它们确实是一个独立的分镜取向，不该被当成"未知"而不参与换族。
+	return "构图";
+}
+function rndFrameAngle(v) {
+	const s = String(v || "");
+	for (let i = 0; i < RND_FRAME_ANGLE.length; i++) {
+		if (RND_FRAME_ANGLE[i].re.test(s)) return RND_FRAME_ANGLE[i].k;
+	}
+	return "";
+}
+// 换族抽分镜：距离和角度都避开最近两族，连按三张必然是三种机位。
+// 兜底两级：先退到只避距离一族，再退到全池（62 条、8 个距离族，实际不会走到）。
+function rndFrameKey() {
+	const pool = rndPool("frame");
+	const ks = Object.keys(pool);
+	if (!ks.length) return "";
+	const hd = Array.isArray(rndLastFrameDist.current) ? rndLastFrameDist.current : [];
+	const ha = Array.isArray(rndLastFrameAngle.current) ? rndLastFrameAngle.current : [];
+	let cand = ks;
+	if (hd.length || ha.length) {
+		const strict = ks.filter((k) => {
+			const d = rndFrameDist(pool[k]);
+			const a = rndFrameAngle(pool[k]);
+			const dOk = hd.indexOf(d) < 0;
+			const aOk = !a || ha.indexOf(a) < 0;   // 候选没特殊角度 → 不算冲突
+			return dOk && aOk;
+		});
+		const distOnly = ks.filter((k) => hd.indexOf(rndFrameDist(pool[k])) < 0);
+		if (strict.length) cand = strict;
+		else if (distOnly.length) cand = distOnly;
+	}
+	const pick = rndPick(cand);
+	if (pick) {
+		const d = rndFrameDist(pool[pick]);
+		const a = rndFrameAngle(pool[pick]);
+		rndLastFrameDist.current = [d].concat(hd.slice(0, 1));
+		if (a) rndLastFrameAngle.current = [a].concat(ha.slice(0, 1));
+	}
+	return pick;
+}
+// 光影族：光从哪来、多硬、怎么落。顺序先具体（特效光有强特征词）后泛（冷暖是底色）。
+const RND_LIGHT_FAM = [
+	{ k: "特效", re: /\bvolumetric|god rays|light shafts|tyndall|lens flare|anamorphic|bokeh|prism|chromatic|sparks|embers|shadow pattern|gobo|neon|halation|reflections|shimmer|caustics|mirror reflection|reflective floor|slanted beam|dust motes|striped light|blinds shadow|lightning flash|searchlight|headlight sweep|moving beam\b/i },
+	{ k: "对比", re: /\bcinematic lighting|dramatic light|cross lighting|key light|motivated light|split lighting|half warm half cool|mixed color temperature|warm and cool\b/i },
+	{ k: "硬光", re: /\bhard shadow|harsh|low key|single light source|spotlight|top lighting|underlighting|overexposed|blown highlights|side lighting|form defining|hard edge|hard beam|stark white\b/i },
+	{ k: "剪影", re: /\bsilhouette|contre-jour|backlit|backlighting|rim light\b/i },
+	{ k: "柔光", re: /\bsoft light|high key|diffused|haze|fog|misty|vignette|falloff|bounce light|ambient glow|reflected light|softbox|even light|beauty light|snow bounce|cool fill\b/i },
+	{ k: "暖光", re: /\bgolden hour|warm sunlight|sunset|candlelight|warm flicker|amber|firelight|lantern glow|fire glow|orange flicker|campfire|warm orange|dusk backlight|orange gradient\b/i },
+	{ k: "冷光", re: /\bcool blue|moonlight|fluorescent|cold white|clinical|silver cast|teal|monitor glow|blue face light|polar night blue\b/i },
+];
+function rndLightFamily(v) {
+	const s = String(v || "");
+	for (let i = 0; i < RND_LIGHT_FAM.length; i++) {
+		if (RND_LIGHT_FAM[i].re.test(s)) return RND_LIGHT_FAM[i].k;
+	}
+	return "其它";
+}
+// 换族抽光影：避开最近两族，30 段分 7 族，排完还剩至少 5 族可选。
+function rndLightKey() {
+	const pool = rndPool("light");
+	const ks = Object.keys(pool);
+	if (!ks.length) return "";
+	const hist = Array.isArray(rndLastLightFam.current) ? rndLastLightFam.current : [];
+	let cand = ks;
+	if (hist.length) {
+		const strict = ks.filter((k) => hist.indexOf(rndLightFamily(pool[k])) < 0);
+		if (strict.length) cand = strict;
+		else {
+			const last = hist[hist.length - 1];
+			const one = ks.filter((k) => rndLightFamily(pool[k]) !== last);
+			if (one.length) cand = one;
+		}
+	}
+	const pick = rndPick(cand);
+	if (pick) {
+		const f = rndLightFamily(pool[pick]);
+		rndLastLightFam.current = [f].concat(hist.slice(0, 1));
+	}
+	return pick;
+}
+// 道具族：按「这东西是干什么用的」分。顺序先特殊后常规——
+// 枪和束缚器具的判定词一旦被「杂项」吃掉，就会出现「步枪被归成日用小物」这种误判。
+const RND_PROP_FAM = [
+	{ k: "束缚", re: /\bbondage|shibari|spreader bar|straitjacket|suspension bar|corset|pet play|wax|ice cubes|feather|flogger|whip|clothespins|ring gag|harness|chastity|electro|latex sheet|stocks|vibrator|dildo|anal |butt plug|handcuffs|blindfold|ball gag|leash|nipple clamps|chain, shackle\b/i },
+	{ k: "军事", re: /\brifle|pistol|handgun|shotgun|machine gun|submachine gun|ballistic shield|gas grenade|night vision|nvg|medical bag|dog tags|spotting scope|ammo|grenade|sledgehammer\b/i },
+	{ k: "血腥", re: /\bamputee|severed|wound|cross-section|blood|stump|bandage|skeleton mask|welding mask|gas mask|red cloth\b/i },
+	{ k: "兵器", re: /\blongsword|katana|drawn string|spear|battle axe|kunai|daggers|scythe|blade\b/i },
+	{ k: "音乐", re: /\bpiano|flute|cello|accordion|taiko|harmonica|guitar|violin\b/i },
+	{ k: "食物", re: /\bapple|bread|coffee|wine bottle|ice cream|bento|cake slice|lollipop|teacup|cup, tea\b/i },
+	{ k: "电子", re: /\blaptop|headphone|console|tablet|monitor|smartphone|camera|flashlight|radio|photograph\b/i },
+	{ k: "工具", re: /\bwrench|hammer|saw,|screwdriver|rope coil\b/i },
+	{ k: "自然", re: /\brose|sunflower|potted plant|fallen leaf|vine|\bcat,|white dove|butterfly|snake|crow|bouquet|dried flowers\b/i },
+	{ k: "织物", re: /\bcape|veil|blanket|flag on pole|ribbon|scarf|gloves|thighhighs|high heels|boots|pendant|earrings|ring,|hair stick|flower crown|jewelry|lace parasol\b/i },
+	{ k: "杂项", re: /\bchair|mirror|sofa|ladder|bathtub|bicycle|motorcycle|skateboard|oar|kite|book|lantern|pocket watch|umbrella|candle|folding fan|round fan|half mask|smoking pipe|cigarette|backpack|luggage|suitcase|plush toy\b/i },
+];
+function rndPropFamily(v) {
+	const s = String(v || "");
+	for (let i = 0; i < RND_PROP_FAM.length; i++) {
+		if (RND_PROP_FAM[i].re.test(s)) return RND_PROP_FAM[i].k;
+	}
+	return "其它";
+}
+// 换族抽道具：避开最近两族，157 段分 11~12 族，排完还剩至少 9 族可选。
+function rndPropKey() {
+	const pool = rndPool("prop");
+	const ks = Object.keys(pool);
+	if (!ks.length) return "";
+	const hist = Array.isArray(rndLastPropFam.current) ? rndLastPropFam.current : [];
+	let cand = ks;
+	if (hist.length) {
+		const strict = ks.filter((k) => hist.indexOf(rndPropFamily(pool[k])) < 0);
+		if (strict.length) cand = strict;
+		else {
+			const last = hist[hist.length - 1];
+			const one = ks.filter((k) => rndPropFamily(pool[k]) !== last);
+			if (one.length) cand = one;
+		}
+	}
+	const pick = rndPick(cand);
+	if (pick) {
+		const f = rndPropFamily(pool[pick]);
+		rndLastPropFam.current = [f].concat(hist.slice(0, 1));
+	}
+	return pick;
+}
+// 场景族：按「这是哪一类地方」分。顺序先特殊后常规——太空/高空/水下/极端天气的判定词
+// 一旦被「城市」「自然」先吃掉，就会出现「海滩被当成高空」（beach 带 sky）这种误判。
+// 所以高空族里刻意不含单独的 sky 一词。
+const RND_SCENE_FAM = [
+	{ k: "棚拍", re: /\bsimple background|plain background|studio backdrop\b/i },
+	{ k: "太空", re: /\bspace station|nebula|cosmic|alien terrain|meteor|stargate|deep space|earth below\b/i },
+	{ k: "高空", re: /\bcloud layer|above the clouds|cable car|balloon|cliff edge|floating island|airplane|aircraft cabin|airfield|runway|on top of train\b/i },
+	{ k: "水下", re: /\bunderwater|submerged|reef|kelp|coral|sunken|caustics|shallow water\b/i },
+	{ k: "极端", re: /\btornado|sandstorm|blizzard|thunderstorm|flood|volcanic ash|aurora|hoarfrost|whiteout|storm|downpour\b/i },
+	{ k: "幻想", re: /\bmagic|rune|temple|castle|dragon|crystal cavern|abyss|otherworld|surreal|dreamscape|inverted world|abstract space|digital space|paper world|mirror space|void\b/i },
+	{ k: "废墟", re: /\bruin|abandoned|collapsed|war-torn|destroyed street|burning city|wreck|trench|broken pews|empty swimming pool\b/i },
+	{ k: "室内", re: /\broom|interior|indoor|corridor|classroom|kitchen|bathroom|bedroom|library|cafe|bar|cell |laboratory|server|theater|museum|office|warehouse|basement|cabin|hospital|mall|store|shrine|church|factory|bakery|greenhouse|poolside|swimming pool|laundromat|entryway\b/i },
+	{ k: "城市", re: /\bstreet|city|alley|rooftop|subway|station|pier|bridge|parking|intersection|building|shop|platform|crosswalk|railway|harbor|checkpoint|gas station|deck|overpass|promenade|plaza|square|highway|port|scaffolding|vending machine|bus stop|school gate|night market|mall|district|passage\b/i },
+	{ k: "自然", re: /\bforest|mountain|field|meadow|canyon|glacier|swamp|cave|waterfall|lake|desert|cliff|grassland|tundra|shore|beach|bamboo|flower|garden|river|valley|hill|grove|spring|volcano|crater|graveyard|gravestone|moss\b/i },
+];
+function rndSceneFamily(v) {
+	const s = String(v || "");
+	for (let i = 0; i < RND_SCENE_FAM.length; i++) {
+		if (RND_SCENE_FAM[i].re.test(s)) return RND_SCENE_FAM[i].k;
+	}
+	return "其它";
+}
+// 换族抽场景：避开最近两族，让连按三张必然落在三种不同性质的地方。
+// 170 段分 9~10 族，排掉两族后还剩至少 7 族可选，不会抽空。
+function rndSceneKey() {
+	const pool = rndPool("scene");
+	const ks = Object.keys(pool);
+	if (!ks.length) return "";
+	const hist = Array.isArray(rndLastSceneFam.current) ? rndLastSceneFam.current : [];
+	let cand = ks;
+	if (hist.length) {
+		const strict = ks.filter((k) => hist.indexOf(rndSceneFamily(pool[k])) < 0);
+		if (strict.length) cand = strict;
+		else {
+			const last = hist[hist.length - 1];
+			const one = ks.filter((k) => rndSceneFamily(pool[k]) !== last);
+			if (one.length) cand = one;
+		}
+	}
+	const pick = rndPick(cand);
+	if (pick) {
+		const f = rndSceneFamily(pool[pick]);
+		rndLastSceneFam.current = [f].concat(hist.slice(0, 1));
+	}
+	return pick;
+}
+// 通用填充：keep 里的槽位有值就不动；其余按来源重抽
+function rndFill(keep, opts) {
+	const o = opts || {};
+	const next = Object.assign({}, segSel || {});
+	delete next.preset;
+	delete next.character;                       // 永远不用 character，交给 look
+	if (o.look) next.look = rndFamPick("look", rndLookFamily, rndLastLookFam);
+	if (o.mood) next.mood = rndFamPick("mood", rndMoodFamily, rndLastMoodFam);
+	// 光影是独立槽位，不在 SEG.order 里，所以不能靠下面的循环，得单独抽
+	if (o.light) next.light = rndLightKey();
+	if (o.extra) {
+		const ex = rndExtra();
+		if (ex) next.extra = ex; else delete next.extra;
+	}
+	SEG.order.forEach((k) => {
+		if (k === "preset" || k === "character") return;
+		if (keep.indexOf(k) >= 0 && next[k]) return;
+		if (!o.slots || o.slots.indexOf(k) >= 0) {
+			// 十个槽位全部走换族抽取：站着换站着的变体、全身换全身、森林换森林、
+			// 手枪换手枪、长发换长发，肉眼看都看不出区别
+			let v;
+			if (k === "pose") v = rndFamPick("pose", rndPoseFamily, rndLastPoseFam);
+			else if (k === "scene") v = rndFamPick("scene", rndSceneFamily, rndLastSceneFam);
+			else if (k === "frame") v = rndFrameKey();
+			else if (k === "prop") v = rndFamPick("prop", rndPropFamily, rndLastPropFam);
+			else if (k === "look") v = rndFamPick("look", rndLookFamily, rndLastLookFam);
+			else if (k === "mood") v = rndFamPick("mood", rndMoodFamily, rndLastMoodFam);
+			else if (k === "extra") v = rndFamPick("extra", rndExtraFamily, rndLastExtraFam);
+			else if (k === "outfit") v = rndFamPick("outfit", rndOutfitFamily, rndLastOutfitFam);
+			else if (k === "style") v = rndFamPick("style", rndStyleFamily, rndLastStyleFam);
+			else v = rndKey(rndPool(k));
+			if (v) next[k] = v;
+		}
+	});
+	setSegSel(next);
+	return { sel: next, text: rndText(next) };
+}
+const RND_NON_ROLE = ["style", "pose", "scene", "frame"];   // 随机角色时保留：画风与构图
+// 随机画面时保留：人物本体（外观/服饰）+ 画风。重抽的是表情 + 道具 + 动作 + 场景 + 取景。
+// 表情不算「角色特征」（特征 = 发色/发型/瞳色/体型），它是状态，跟姿势场景一起归画面侧。
+const RND_NON_SCENE = ["look", "outfit", "style"];
+const RND_SCENE_SLOTS = ["prop", "pose", "scene", "frame"];
+// 随机全部：除 preset（整套，会吞掉其它槽位）与 character（固定白发红瞳，和 look 抢 tag）之外的全路
+const RND_ALL_SLOTS = SEG.order.filter((k) => k !== "preset" && k !== "character");
+// 把选中的槽位压成短 ID 串，给消息栏用：ST-02 LK-12 MD-04 OF-02 PR-03 PO-29 SC-27 FR-12
+function rndIdOf(v) {
+	const s = String(v || "").trim();
+	return s ? s.split(/\s+/)[0] : "";
+}
+// 追加到正向提示词末尾，逐词去重，不清空原有内容。返回实际新增的词数。
+// 去重口径和 applyStyleInsert 一致：全部小写比较，保留原有的大小写写法。
+function setPosAppend(text) {
+	const add = String(text || "").trim();
+	if (!add) return 0;
+	const items = add.split(",").map((x) => x.trim()).filter(Boolean);
+	const cur = String(pos || "").trim();
+	const have = new Set(cur.toLowerCase().split(",").map((x) => x.trim()).filter(Boolean));
+	const added = cur ? items.filter((t) => !have.has(t.toLowerCase())).length : items.length;
+	setPos((prev) => {
+		const c = String(prev || "").trim();
+		if (!c) return add;
+		const h = new Set(c.toLowerCase().split(",").map((x) => x.trim()).filter(Boolean));
+		const fresh = add.split(",").map((x) => x.trim()).filter(Boolean).filter((t) => !h.has(t.toLowerCase()));
+		if (!fresh.length) return c;
+		return c.replace(/[,\s]+$/, "") + ", " + fresh.join(", ");
+	});
+	return added;
+}
+// 从提示词里逐词删掉 texts 中出现过的词（大小写不敏感），其余顺序原样保留。
+function posDropWords(cur, texts) {
+	const drop = new Set();
+	(texts || []).forEach((t) => {
+		String(t || "").split(",").forEach((w) => {
+			const s = w.trim().toLowerCase();
+			if (s) drop.add(s);
+		});
+	});
+	if (!drop.size) return String(cur || "").trim();
+	return String(cur || "").split(",").map((x) => x.trim()).filter((x) => x && !drop.has(x.toLowerCase())).join(", ");
+}
+// 三个按钮各自负责的槽位（账本按槽位记账，所以跨按钮重叠时后按的那个说了算）
+// light（光影）归画面侧：它是状态不是本体，换光等于换一张照片，但人还是同一个。
+const RND_APPLY_ROLE = ["look", "mood", "extra", "outfit", "prop"];
+const RND_APPLY_SCENE = ["mood", "prop", "pose", "scene", "frame", "light"];
+const RND_APPLY_ALL = ["style", "look", "mood", "extra", "outfit", "prop", "pose", "scene", "frame", "light"];
+// 随机按钮统一入口：先把 slots 这些槽位「随机按钮写过的东西」剥干净，再补上本次抽到的新词。
+//
+// 剥除范围有两层：
+//   1) 当前账本 store[k]        —— 上一轮写进去的那一段
+//   2) 该槽位历史全集 seen[k]   —— 这个槽位历次被随机写过的所有词
+// 第 2 层是必要的：账本可能被判丢（换浏览器、清了 localStorage、老版本留下的堆积），
+// 只靠第 1 层的话那些词会被当成「用户手写」永久保留，越按越乱，最后提示词里躺着五六套
+// 互相冲突的姿势，模型只能在冲突里折中，每张图都长一个样。
+// 用户自己敲的词只要没被随机按钮用过，就不在任何一层里，永远不会被删。
+// 按槽位自愈：把提示词里属于这些槽位的词，每个槽位只留「最后一段连续块」。
+//
+// 为什么需要它：账本 rndBySlot 与历史集 rndSeen 都是后加的，老版本只追加不剥离，
+// 用户提示词里可能已经躺着五六套互斥的姿势/场景/分镜。这些词在账本里没有记录，
+// 于是会被当成「用户手写」永久保护，重启多少次都不会掉。这一层不看账本，
+// 直接拿池子里的词做字典反查，同一槽位堆了几段就只留最后一段。
+// 副作用：用户手写的词若恰好与池中词同形（如 standing）也会被折叠，但只保留最后那套，
+// 视觉上仍是「一套完整描述」，比一次堆五套强得多。
+function rndStripBySlot(cur, slots) {
+	const toks = String(cur || "").split(",").map((x) => x.trim()).filter(Boolean);
+	if (!toks.length) return String(cur || "").trim();
+	const maps = {};
+	for (let si = 0; si < (slots || []).length; si++) {
+		const k = slots[si];
+		const pool = rndPool(k);
+		const bag = new Set();
+		for (const key of Object.keys(pool)) {
+			for (const w of String(pool[key] || "").split(",")) {
+				const s = w.trim().toLowerCase();
+				if (s) bag.add(s);
+			}
+		}
+		maps[k] = bag;
+	}
+	const bySlot = {};
+	for (let i = 0; i < toks.length; i++) {
+		const lw = toks[i].toLowerCase();
+		for (let si = 0; si < (slots || []).length; si++) {
+			const k = slots[si];
+			if (maps[k] && maps[k].has(lw)) { (bySlot[k] = bySlot[k] || []).push(i); break; }
+		}
+	}
+	const drop = new Set();
+	for (const k of (slots || [])) {
+		const idx = bySlot[k] || [];
+		if (idx.length <= 1) continue;
+		// 从尾部往前找连续的最后一个块，它之前的同槽位词全部丢掉
+		let start = idx.length - 1;
+		while (start > 0 && idx[start] - idx[start - 1] === 1) start--;
+		for (let j = 0; j < start; j++) drop.add(idx[j]);
+	}
+	if (!drop.size) return toks.join(", ");
+	return toks.filter((_, i) => !drop.has(i)).join(", ");
+}
+function rndApply(slots, sel) {
+	const store = rndBySlot.current || {};
+	const seen = rndSeen.current || {};
+	const oldTexts = [];
+	(slots || []).forEach((k) => {
+		if (store[k]) oldTexts.push(store[k]);
+		const bag = seen[k];
+		if (bag) oldTexts.push(Object.keys(bag).join(", "));
+	});
+	const base0 = posDropWords(pos, oldTexts);
+	// 再按槽位折叠一次：账本没记录的老堆积、手贴的多套描述，同一槽位只留最后一段。
+	const base = rndStripBySlot(base0, slots);
+	const add = [rndPrefix(), rndSlotText(sel, slots)].filter(Boolean).join(", ");
+	const items = add.split(",").map((x) => x.trim()).filter(Boolean);
+	const have = new Set(base.toLowerCase().split(",").map((x) => x.trim()).filter(Boolean));
+	/* 0.7.130：原来只跟 base 比，本次新词自己的重复没人管。
+	   多个槽位带同一个词时（动作槽和取景槽都能出 from above / high angle / full body），
+	   它会连着写 2–3 遍。同一个词重复三次等于把权重抬高，模型于是被死死钉在那个视角上，
+	   背景又没跟着换透视——构图就裂了。这里对新词也去重，只保留第一次出现。 */
+	const _freshSeen = new Set();
+	const _fresh0 = items.filter((t) => {
+		const k = t.toLowerCase();
+		if (have.has(k) || _freshSeen.has(k)) return false;
+		_freshSeen.add(k);
+		return true;
+	});
+	/* 0.7.130：角度互斥。动作槽和取景槽都会带机位词，from above（正上方垂直俯拍）
+	   和 high angle（高角度斜俯拍）虽然同属「俯视」，落在同一张图里却是两套透视；
+	   背景若没跟着换视角，就会出现角色俯视、场景平视的割裂。
+	   按 rndFrameAngle 的族归类，同一族只留先出现的那个。 */
+	const _angleSeen = [];
+	const fresh = _fresh0.filter((t) => {
+		const fam = rndFrameAngle(t);
+		if (!fam) return true;
+		if (_angleSeen.indexOf(fam) >= 0) return false;
+		_angleSeen.push(fam);
+		return true;
+	});
+	const next = base ? (fresh.length ? base + ", " + fresh.join(", ") : base) : fresh.join(", ");
+	setPos(next);
+	const store2 = Object.assign({}, store);
+	(slots || []).forEach((k) => {
+		const v = sel[k];
+		const pool = rndPool(k);
+		if (v && rndHas(pool, v)) store2[k] = pool[v]; else delete store2[k];
+	});
+	rndBySlot.current = store2;
+	rndSaveLedger(store2);
+	// 历史全集持续累积：下回按同一个按钮时，这一轮写进去的词也在剥除范围内。
+	const seen2 = Object.assign({}, seen);
+	(slots || []).forEach((k) => {
+		const v = sel[k];
+		const pool = rndPool(k);
+		if (!v || !rndHas(pool, v)) return;
+		const bag = Object.assign({}, seen2[k] || {});
+		const t = String(pool[v] || "");
+		t.split(",").forEach((w) => { const s = w.trim(); if (s) bag[s.toLowerCase()] = s; });
+		seen2[k] = bag;
+	});
+	rndSeen.current = seen2;
+	rndSaveSeen(seen2);
+	return fresh.length;
+}
+// 清掉提示词里所有「曾经被随机按钮写过」的词，只留用户自己敲的。
+function rndRoleOnly() {
+	// 换人：look + mood + extra + outfit + prop；画风与构图保持。再按时先把上一次这套角色剥掉再写新的。
+	const r = rndFill(RND_NON_ROLE, { look: true, mood: true, extra: true, slots: ["outfit", "prop"] });
+	const added = rndApply(RND_APPLY_ROLE, r.sel);
+	const ids = [r.sel.look, r.sel.mood, r.sel.extra, r.sel.outfit, r.sel.prop].map(rndIdOf).filter(Boolean).join(" ");
+	setMsg("随机角色 换掉旧的，写入 +" + added + " 词：" + ids);
+}
+function rndSegOnly() {
+	// 换画面：表情（mood）+ 道具（prop）+ 动作（pose）+ 场景（scene）+ 取景/分镜（frame）+ 光影（light）。
+	// 只保留人物本体（look / outfit / extra）与画风（style），空的也不补。
+	const r = rndFill(RND_NON_SCENE, { mood: true, light: true, slots: RND_SCENE_SLOTS });
+	const added = rndApply(RND_APPLY_SCENE, r.sel);
+	// 消息栏打出这次抽到的机位 ID 和姿势首词：一眼能看出到底换没换。
+	// 如果这里每次都不同、出图却还是同一个姿态，说明提示词里还挂着别的姿势词在压它，
+	// 不是随机功能没生效。
+	const poseTag = String(rndPool("pose")[r.sel.pose] || "").split(",")[0].trim();
+	const lightTag = String(rndPool("light")[r.sel.light] || "").split(",")[0].trim();
+	setMsg("随机画面 +" + added + " 词 · " + rndIdOf(r.sel.pose) + "/" + rndIdOf(r.sel.frame) + "/" + rndIdOf(r.sel.light) + " · 姿势=" + (poseTag || "—") + " · 光=" + (lightTag || "—") + " · " + String(pos || "").length + " 字符");
+}
+function rndAllBoth() {
+	// 十路全抽：style + look + mood + extra + outfit + prop + pose + scene + frame + light
+	const r = rndFill([], { look: true, mood: true, extra: true, light: true, slots: RND_ALL_SLOTS });
+	const added = rndApply(RND_APPLY_ALL, r.sel);
+	const ids = [r.sel.style, r.sel.look, r.sel.mood, r.sel.extra, r.sel.outfit, r.sel.prop, r.sel.pose, r.sel.scene, r.sel.frame, r.sel.light].map(rndIdOf).filter(Boolean).join(" ");
+	setMsg("随机全部 换掉旧的，写入 +" + added + " 词：" + ids);
+}
+function segBuilder() {
+	const order = SEG.order;
+	const label = SEG.labels || {};
+	const blocks = SEG.blocks || {};
+	const sel = segSel || {};
+	const picked = order.filter((k) => sel[k]).length;
+	const full = segTextNow();
+	const cur = blocks[segOpen] ? segOpen : order[0];
+	const curList = Object.keys(blocks[cur] || {});
+
+	const rowOf = (k) => h("div", {
+		key: k,
+		onClick: () => setSegOpen(k),
+		title: sel.preset && k !== "preset" ? "已选「整套」，这一槽不参与拼接" : "",
+		style: {
+			opacity: sel.preset && k !== "preset" ? 0.45 : 1,
+			display: "flex", alignItems: "center", gap: "10px", padding: "7px 10px", cursor: "pointer", borderRadius: "8px",
+			border: "1px solid " + (segOpen === k ? "var(--c-accent)" : (sel[k] ? "rgba(74,192,122,.55)" : "var(--c-line)")),
+			background: segOpen === k ? "var(--c-bg2)" : "transparent",
+		},
+	},
+		h("span", { style: { minWidth: "42px", fontSize: "12px", color: "var(--c-fg4)" } }, label[k] || k),
+		h("span", { style: { flex: 1, fontSize: "12.5px", wordBreak: "break-all" } }, sel[k] || h("span", { style: { color: "var(--c-fg5)" } }, "未选")),
+		sel[k] ? h("span", {
+			title: "清空这一段",
+			onClick: (e) => { e.stopPropagation(); setSegSel(Object.assign({}, sel, { [k]: "" })); },
+			style: Object.assign({}, S.chip, { padding: "0 8px", lineHeight: "18px" }),
+		}, "×") : null);
+
+	return h("div", { style: { display: "flex", flexDirection: "column", gap: "10px" } },
+		h("div", { style: { display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" } },
+			h("button", { style: S.btn, onClick: () => setSegOn(false) }, "← 返回词库"),
+			h("span", { style: { fontWeight: 700, fontSize: "15px" } }, "提示词段构建"),
+			h("span", { style: { fontSize: "12px", color: "var(--c-fg4)" } }, "已选 " + picked + "/" + order.length),
+			h("span", { style: { fontSize: "11.5px", color: "var(--c-fg5)" } }, sel.preset ? "已选「整套」：只输出 质量词+评级+整套串，其余槽位不参与" : "拼装顺序固定：风格 → 人物 → 衣服 → 道具 → 动作 → 场景 → 取景（顺序即权重）")),
+
+		h("div", { style: { display: "flex", gap: "6px", alignItems: "center", flexWrap: "wrap" } },
+			h("span", { style: { fontSize: "12px", color: "var(--c-fg4)" } }, "评级："),
+			(SEG.ratings || []).map((r) => h("span", {
+				key: r,
+				onClick: () => setSegRating(r),
+				style: Object.assign({}, S.chip, { cursor: "pointer", padding: "3px 10px" },
+					r === segRating ? { background: "var(--c-accent)", color: "var(--c-accent-on)", borderColor: "var(--c-accent)" } : {}),
+			}, r.replace("rating:", "")))),
+
+		h("div", { style: { display: "flex", flexDirection: "column", gap: "5px" } }, order.map(rowOf)),
+
+		h("div", { style: { border: "1px solid var(--c-line)", borderRadius: "8px", padding: "8px 10px", display: "flex", flexDirection: "column", gap: "6px" } },
+			h("div", { style: { fontSize: "12px", color: "var(--c-fg4)" } }, (label[cur] || cur) + " · " + curList.length + " 个可选（" + (SEG.hints[cur] || "") + "）"),
+			h("div", { style: { display: "flex", flexDirection: "column", gap: "4px", maxHeight: "300px", overflowY: "auto" } },
+				curList.map((k) => h("div", {
+					key: k,
+					title: blocks[cur][k],
+					onClick: () => setSegSel(Object.assign({}, sel, { [cur]: sel[cur] === k ? "" : k })),
+					style: { display: "flex", gap: "8px", alignItems: "baseline", padding: "4px 6px", borderRadius: "5px", cursor: "pointer",
+						background: sel[cur] === k ? "rgba(74,192,122,.16)" : "transparent" },
+				},
+					h("span", { style: { minWidth: "50px", fontSize: "11.5px", color: "var(--c-fg5)" } }, k.split(" ")[0]),
+					h("span", { style: { minWidth: "150px", fontSize: "12.5px" } }, k.slice(k.indexOf(" ") + 1)),
+					h("span", { style: { fontSize: "11px", color: "var(--c-fg5)", wordBreak: "break-all" } }, blocks[cur][k]))))),
+
+		h("div", { style: { border: "1px solid var(--c-line)", borderRadius: "8px", padding: "8px 10px", display: "flex", flexDirection: "column", gap: "8px" } },
+			h("div", { style: { fontSize: "12px", color: "var(--c-fg4)" } }, "拼好的提示词（" + full.length + " 字符）"),
+			h("textarea", { style: Object.assign({}, S.ta, { minHeight: "96px" }), readOnly: true, value: full }),
+			h("div", { style: { display: "flex", gap: "6px", flexWrap: "wrap" } },
+				h("button", { style: S.btn, onClick: () => { setPos(full); setMsg("已写入正向提示词"); } }, "写入正向"),
+				h("button", { style: S.btn2, onClick: () => { insert(full, "pos"); setMsg("已追加到正向"); } }, "追加到正向"),
+				h("button", { style: S.btn2, onClick: () => { insert(full, "neg"); setMsg("已追加到负面"); } }, "追加到负面"),
+				h("button", { style: S.btn2, onClick: copySeg }, "复制"),
+				h("button", { style: S.btn2, onClick: randomSeg }, "随机一套"),
+				h("button", { style: S.btn2, onClick: () => setSegSel({}) }, "清空全部"),
+				h("button", { style: S.btn2, onClick: () => setTab("gen") }, "去生成页")),
+			h("div", { style: { fontSize: "11.5px", color: "var(--c-fg5)" } }, "写入 = 替换正向框；追加 = 接在原有内容后面。")));
+}
+
 function libTab() {
 	// 0.7.79：词库「粘贴 JSON」兜底（文件对话框在某些环境不弹，导入就等于没有）
 	const [dictPasteOpen2, setDictPasteOpen2] = React.useState(false);
@@ -9818,7 +11336,14 @@ function libTab() {
 	};
 
 
+	// 二级视图：提示词段构建（顶部按钮切回分类词库）
+	if (segOn) return segBuilder();
+
 	return h("div", { style: { display: "flex", flexDirection: "column", gap: "10px" } },
+		h("div", { style: { display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap", padding: "6px 10px", borderRadius: "8px", border: "1px solid var(--c-line)", background: "var(--c-bg2)" } },
+			h("span", { style: { fontSize: "12px", color: "var(--c-fg4)" } }, "词库模式："),
+			h("button", { style: S.btn, onClick: () => setSegOn(true), title: "六个槽位各选一段，自动拼成完整提示词" }, "提示词段构建 →"),
+			h("span", { style: { fontSize: "11.5px", color: "var(--c-fg5)" } }, "风格 · 人物 · 衣服 · 动作 · 场景 · 取景，选完即完整提示词")),
 		h("div", { style: { display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" } },
 			h("input", { value: cardQ, placeholder: "搜词条 / 英文标签", onChange: (e) => setCardQ(e.target.value), style: Object.assign({}, S.input || S.inp, { width: "220px" }) }),
 			["all", "pos", "neg"].map((k) => h("span", {
@@ -9907,7 +11432,7 @@ function libTab() {
 			["outfit", "服饰", ["shirt", "skirt", "dress", "coat", "jacket", "uniform", "necktie", "tie", "stocking", "sock", "shoe", "boot", "glove", "scarf", "sweater", "hoodie", "vest", "pants", "trouser", "belt", "hat", "cap", "apron", "kimono", "cape", "cloak"]],
 			["base", "基础", ["1girl", "1boy", "solo", "group"]],
 		];
-		const CARD_ORDER = ["trigger", "base", "hair", "eyes", "glasses", "outfit", "extra"];
+		const CARD_ORDER = ["trigger", "base", "hair", "eyes", "glasses", "outfit", "proportion", "extra"];   /* 0.7.130：角色卡也吃 proportion（此前只有风格卡有，角色卡里填了会被 joinCardParts 丢掉） */
 
 		/** 风格卡的模块划分：画风 / 线条 / 上色 / 光影 */
 		const STYLE_GROUPS = [
@@ -10013,6 +11538,7 @@ function libTab() {
 			if (trg) out.push(trg);
 			for (const k of CARD_ORDER) {
 				if (k === "trigger") continue;
+				if (k === "proportion") { const sp = proportionTags((p || {})[k]); if (sp) out.push(sp); continue; }
 				const arr = normPart((p || {})[k]);
 				const s = arr.map((x) => String(x.t || "").trim()).filter(Boolean).join(", ");
 				if (s) out.push(s);
@@ -10313,7 +11839,7 @@ function cardCoverOf(c) {
 
 		function newCard() {
 		loadLlllite();
-		setCardEdit({ id: "", name: "", note: "", cover: "", neg: [], isNew: true, locks: normLocks([]), file: "", cond: normCond(null), parts: { trigger: "", base: "", hair: "", eyes: "", glasses: "", outfit: "", extra: "" } });
+		setCardEdit({ id: "", name: "", note: "", cover: "", neg: [], isNew: true, locks: normLocks([]), file: "", cond: normCond(null), baseModels: [], baseModelsText: ckpt ? String(ckpt).split(/[\\/]/).pop().replace(/\.(safetensors|ckpt)$/i, "") : "", parts: { trigger: "", base: "", hair: "", eyes: "", glasses: "", outfit: "", extra: "" } });   /* 新卡默认预填当前底模 */
 	}
 
 		/** 拉一次 LLLite 资产/权重表（侧车 /lllite），编辑器与卡片角标都吃这张表 */
@@ -10329,7 +11855,7 @@ function cardCoverOf(c) {
 		function editCard(c) {
 		const u = (USER.cards || []).filter((x) => x && x.id === c.id)[0];
 		const parts = (u && u.parts) || splitCardTags(c.tags);
-		setCardEdit({ id: c.id, name: c.name || "", note: c.note || "", cover: cardCoverOf(c), parts: parts, lora: String(c.lora || ""), loraW: Number(c.loraW) > 0 ? Number(c.loraW) : 0.7, loraAlt: String(c.loraAlt || ""), cond: normCond(c.conditioning), neg: normPart((u && u.neg) || c.neg || []), isNew: false, locks: normLocks(c.locks), file: String(c.file || ""), builtin: !!c.builtin });
+		setCardEdit({ id: c.id, name: c.name || "", note: c.note || "", cover: cardCoverOf(c), parts: parts, lora: String(c.lora || ""), loraW: Number(c.loraW) > 0 ? Number(c.loraW) : 0.7, loraAlt: String(c.loraAlt || ""), cond: normCond(c.conditioning), neg: normPart((u && u.neg) || c.neg || []), isNew: false, locks: normLocks(c.locks), file: String(c.file || ""), builtin: !!c.builtin, baseModels: Array.isArray(c.baseModels) ? c.baseModels.slice() : [], baseModelsText: c.baseModelsText != null ? String(c.baseModelsText) : (Array.isArray(c.baseModels) ? c.baseModels.join(", ") : ""), training: c.training, trainingText: c.trainingText, regression: c.regression, regressionText: c.regressionText });   /* 0.7.130：这几项以前没带进草稿 → 编辑器输入框永远空 → 一保存 baseModels 就被写成 []，训练脚本标的底模存不住 */
 		loadLlllite();
 		setTimeout(() => COND.check({ name: c.name || "", id: c.id || "", conditioning: normCond(c.conditioning) }, [Number(w), Number(hh)]), 0);
 	}
@@ -10828,7 +12354,7 @@ h("button", { style: CARD_BTN, onClick: addCardLock }, "＋ 新增特征锁"),
 										h("div", { style: { display: "flex", gap: "8px", marginTop: "12px", alignItems: "center" } },
 											h("div", { style: { fontWeight: 600, fontSize: "12px", color: "var(--c-fg2)", margin: "12px 0 4px" } }, "资产与迁移（可选 · 让这张卡能跨机器、跨底模活下去）")),
 										h("div", { style: row }, h("span", { style: lab }, "底模"),
-											h("input", { style: inp, value: _bmText, placeholder: "逗号分隔，例如 <底模>.safetensors", onChange: (e) => { set("baseModelsText", e.target.value); setCardChk(null); } })),
+											h("input", { style: inp, value: _bmText, placeholder: "逗号分隔，例如 anima-aesthetic-v1.1.safetensors", onChange: (e) => { set("baseModelsText", e.target.value); setCardChk(null); } })),
 										h("div", { style: { fontSize: "11.5px", color: "var(--c-fg4)", margin: "-4px 0 8px" } }, "写清这张卡是在哪个底模上调出来的。换机或换底模之后，点「自检」就能知道还能不能用。"),
 										h("div", { style: row }, h("span", { style: lab }, "训练记录"),
 											h("textarea", { style: Object.assign({}, inp, { minHeight: "46px", fontFamily: "Consolas, monospace", lineHeight: "1.45" }), value: _trText, placeholder: '{"steps":3000,"rank":64,"datasetHash":"..."}', onChange: (e) => { set("trainingText", e.target.value); setCardChk(null); } })),
@@ -10871,7 +12397,8 @@ h("button", { style: CARD_BTN, onClick: addCardLock }, "＋ 新增特征锁"),
 		/** 插入风格卡：core=false 全量；core=true 去掉「光影 / 其它」，方便试不同氛围 */
 		function applyStyleInsert(c, core, mode) {
 		  const parts0 = (c.parts && typeof c.parts === "object") ? c.parts : null;
-		  const full = String(c.tags || "").trim() || (parts0 ? joinStyleParts(parts0) : "");
+		  const _fromParts = parts0 ? joinStyleParts(parts0) : "";
+		  const full = _fromParts.trim() || String(c.tags || "").trim();
 		  let tags = full;
 		  if (core) {
 		    const pp = parts0 || splitStyleTags(full);
@@ -10882,8 +12409,9 @@ h("button", { style: CARD_BTN, onClick: addCardLock }, "＋ 新增特征锁"),
 		    const have = new Set(String(cur || "").toLowerCase().split(",").map((x) => x.trim()).filter(Boolean));
 		    const list = String(extra || "").split(",").map((x) => x.trim()).filter(Boolean).filter((t) => !have.has(t.toLowerCase()));
 		    const base = String(cur || "").replace(/[\s,]+$/, "");
-		    if (!list.length) return { t: base, n: 0 };
-		    return { t: base ? base + ", " + list.join(", ") : list.join(", "), n: list.length };
+		    // 返回字段名与角色卡的 appendTags() 保持一致的形状，便于两处共用调用习惯
+		    if (!list.length) return { t: base, n: 0, text: base, added: 0 };
+		    return { t: base ? base + ", " + list.join(", ") : list.join(", "), n: list.length, text: base ? base + ", " + list.join(", ") : list.join(", "), added: list.length };
 		  };
 		  const _rp = add(String(pos || ""), tags);
 		  const _rn = add(String(neg || ""), ng);
@@ -10930,7 +12458,7 @@ h("button", { style: CARD_BTN, onClick: addCardLock }, "＋ 新增特征锁"),
 			const _sid = String(c.id || c.name || "");
 			INSERTED.set(_sid, {
 			  id: _sid, kind: "style", name: String(c.name || ""), core: !!core, direct: !!direct,
-			  posTokens: diffTokens(pos, _rp.text), negTokens: diffTokens(neg, _rn.text),
+			  posTokens: diffTokens(pos, _rp.t), negTokens: diffTokens(neg, _rn.t),   /* 0.7.130：add() 返回的是 {t,n}，原来读 .text 恒为 undefined → tokList 得空数组 → 差集永远 []，取消插入撤不掉任何词 */
 			  loras: (chain || []).map((l) => ({ name: String(l.name), w: Number(l.w) })),
 			  locks: [], cond: null,
 			});
@@ -11378,7 +12906,7 @@ function applyStyleImport(raw) {
     if (!nm) continue;
     const tags = String(c.tags || joinStyleParts(c.parts || {})).trim();
     if (!tags) continue;
-    const rec = { id: "s" + String(Date.now()) + "_" + ok.length, name: nm, tags: tags, note: String(c.note || ""), cover: String(c.cover || ""), parts: (c.parts && typeof c.parts === "object") ? c.parts : splitStyleTags(tags), neg: normPart(c.neg), loras: normStyleLoras(c), ckpt: String(c.ckpt || ""), gen: Object.assign({}, c.gen || {}), baseModels: (typeof _styleBm === "function" ? _styleBm(c) : (Array.isArray(c.baseModels) ? c.baseModels : [])), training: c.training || null, regression: c.regression || null };
+    const rec = { id: "s" + String(Date.now()) + "_" + ok.length, name: nm, tags: tags, note: String(c.note || ""), cover: String(c.cover || ""), parts: (c.parts && typeof c.parts === "object") ? c.parts : splitStyleTags(tags), neg: normPart(c.neg), loras: normStyleLoras(c), ckpt: String(c.ckpt || ""), gen: Object.assign({}, c.gen || {}), baseModels: (typeof _styleBm === "function" ? _styleBm(c) : (Array.isArray(c.baseModels) ? c.baseModels : [])), baseModelsText: (function () { const ok = (v) => { const s = String(v == null ? "" : v).trim(); return s && s.indexOf("<") < 0 && s.indexOf(">") < 0 ? s : ""; }; return ok(c.baseModelsText) || ok(c.ckpt) || ((Array.isArray(c.baseModels) && c.baseModels.length) ? ok(c.baseModels[0]) : "") || ""; })(), modelFamily: String(c.modelFamily || ""), training: c.training || null, regression: c.regression || null };
     const hit = USER.styleCards.findIndex((x) => x && String(x.name || "").trim() === nm);
     if (hit >= 0) { rec.id = USER.styleCards[hit].id; if (!rec.cover && USER.styleCards[hit].cover) rec.cover = USER.styleCards[hit].cover; USER.styleCards[hit] = rec; updated++; }
     else { USER.styleCards.push(rec); added++; }
@@ -11439,7 +12967,7 @@ function applyStyleImport(raw) {
 		          style: { position: "absolute", top: "calc(100% + 4px)", left: 0, zIndex: 60, minWidth: "206px", background: "var(--c-card)", border: "1px solid rgba(var(--c-ink-rgb),.18)", borderRadius: "8px", boxShadow: "0 10px 26px rgba(var(--c-ink-rgb),.18)", padding: "4px", display: "flex", flexDirection: "column", gap: "3px" },
 		          onMouseLeave: () => setStyleSub(""),
 		        },
-		          h("div", { style: { position: "relative" }, onMouseEnter: () => setStyleSub("direct") },
+		          h("div", { style: { position: "relative" }, onClick: (e) => { if (e && e.stopPropagation) e.stopPropagation(); setStyleSub(styleSub === "direct" ? "" : "direct"); } },
 		            h("button", {
 		              style: Object.assign({}, CARD_BTN_ACCENT, { width: "100%", textAlign: "left", padding: "6px 10px", display: "flex", alignItems: "center", gap: "8px" }),
 		              title: "直插：先把 LoRA 列整个清空，再只挂这张风格卡的链（角色 LoRA 也会被清掉）",
@@ -11448,11 +12976,11 @@ function applyStyleImport(raw) {
 		              h("span", { style: { flex: 1 } }, "直插"),
 		              h("span", { style: { fontSize: "11px", opacity: 0.85, whiteSpace: "nowrap" } }, "清空 LoRA ▸")),
 		            styleSub === "direct" ? h("div", {
-		              style: { position: "absolute", top: 0, left: "calc(100% + 4px)", zIndex: 70, minWidth: "196px", background: "var(--c-card)", border: "1px solid rgba(var(--c-ink-rgb),.18)", borderRadius: "8px", boxShadow: "0 10px 26px rgba(var(--c-ink-rgb),.18)", padding: "4px", display: "flex", flexDirection: "column", gap: "3px" },
+		              style: { marginTop: "3px", marginLeft: "10px", background: "rgba(var(--c-ink-rgb),.05)", border: "1px solid rgba(var(--c-ink-rgb),.10)", borderRadius: "6px", padding: "3px", display: "flex", flexDirection: "column", gap: "2px" },
 		            },
 		              h("button", { style: Object.assign({}, CARD_BTN_ACCENT, { textAlign: "left", padding: "6px 10px" }), title: "清空 LoRA + 插入全部画风条目", onClick: () => applyStyleInsert(c, false, "direct") }, "完整插入（全部画风）"),
 		              h("button", { style: Object.assign({}, CARD_BTN, { textAlign: "left", padding: "6px 10px" }), title: "清空 LoRA + 只留画风/线条/上色（去掉光影与其它）", onClick: () => applyStyleInsert(c, true, "direct") }, "只插核心（去掉光影/其它）")) : null),
-		          h("div", { style: { position: "relative" }, onMouseEnter: () => setStyleSub("stack") },
+		          h("div", { style: { position: "relative" }, onClick: (e) => { if (e && e.stopPropagation) e.stopPropagation(); setStyleSub(styleSub === "stack" ? "" : "stack"); } },
 		            h("button", {
 		              style: Object.assign({}, CARD_BTN, { width: "100%", textAlign: "left", padding: "6px 10px", display: "flex", alignItems: "center", gap: "8px" }),
 		              title: "叠插：一个 LoRA 都不清空，把这张卡的链叠加上去（同名只更新强度）—— 用来融合多张风格卡",
@@ -11461,7 +12989,7 @@ function applyStyleImport(raw) {
 		              h("span", { style: { flex: 1 } }, "叠插"),
 		              h("span", { style: { fontSize: "11px", color: "var(--c-fg4)", whiteSpace: "nowrap" } }, "叠加融合 ▸")),
 		            styleSub === "stack" ? h("div", {
-		              style: { position: "absolute", top: 0, left: "calc(100% + 4px)", zIndex: 70, minWidth: "196px", background: "var(--c-card)", border: "1px solid rgba(var(--c-ink-rgb),.18)", borderRadius: "8px", boxShadow: "0 10px 26px rgba(var(--c-ink-rgb),.18)", padding: "4px", display: "flex", flexDirection: "column", gap: "3px" },
+		              style: { marginTop: "3px", marginLeft: "10px", background: "rgba(var(--c-ink-rgb),.05)", border: "1px solid rgba(var(--c-ink-rgb),.10)", borderRadius: "6px", padding: "3px", display: "flex", flexDirection: "column", gap: "2px" },
 		            },
 		              h("button", { style: Object.assign({}, CARD_BTN_ACCENT, { textAlign: "left", padding: "6px 10px" }), title: "叠加融合：一个 LoRA 都不删，把这张卡的链加进去，再插全部画风条目", onClick: () => applyStyleInsert(c, false, "stack") }, "完整插入（全部画风）"),
 		              h("button", { style: Object.assign({}, CARD_BTN, { textAlign: "left", padding: "6px 10px" }), title: "叠加融合 + 只留画风/线条/上色", onClick: () => applyStyleInsert(c, true, "stack") }, "只插核心（去掉光影/其它）")) : null)
@@ -11681,7 +13209,11 @@ mod("style", "画风"),
 		 *  withOutfit=false 时把「服饰」模块剥掉，只插角色本体，方便同一个角色换不同衣服试 */
 		function applyCardInsert(c, withOutfit) {
 		  const parts0 = (c.parts && typeof c.parts === "object") ? c.parts : null;
-		  const full = String(c.tags || "").trim() || (parts0 ? joinCardParts(parts0) : "");
+		  /* 0.7.130：原来 tags 优先。tags 是落盘缓存、parts 才是编辑真相，两者不同步时
+		     （比如老卡 parts 里有 proportion 但 tags 没重算）插入会静默丢掉整段词，
+		     表现就是「同样提示词换张角色卡，头身比和透视全变了」。改为 parts 优先、tags 兜底。 */
+		  const _fromParts = parts0 ? joinCardParts(parts0) : "";
+		  const full = _fromParts.trim() || String(c.tags || "").trim();
 		  let tags = full;
 		  if (!withOutfit) {
 		    const parts = parts0 || splitCardTags(full);
@@ -11784,7 +13316,22 @@ function stabilizePrompt(text, negText, cards) {
 				onClick: () => { const _r = INSERTED.get(c.id || c.name); if (_r) { removeInserted(_r); return; } setCardSel(on ? "" : c.id); },
 			},
 			cardCoverBox(c),
-			ins ? h("span", { style: { position: "absolute", top: "6px", right: "6px", zIndex: 6, fontSize: "11px", lineHeight: "16px", padding: "0 7px", borderRadius: "999px", color: "#fff", background: ins.partial ? "rgba(200,140,30,.95)" : "rgba(45,105,225,.95)", boxShadow: "0 1px 4px rgba(0,0,0,.25)" } }, ins.partial ? "部分移除" : "已插入") : null,
+			/* 右上角一列：插入状态（条件）在上、适配底模（always）在下，和风格卡同款 */
+			h("div", {
+				style: { position: "absolute", top: "6px", right: "6px", zIndex: 6, display: "flex",
+					flexDirection: "column", alignItems: "flex-end", gap: "4px",
+					maxWidth: "calc(100% - 12px)", pointerEvents: "none" },
+			},
+				ins ? h("span", { style: { fontSize: "11px", lineHeight: "16px", padding: "0 7px", borderRadius: "999px", color: "#fff", background: ins.partial ? "rgba(200,140,30,.95)" : "rgba(45,105,225,.95)", boxShadow: "0 1px 4px rgba(0,0,0,.25)" } }, ins.partial ? "部分移除" : "已插入") : null,
+				(() => { const b = bmBadge(c); return h("span", {
+					style: Object.assign({ maxWidth: "100%", fontSize: "10.5px", lineHeight: "15px", padding: "0 6px", borderRadius: "5px",
+						background: "rgba(10,10,12,.66)", color: "rgba(255,255,255,.92)",
+						border: "1px solid rgba(255,255,255,.16)", whiteSpace: "nowrap",
+						overflow: "hidden", textOverflow: "ellipsis", letterSpacing: ".2px" },
+						b.muted ? { background: "rgba(10,10,12,.42)", color: "rgba(255,255,255,.62)", borderStyle: "dashed" } : null),
+					title: b.full,
+				}, b.text); })(),
+			),
 				h("div", { style: { padding: "8px 10px 10px" } },
 					h("div", { style: { display: "flex", alignItems: "baseline", gap: "6px" } },
 						h("span", { style: { fontWeight: 700, fontSize: "13px", color: "var(--c-fg)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", flex: "1 1 auto", minWidth: 0 } }, c.name), c.packMode ? h("span", { style: { flex: "none", fontSize: "10px", padding: "0 4px", borderRadius: "999px", background: "rgba(29,78,216,.10)", color: "var(--c-accent)" }, title: "这张卡是从「" + (PACK_MODE_CN[c.packMode] || c.packMode) + "」卡包导入的" }, (PACK_MODE_CN[c.packMode] || c.packMode)) : null, 
@@ -11959,20 +13506,24 @@ function presetTab() {
 				status,
 				h("span", { style: S.dim }, ckpts.length + " 底模 · " + loras.length + " LoRA · " + (USER.presets || []).length + " 预设")),
 			h("div", { style: { display: "flex", gap: "6px", marginLeft: "auto", justifyContent: "flex-end", flexWrap: "wrap", minWidth: 0 } },
-				!online ? h("button", { style: S.btn2, title: "手动拉起 ComfyUI（约 20~60 秒）", onClick: async () => {
-				  setOnline(null); setMsg("正在启动 ComfyUI，等 20~60 秒…");
-				  try {
-				    const r = await jpost(EXPANDER + "/comfy/start", {}, 120000);
-				    if (!r || !r.ok) throw new Error((r && r.message) || "start 失败");
-				  } catch (e) { setOnline(false); setMsg("启动失败：" + errText(e) + "。也可双击 <ComfyUI父目录>\\start-comfy.ps1"); return; }
-				  for (let i = 0; i < 60; i++) {
-				    try { await jget(COMFY + "/system_stats", 4000); break; }
-				    catch (e3) { await new Promise((r) => setTimeout(r, 2000)); }
-				  }
-				  setMsg("ComfyUI 已启动");
-				  setOnline(null); setConn((c) => c + 1);
-				} }, "启动 ComfyUI") : null,
-				!online ? h("button", { style: S.btn2, onClick: () => { setOnline(null); setMsg(""); setConn((c) => c + 1); } }, "重试连接") : null,
+				(launchAtt || !online) ? h("button", {
+					style: Object.assign({}, S.btn2, launchAtt
+						? { background: "#c62828", borderColor: "#c62828", color: "#fff", fontWeight: 800, display: "inline-flex", alignItems: "center", gap: 7, minWidth: 128 }
+						: { fontWeight: 700, minWidth: 128 }),
+					title: launchAtt ? "点击停止本次启动并回收进程" : "手动拉起 ComfyUI（约 20~60 秒）",
+					"data-cc-guide": "connection-action",
+					onClick: launchAtt ? stopLaunch : beginLaunch,
+				},
+					launchAtt
+						? h(React.Fragment, null,
+							h("span", {
+								style: { display: "inline-block", width: 11, height: 11, borderRadius: "50%",
+									border: "2px solid rgba(255,255,255,.45)", borderTopColor: "#fff",
+									animation: "cc-spin .7s linear infinite" },
+							}),
+							"停止启动")
+						: "启动 ComfyUI") : null,
+				!online && !launchAtt ? h("button", { style: S.btn2, onClick: () => { setOnline(null); setMsg(""); setConn((c) => c + 1); } }, "重试连接") : null,
 				online ? h("button", {
 					style: S.btn2, title: "重新读一遍 ComfyUI 状态与模型清单（不重启进程）",
 					onClick: () => { setOnline(null); setMsg("重新连接中…"); setConn((c) => c + 1); },
@@ -12050,9 +13601,9 @@ function presetTab() {
 		h("div", { key: "pvhost", style: { display: (tab === "pv-output" || tab === "pv-online") ? "flex" : "none", flexDirection: "column", flex: 1, minHeight: 0, minWidth: 0, overflow: "hidden" } },
 			h(PreviewConsole, { page: tab === "pv-output" ? "output" : tab === "pv-online" ? "online" : "" })),
 		h(TabBoundary, { key: tab },
-			tab === "gen" ? h(genTab, { key: "gen" }) : null,
-			tab === "style" ? h(styleCardTab, { key: "style" }) : null,
-			tab === "card" ? h(cardTab, { key: "card" }) : null,
+			tab === "gen" ? genTab() : null,   /* 内联调用：genTab 是 Console 内的嵌套函数，h(genTab) 每次渲染都是新类型 → 整棵子树卸载重建 → 输入框每敲一个字就失焦 */
+			tab === "style" ? styleCardTab() : null,
+			tab === "card" ? cardTab() : null,
 			tab === "lib" ? h(libTab, { key: "lib" }) : null,
 			tab === "preset" ? h(presetTab, { key: "preset" }) : null),
 		impRep ? importReportPanel() : null,

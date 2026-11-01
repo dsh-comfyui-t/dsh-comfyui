@@ -1,6 +1,6 @@
 {
   "name": "dsh-comfyui-console",
-  "version": "0.7.153",
+  "version": "0.7.164",
   "description": "ComfyUI drawing console for DSH (Anima / LLLite / role & style cards)",
   "type": "module",
   "main": "lib/index.js",
@@ -14,6 +14,14 @@
     "./package.json": "./package.json"
   },
   "files": [
+    "lib/app.js",
+    "lib/dict.js",
+    "lib/presets.js",
+    "lib/workflow.js",
+    "lib/dictcard.js",
+    "lib/online_models.js",
+    "lib/randomlib.js",
+    "tools/build_client.mjs",
     "lib/client.js",
     "lib/index.js",
     "expander.py",
@@ -51,7 +59,7 @@
     "config.example.json",
     "cordis.patch.yml",
     "routes.json",
-    "lora来源.json",
+    "lora来源.example.json",
     "README.md",
     "CHANGELOG.md",
     "install.ps1",

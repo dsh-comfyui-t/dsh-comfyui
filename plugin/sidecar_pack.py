@@ -53,7 +53,7 @@ def _pack_root():
 
 
 CORE_EMBED = ['<画风LoRA>']
-BASE_MODEL = {'unet': '<底模>.safetensors',
+BASE_MODEL = {'unet': 'anima-aesthetic-v1.1.safetensors',
               'clip': 'qwen_3_06b_base.safetensors',
               'vae': 'qwen_image_vae.safetensors'}
 _SHA_CACHE = {}
@@ -506,6 +506,24 @@ def _stylecards_unpack(handler, n, auto=0):
             head = json.loads(f.read(hlen).decode('utf-8'))
             files = head.get('files') or []
             card = dict(head.get('card') or {})
+            # 旧包（0.7.x 风格卡）只写 ckpt，没有单卡 baseModelsText。导入时回填，
+            # 保证再导出时底模字段不丢；顶层 baseModel 是最后兜底。
+            # 注意：老包常把底模写成 `<底模>.safetensors` 这种字面量占位符（导出时没探到底模），
+            # 含尖括号的一律当无效，绝不回填 —— 否则等于把假值当真的存进去。
+            def _bm_ok(v):
+                s = str(v or '').strip()
+                return bool(s) and '<' not in s and '>' not in s
+            if not _bm_ok(card.get('baseModelsText')):
+                _src = ''
+                if _bm_ok(card.get('ckpt')):
+                    _src = str(card.get('ckpt')).strip()
+                else:
+                    _bmh = head.get('baseModel')
+                    _u = (_bmh or {}).get('unet') if isinstance(_bmh, dict) else ''
+                    if _bm_ok(_u):
+                        _src = str(_u).strip()
+                if _src:
+                    card['baseModelsText'] = _src
             card_id = _slug(head.get('cardId') or card.get('name'))
             root = _loras_dir()
             dst = os.path.join(_pack_root(), card_id)

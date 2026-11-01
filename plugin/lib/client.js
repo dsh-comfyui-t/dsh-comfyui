@@ -308,6 +308,378 @@ window.__ModuleLoader__.load({
 			const misses = Array.from(new Set((out.match(/[\u4e00-\u9fa5]+/g) || [])))
 			return { out: out, hits: hits, misses: misses }
 		}
+
+		// ==================== 提示词段构建（SEG）====================
+		/**
+		 * 词库「提示词段构建」模式的段数据（v3：全套设计 + 历史会话整套串）。
+		 *
+		 * 八个槽位：风格 / 人物 / 衣服 / 道具 / 动作 / 场景 / 取景 / 整套。
+		 * 拼装顺序固定：质量词+评级 → 风格 → 人物 → 衣服 → 道具 → 动作 → 场景 → 取景。
+		 * 顺序即权重：模型注意力按位置衰减，越靠前越重。
+		 *
+		 * 「整套」(preset) 是特例：选中后**覆盖**其余槽位，只输出 质量词+评级+整套串，
+		 * 因为那些是从历史会话里收来的成品提示词，本身已含风格与服装，叠别的会打架。
+		 *
+		 * blocks: { 槽位: { "ID 名称": "完整标签串" } }
+		 */
+		const SEG = {
+			"version": 3,
+			"quality": "masterpiece, best quality, amazing quality, very aesthetic, absurdres, newest, extreme aesthetic",
+			"order": [
+				"preset",
+				"style",
+				"character",
+				"outfit",
+				"prop",
+				"pose",
+				"scene",
+				"frame"
+			],
+			"labels": {
+				"style": "风格",
+				"character": "人物",
+				"outfit": "衣服",
+				"prop": "道具",
+				"pose": "动作",
+				"scene": "场景",
+				"frame": "取景",
+				"preset": "整套"
+			},
+			"hints": {
+				"style": "画风与渲染",
+				"character": "脸/发色/表情/人数",
+				"outfit": "服装与状态",
+				"prop": "玩具/武器/道具/战损（可空）",
+				"pose": "姿势与动作",
+				"scene": "环境与背景",
+				"frame": "机位与取景",
+				"preset": "历史会话收来的整套串（选中后覆盖其它槽位）"
+			},
+			"ratings": [
+				"rating:safe",
+				"rating:questionable",
+				"rating:explicit"
+			],
+			"blocks": {
+				"style": {
+					"ST-01 平涂·望月けい（默认）": "mochizuki_kei, 2d anime illustration, flat color, cel shading, flat shading, solid color blocks, clean crisp lineart, realistic proportions",
+					"ST-02 平涂·战术": "mochizuki_kei, 2d anime illustration, flat color, cel shading, flat shading, solid color blocks, clean crisp lineart, muted military palette, dense gear detail, realistic proportions, worn equipment",
+					"ST-03 平涂·冷色": "mochizuki_kei, 2d anime illustration, flat color, cel shading, solid color blocks, clean crisp lineart, cold palette, dense gear detail, realistic proportions",
+					"ST-04 半写实·战场": "semi-realistic anime, detailed shading, heavy rendering, desaturated palette, muted colors, cinematic lighting, film grain, gritty atmosphere",
+					"ST-05 平涂·明亮日常": "mochizuki_kei, 2d anime illustration, flat color, cel shading, bright clean colors, soft lineart, realistic proportions",
+					"ST-06 厚涂": "painterly, thick painting, detailed shading, soft lighting, oil painting texture, rich colors",
+					"ST-07 复古赛璐璐": "retro anime, 90s anime, cel animation, film grain, soft focus, muted colors",
+					"ST-08 粗线稿": "bold lineart, thick outlines, heavy line weight, high contrast, flat color",
+					"ST-09 水彩": "watercolor, soft edges, paper texture, pale palette, bleeding colors",
+					"ST-10 像素风": "pixel art, 16-bit, limited palette, dithering, sharp pixels"
+				},
+				"character": {
+					"CH-01 默认（白发红瞳·浅笑）": "1girl, solo, short white bob hair, short hair, bright red eyes, eyelashes, eyebrows visible through hair, soft pale pink lips, slight blush, looking at viewer",
+					"CH-02 冷淡（垂眼无表情）": "1girl, solo, short white bob hair, bright red eyes, half-closed eyes, expressionless, blank stare, looking at viewer",
+					"CH-03 挑衅（眯眼坏笑）": "1girl, solo, short white bob hair, bright red eyes, eyelids lowered, smug smile, head tilted, looking at viewer",
+					"CH-04 害羞": "1girl, solo, short white bob hair, bright red eyes, heavy blush, looking away, embarrassed, sweatdrop",
+					"CH-05 战损": "1girl, solo, short white bob hair, bright red eyes, dirty face, grime, blood on cheek, scar on cheek, bandage on cheek, tired expression",
+					"CH-06 战术严肃": "1girl, solo, short white bob hair, bright red eyes, ballistic goggles, calm, alert, serious, looking at viewer",
+					"CH-07 全遮面罩": "1girl, solo, short white hair, full face helmet, thick visor, glowing eyes behind visor, no visible face",
+					"CH-08 双人": "2girls, short white bob hair, bright red eyes, similar appearance, standing together",
+					"CH-09 兴奋": "1girl, solo, short white bob hair, bright red eyes, open mouth, big smile, excited, blush",
+					"CH-10 湿身": "1girl, solo, short white bob hair, wet hair, bright red eyes, wet skin, water droplets, dripping, looking at viewer",
+					"CH-11 兽耳尾": "1girl, solo, short white bob hair, bright red eyes, cat ears, animal ears, tail, kemonomimi, collar",
+					"CH-12 眼镜": "1girl, solo, short white bob hair, bright red eyes, glasses, round eyewear, glasses glare",
+					"CH-13 纹身穿孔": "1girl, solo, short white bob hair, bright red eyes, tattoo, arm tattoo, nipple piercing, navel piercing, tongue piercing",
+					"CH-14 无表情死鱼眼": "1girl, solo, short white bob hair, bright red eyes, expressionless, dead eyes, half-closed eyes, emotionless",
+					"CH-15 病态": "1girl, solo, short white bob hair, bright red eyes, dark circles, pale skin, tired, hollow eyes",
+					"CH-16 半机械": "1girl, solo, short white bob hair, bright red eyes, cybernetic eye, mechanical arm, glowing seams, cables on neck",
+					"CH-17 汗湿": "1girl, solo, short white bob hair, bright red eyes, sweat, sweaty, glistening skin, wet hair, panting",
+					"CH-18 流泪": "1girl, solo, short white bob hair, bright red eyes, crying, tears, teary eyes, trembling lips",
+					"CH-19 沉睡": "1girl, solo, short white bob hair, bright red eyes, sleeping, eyes closed, relaxed, breathing",
+					"CH-20 侧脸剪影": "1girl, solo, short white bob hair, bright red eyes, profile, side face, silhouette"
+				},
+				"outfit": {
+					"OF-01 白长裙+绷带": "white longsleeve dress, tight fit, slightly transparent, round neckline, floral pattern, wet clothes, bandage bikini, bandages on chest, bandage around thigh, loose bandage ends, black gloves",
+					"OF-02 湿白衬衫": "white dress shirt, wet clothes, see-through, unbuttoned shirt, collar open, sleeves rolled up, white panties, black gloves",
+					"OF-03 黑连体衣": "black bodysuit, tight, sleeveless, high neck, front zipper, black thighhighs, black gloves, zipper pull",
+					"OF-04 透明雨衣": "transparent raincoat, clear plastic, open raincoat, white lingerie, see-through",
+					"OF-05 浴巾裹身": "white bath towel, wrapped in towel, towel around body, bare shoulders, collarbone, bare legs",
+					"OF-06 水手服": "serafuku, white shirt, navy sailor collar, red neckerchief, pleated skirt, black thighhighs, loafers",
+					"OF-07 西装制服": "blazer, white shirt, red ribbon tie, pleated skirt, white thighhighs, loafers, school bag",
+					"OF-08 白吊带+短裤": "white camisole, spaghetti straps, denim shorts, bare shoulders, navel",
+					"OF-09 黑开叉长裙": "black dress, long sleeves, high slit, bare shoulders, thigh strap, bare legs",
+					"OF-10 只剩绷带": "bandages only, bandage bikini, bandages on chest, covered nipples, bandage around thigh, loose bandage ends, bare shoulders, bare legs",
+					"OF-11 围裙裸体": "apron only, naked apron, bare shoulders, bare back, bare legs",
+					"OF-12 蕾丝睡衣": "white lace babydoll, negligee, see-through, panties, bare legs",
+					"OF-13 女仆": "maid, maid headdress, black dress, white apron, white thighhighs, frills",
+					"OF-14 护士": "nurse, nurse cap, white dress, white thighhighs, open clothes",
+					"OF-15 微比基尼": "micro bikini, string bikini, navel, bare legs, side tie",
+					"OF-16 死库水": "school swimsuit, one-piece swimsuit, wet, name tag, bare shoulders",
+					"OF-17 蕾丝内衣": "white lace underwear, bra, panties, bare legs, garter belt",
+					"OF-18 白大褂": "white lab coat, open coat, white shirt underneath, ID card, pen in pocket",
+					"OF-19 连帽卫衣": "hoodie, oversized, sleeves past fingers, no pants, black panties, bare legs",
+					"OF-20 和服浴衣": "yukata, floral pattern, obi, wooden sandals, yukata off shoulder, bare shoulder",
+					"OF-21 旗袍": "qipao, chinese clothes, high slit, frog buttons, black stockings, side slit",
+					"OF-22 哥特裙": "gothic lolita, black dress, frills, petticoat, lace, headdress, corset",
+					"OF-23 运动服": "track suit, jersey, track pants, sneakers, three stripes, zip up",
+					"OF-24 OL 西装": "office lady, suit, pencil skirt, white blouse, black stockings, high heels, glasses",
+					"OF-25 晚礼服": "evening gown, backless dress, long gloves, jewelry, high heels, slit",
+					"OF-26 胶衣": "latex, black latex suit, shiny, skintight, high collar, zipper, gloves",
+					"OF-27 JK+战术背心": "serafuku, white shirt, sailor collar, short pleated skirt, black thighhighs, plate carrier over uniform, tactical gloves, headset",
+					"OF-28 战术·美重": "multicam, plate carrier with side plates, neck guard, groin flap, shoulder pads, high cut helmet, peltor headset, combat boots, tactical gloves, mag pouches",
+					"OF-29 战术·俄重": "digital flora camouflage, emr camouflage, heavy plate carrier, side plates, neck guard, groin flap, heavy helmet with full face visor, mandible guard, tactical gloves",
+					"OF-30 战术·黑狐全黑": "black tactical gear, matte black plate carrier, no camouflage, black combat uniform, black high cut helmet, thermal goggles, headset, radio, ptt",
+					"OF-31 吉利服": "ghillie suit, camouflage, hood up, camo wrap, leaves on helmet, tactical gloves",
+					"OF-32 板甲混搭": "plate armor, steel cuirass, pauldrons, gauntlets, greaves, tactical vest over armor, camo cloak, magazine pouches",
+					"OF-33 动力装甲": "power armor, powered exoskeleton, hydraulic joints, shoulder servo, glowing seams, armored gauntlets, heavy boots",
+					"OF-34 防暴重装": "riot armor, riot helmet, full body armor, shin guards, arm guards, heavy gloves, duty belt",
+					"OF-35 EOD 排爆服": "bomb suit, eod suit, heavy padded armor, blast visor, chest plate, groin protector, thick gloves, heavy boots",
+					"OF-36 外骨骼": "powered exoskeleton, mechanical leg braces, hydraulic pistons, back frame, heavy backpack, combat shirt, plate carrier",
+					"OF-37 战术·狙击手": "combat shirt, plate carrier, crye precision, magazine pouches, ifak, radio, ptt, knee pads, tactical gloves, combat boots, helmet, nvg mount",
+					"OF-38 战术·观察手": "combat shirt, plate carrier, chest rig, radio, ptt, knee pads, tactical gloves, helmet, headset, binoculars on chest",
+					"OF-39 战术·机枪手": "combat shirt, heavy plate carrier, ammo belt, pouches, tactical gloves, combat boots, helmet, ear protection, drum pouch",
+					"OF-40 战术·CQB 夜战": "combat shirt, plate carrier, multicam black, helmet, nvg mount, peltor headset, tactical gloves, knee pads, flashlight mount",
+					"OF-41 战术·医疗兵": "plate carrier, red cross armband, armored apron, helmet, headset, thigh rig, medical pouches, bloody gloves",
+					"OF-42 战术·破门手": "heavy armor, breacher vest, shoulder pads, blast helmet, thick gloves, knee pads, door ram sling, tool belt",
+					"OF-43 Killa 风·骷髅面罩": "heavy helmet with skull paint, skeleton mask, balaclava, heavy plate carrier, shoulder armor, black tracksuit, three stripes on sleeves, track pants, combat boots",
+					"OF-44 Reshala 风·黑西装": "black suit, black dress shirt, unbuttoned shirt, gold chain necklace, gold rings, leather holster, black gloves, cigar",
+					"OF-45 Tagilla 风·焊工面具": "welding mask, heavy plate carrier, industrial apron, thick gloves, knee pads, combat boots, tank top, blood stains, muscular arms",
+					"OF-46 Sanitar 风·白大褂口罩": "white medical coat, scrubs, surgical mask, surgical gloves, blood stains, medical pouches, shoulder bag",
+					"OF-47 教派长袍": "black hooded robe, red cloth, bandages on arms, religious symbols, rope belt, boots",
+					"OF-48 树桩吉利服": "ghillie suit, tree stump camouflage, bark texture, moss, rope belt, hunting pouches, leaves",
+					"OF-49 巫女": "miko, white haori, red hakama, tabi, hair ribbon, ofuda",
+					"OF-50 和服正式": "kimono, furisode, obi, kanzashi, zori, patterned fabric",
+					"OF-51 警察制服": "police uniform, blue shirt, badge, duty belt, handcuffs, peaked cap, black trousers",
+					"OF-52 空乘制服": "flight attendant, uniform, neckerchief, pencil skirt, blazer, name tag, heels",
+					"OF-53 教师": "teacher, blouse, pencil skirt, cardigan, glasses, ID lanyard",
+					"OF-54 技工": "mechanic, overalls, tank top, work gloves, tool belt, oil stains, boots",
+					"OF-55 皮衣": "leather jacket, black leather, zipper, tight pants, boots, belt",
+					"OF-56 湿白 T 恤": "white t-shirt, wet clothes, completely wet, see-through, no bra, nipples visible through clothes, bare legs",
+					"OF-57 破损服装": "torn clothes, torn shirt, torn skirt, exposed shoulder, dirt, ripped stockings",
+					"OF-58 半褪": "clothes lift, shirt lift, one piece removed, off shoulder, undressing, falling strap",
+					"OF-59 竞技泳装": "competition swimsuit, high cut, racerback, swim cap, wet, bare shoulders",
+					"OF-60 体操服": "gym uniform, bloomers, white shirt, shorts, sneakers, name tag",
+					"OF-61 啦啦队": "cheerleader uniform, pleated skirt, crop top, pom poms, knee socks",
+					"OF-62 运动内衣": "sports bra, leggings, bare midriff, sneakers, ponytail",
+					"OF-63 睡衣裤装": "pajamas, one-piece pajamas, slippers, messy hair, blanket",
+					"OF-64 军大衣": "military coat, long coat, fur collar, belt, gloves, boots, snow on shoulders",
+					"OF-65 防化服": "hazmat suit, fully sealed, oxygen tank, thick gloves, hood up, gas mask",
+					"OF-66 破冰船船员": "naval jacket, wool sweater, watch cap, gloves, boots, frost",
+					"OF-67 废土拾荒": "ragged clothes, gas mask, goggles, patched coat, backpack, scavenger gear",
+					"OF-68 赛博义体": "cybernetic, mechanical arm, robotic arm, glowing seams, cables, torn sleeve, techwear",
+					"OF-69 机能风": "techwear, straps, buckles, cargo pants, high collar, utility vest",
+					"OF-70 婚纱": "wedding dress, white gown, veil, lace, long skirt, tiara",
+					"OF-71 男装": "male clothes, suit, necktie, dress shirt, trousers, tailored jacket",
+					"OF-72 校服男生款": "gakuran, black uniform, high collar, buttoned jacket, trousers",
+					"OF-73 泳装连体": "one-piece swimsuit, high cut, wet, bare shoulders, pool"
+				},
+				"prop": {
+					"PR-01 分腿器": "spreader bar, spread legs, metal bar between ankles, bondage, straps on thighs",
+					"PR-02 拘束衣": "straitjacket, white straitjacket, bound arms, buckles, leather straps",
+					"PR-03 悬吊横杆": "suspension bar, suspended, hanging, rope, straps, bound",
+					"PR-04 束腰": "black corset, tight lacing, waist cincher, garter belt",
+					"PR-05 宠物 play": "pet play, collar, chain leash, tail plug, butt plug, animal tail, food bowl",
+					"PR-06 滴蜡": "hot wax, candle wax, wax on body, candle, dripping wax",
+					"PR-07 冰块": "ice cubes, ice on belly, ice on nipples, melting water, shivering",
+					"PR-08 羽毛": "feather, holding feather, feather in hand, tickle",
+					"PR-09 散鞭": "flogger, riding crop, whip, welts on back, red marks",
+					"PR-10 晾衣夹": "clothespins, clothespins on body, clothespins on nipples, clamps",
+					"PR-11 口环": "ring gag, open mouth, saliva, drooling, teeth, tongue out",
+					"PR-12 束缚 harness": "bondage harness, leather harness, straps, chest harness, buckles, chains",
+					"PR-13 贞操带": "chastity belt, metal belt, lock, keys",
+					"PR-14 电击贴片": "electro stimulation, tens unit, electrode pads, wires, cables",
+					"PR-15 真空乳胶床": "latex sheet, vacuum bed, encased in latex, sealed, transparent latex, body outline visible",
+					"PR-16 足枷": "foot stocks, stocks, wooden stocks, feet locked, toe rings",
+					"PR-17 振动棒": "holding vibrator, sex toy",
+					"PR-18 电动棒": "holding vibrator, wand vibrator, magic wand, sex toy",
+					"PR-19 假阳具": "holding dildo, licking dildo, sex toy",
+					"PR-20 肛珠": "anal beads, sex toy",
+					"PR-21 肛塞": "butt plug, anal plug, sex toy",
+					"PR-22 遥控振动蛋": "vibrating egg, remote control, vibrator under clothes",
+					"PR-23 乳头夹": "nipple clamps, clamps on nipples, chain",
+					"PR-24 手铐": "handcuffs, bound wrists",
+					"PR-25 绳缚": "rope, shibari, bound arms, bound torso, knots",
+					"PR-26 项圈牵引": "collar, leash, leash pull, chain",
+					"PR-27 眼罩口球": "blindfold, ball gag, saliva",
+					"PR-28 狙击枪": "bolt action sniper rifle, sniper scope, suppressor, bipod, long barrel, cheek rest, magazine, sling",
+					"PR-29 反器材步枪": "anti-materiel rifle, muzzle brake, big scope, bipod, box magazine, long barrel",
+					"PR-30 突击步枪": "assault rifle, holographic sight, suppressor, foregrip, magazine, sling",
+					"PR-31 轻机枪": "light machine gun, ammo belt, bipod, heat shield",
+					"PR-32 霰弹枪": "pump action shotgun, shell holder, breaching rounds",
+					"PR-33 冲锋枪": "submachine gun, drum magazine, vertical foregrip, suppressor, red dot sight",
+					"PR-34 手枪": "handgun, pistol, suppressor, extended magazine, holster",
+					"PR-35 防弹盾": "ballistic shield, riot shield, viewing slit, shield brace",
+					"PR-36 大锤": "sledgehammer, large hammer, hammer on shoulder",
+					"PR-37 催泪瓦斯": "gas grenade, cs gas, white smoke, throwing",
+					"PR-38 透明伞": "holding umbrella, clear umbrella, umbrella over shoulder",
+					"PR-39 观靶镜": "spotting scope, tripod, rangefinder, notepad",
+					"PR-40 夜视仪": "dual tube nvg, night vision goggles, ir strobe, green night vision tint",
+					"PR-41 无线电": "radio, handheld radio, antenna, headset wire, ptt",
+					"PR-42 医疗包": "medical bag, tourniquet, scissors, bandages, syringe",
+					"PR-43 狗牌": "dog tags, chain, military id",
+					"PR-44 香烟": "cigarette, smoking, smoke, holding cigarette",
+					"PR-45 断臂（断面）": "amputee, missing arm, severed arm, stump, cross-section, exposed muscle, blood splatter",
+					"PR-46 断腿（断面）": "amputee, missing leg, severed leg, stump, cross-section, exposed bone, blood pool",
+					"PR-47 双腿断裂": "double amputee, missing both legs, stumps, cross-section, exposed bone, heavy blood loss, pale skin",
+					"PR-48 贯穿伤": "wound, deep wound, cross-section, exposed muscle, blood, blood on body",
+					"PR-49 断肢握枪": "severed arm on ground, holding rifle, blood on hand, blood on weapon, cross-section",
+					"PR-50 血污": "blood on clothes, blood splatter, dripping blood, blood pool, blood on face",
+					"PR-51 绷带包扎": "bandages, bandaged arm, bandaged head, stained bandages, tourniquet",
+					"PR-52 面具（骷髅）": "skeleton mask, painted skull mask, balaclava",
+					"PR-53 焊工面具": "welding mask, glowing eyes through mask slit",
+					"PR-54 防毒面具": "gas mask, respirator, gas mask filter, cracked mask",
+					"PR-55 教派红布": "red cloth, red mask, religious symbols, bandages on arms"
+				},
+				"pose": {
+					"PO-01 站立正面": "standing, facing viewer, straight-on, arms at sides, legs together, feet together, upright posture",
+					"PO-02 站立岔腿": "standing, facing viewer, legs apart, arms at sides, wide stance",
+					"PO-03 侧身回头": "from side, looking back, turning head, profile, standing",
+					"PO-04 双手背后": "standing, arms behind back, chest out, looking at viewer",
+					"PO-05 后仰撩发": "standing, back arched, hand in own hair, head back, mouth open",
+					"PO-06 鸭子坐": "sitting, wariza, on knees, hands on thighs, legs apart",
+					"PO-07 正坐": "seiza, kneeling, hands on thighs, looking at viewer",
+					"PO-08 侧坐抱膝": "sitting, on floor, legs to the side, hugging own knees, chin on knees",
+					"PO-09 蹲": "squatting, crouching, knees apart, arms between legs",
+					"PO-10 椅子翘腿": "sitting on chair, crossed legs, leaning back, one arm behind head",
+					"PO-11 椅子后仰": "sitting on chair, leaning back, legs spread, arms behind back",
+					"PO-12 跪伏抬头": "kneeling, thighs apart, leaning forward, looking up at viewer, hands on floor",
+					"PO-13 趴跪": "all fours, ass towards viewer, looking back, back arched, from behind",
+					"PO-14 仰卧折腿": "lying, on back, legs up, knees to chest, from above",
+					"PO-15 仰卧张腿": "lying, on back, legs spread, arms above head, from above",
+					"PO-16 侧躺抬腿": "lying on side, one leg up, holding leg, from above",
+					"PO-17 趴躺翘腿": "lying, on stomach, legs up, feet up, looking at viewer, from above",
+					"PO-18 撑地张腿坐": "sitting on floor, legs spread, leaning back on hands, head tilted back, mouth open",
+					"PO-19 靠墙坐地": "sitting on floor, back against wall, legs spread, head back, mouth open",
+					"PO-20 靠墙抬腿": "standing, one leg up, back against wall, head back, mouth open",
+					"PO-21 骑坐": "kneeling, straddling, riding, hips forward, looking at viewer",
+					"PO-22 弯腰后视": "bent over, looking back, hands on floor, arched back, from behind",
+					"PO-23 扶桌后弯": "bent over, hands on table, looking back, legs apart",
+					"PO-24 前倾俯身": "standing, legs apart, leaning forward, upper body bent forward, arched back, head up, looking at viewer",
+					"PO-25 俯身看镜头（仰视机位）": "leaning forward, chest towards viewer, upper body bent forward, head tilted down, chin down, looking down at viewer",
+					"PO-26 跳跃滞空": "jumping, mid-air, legs bent, arms up, hair floating, skirt floating, dynamic angle",
+					"PO-27 奔跑": "running, arms swinging, hair flying, leaning forward, motion blur",
+					"PO-28 水中站立": "standing in water, water line, arms at sides, wet",
+					"PO-29 镜子前": "standing in front of mirror, reflection, hands on sink, looking at reflection",
+					"PO-30 自拍": "holding phone, selfie, arm extended, looking at phone screen",
+					"PO-31 高举双臂": "standing, arms up, stretching, eyes closed, back arched",
+					"PO-32 伸懒腰": "stretching, arms up, yawning, sleepy, eyes closed",
+					"PO-33 抱膝坐地": "sitting on floor, knees up, arms around knees, head resting on knees",
+					"PO-34 单手扶腰": "standing, one hand on own hip, other hand at side, weight on one leg",
+					"PO-35 一手扶腰一手比脸": "standing, legs apart, one hand on own hip, other hand up, hand near face, peace sign, v sign beside cheek",
+					"PO-36 站姿警戒": "standing, rifle at low ready, legs apart, upright posture, alert",
+					"PO-37 单膝跪": "kneeling, one knee down, one knee up, upright torso",
+					"PO-38 卧姿狙击": "prone, lying on stomach, elbows on ground, aiming, cheek on stock, one eye closed",
+					"PO-39 膝盖跪地狙击": "kneeling, one knee down, aiming, cheek on stock, elbows supported on knee",
+					"PO-40 抱枪站立": "standing, rifle held low, both hands on rifle, facing viewer",
+					"PO-41 举枪瞄准": "standing, rifle raised, aiming forward, both hands on rifle, leaning into corner",
+					"PO-42 蹲姿射击": "squatting, one knee down, rifle raised, aiming",
+					"PO-43 被绑跪坐": "kneeling, arms bound behind back, leaning forward, head down",
+					"PO-44 悬吊": "suspended, arms above head, legs bent, body arched, hanging",
+					"PO-45 蹲张腿": "squatting, legs spread, arms on knees, trembling",
+					"PO-46 鸭坐张腿": "sitting, wariza, on knees, legs apart, hands behind back",
+					"PO-47 仰卧大字": "lying, on back, legs spread, arms spread, from above",
+					"PO-48 侧躺抱头": "lying on side, arms around head, knees drawn up, from above",
+					"PO-49 趴地爬行": "on all fours, crawling, dragging leg, exhausted, looking at viewer",
+					"PO-50 半跪撑枪": "kneeling, one knee down, head down, leaning on rifle, exhausted",
+					"PO-51 手抚伤口": "standing, side view, hand on own wound, leaning back, mouth open",
+					"PO-52 仰头淋雨": "head back, eyes closed, rain on face, wet face, mouth open, arms at sides",
+					"PO-53 低头看手": "looking down at own hands, shocked expression, mouth open",
+					"PO-54 跪坐抬头看": "seiza, kneeling, head up, looking up at viewer, hands on thighs",
+					"PO-55 撑墙站立": "standing, one hand on wall, leaning against wall, head down",
+					"PO-56 坐地靠柜": "sitting on floor, knees up, arms around knees, head resting on knees, leaning on cabinet",
+					"PO-57 侧卧支撑": "lying on side, propped on elbow, head resting on hand, looking at viewer",
+					"PO-58 手放胸口": "standing, hand on own chest, looking at viewer, gentle smile",
+					"PO-59 转身回眸": "turning around, looking back over shoulder, hair in motion, standing",
+					"PO-60 仰卧屈膝侧头": "lying, on back, knees bent, head turned, arms at sides, from above"
+				},
+				"scene": {
+					"SC-01 纯色深灰": "simple background, dark grey background, minimal background, flat perspective, clear silhouette",
+					"SC-02 纯色+蓝玫瑰": "simple background, dark grey background, blue roses, minimal background, flat perspective",
+					"SC-03 教室": "classroom, desks, blackboard, window light, dust",
+					"SC-04 学校走廊": "school corridor, lockers, broken window, dust light",
+					"SC-05 天台": "school rooftop, railing, water tank, overcast sky",
+					"SC-06 商场": "shopping mall, broken escalator, neon sign, debris",
+					"SC-07 破冰船甲板": "icebreaker deck, ice, snow, metal railing, blue cold light",
+					"SC-08 船舱": "ship corridor, steel walls, pipes, emergency light, steam",
+					"SC-09 废墟街道": "destroyed street, rubble, burnt cars, smoke, overcast",
+					"SC-10 战壕": "trench, sandbags, mud, barbed wire, rain",
+					"SC-11 森林": "pine forest, fallen logs, mist, green tones",
+					"SC-12 雪地": "snow field, snowfall, whiteout, cold light",
+					"SC-13 浴室": "bathroom, tiles, water, steam, mirror",
+					"SC-14 海滩": "beach, sea, bright sky, sand, minimal background",
+					"SC-15 和室": "japanese room, tatami, shoji, paper door, low table",
+					"SC-16 办公室": "office, desk, blinds, paperwork, warm lamp",
+					"SC-17 地下停车场": "underground parking, concrete pillars, fluorescent light, oil stains",
+					"SC-18 雨中街道": "rain, wet street, puddles, neon reflection, overcast",
+					"SC-19 工厂": "factory, rusty pipes, sparks, dim light, metal floor",
+					"SC-20 教堂": "church, broken pews, stained glass, dust light",
+					"SC-21 机场跑道": "airfield, runway, control tower, wind, overcast",
+					"SC-22 地铁站": "subway station, tiled walls, broken lights, tracks, dust",
+					"SC-23 加油站": "gas station, pumps, broken canopy, night, wet asphalt",
+					"SC-24 仓库": "warehouse, shelves, pallets, high windows, dust",
+					"SC-25 医院走廊": "hospital corridor, fluorescent light, wheelchairs, sterile",
+					"SC-26 图书馆": "library, bookshelves, reading table, window light",
+					"SC-27 天台夜景": "rooftop at night, city lights, antenna, wind",
+					"SC-28 泳池": "swimming pool, water surface, lane ropes, blue tiles",
+					"SC-29 卧室": "bedroom, bed, curtains, soft light, clothes on floor",
+					"SC-30 审讯室": "interrogation room, single lamp, metal table, steel door",
+					"SC-31 冰原": "ice field, frozen sea, cracks in ice, cold light, wind",
+					"SC-32 沙漠": "desert, sand dunes, harsh light, heat haze",
+					"SC-33 检查站": "checkpoint, concrete barriers, sandbags, watchtower, dust",
+					"SC-34 燃烧的城市": "burning city, fire, black smoke, embers, orange sky",
+					"SC-35 机舱内部": "aircraft cabin, seats, overhead bins, emergency light, tilted",
+					"SC-36 屋顶水箱": "water tank, steel platform, ladder, dusk",
+					"SC-37 墓园": "graveyard, gravestones, fog, bare trees, overcast",
+					"SC-38 列车车厢": "train interior, seats, windows, tunnel dark, flicker",
+					"SC-39 地下室": "basement, concrete stairs, dim bulb, pipes, damp",
+					"SC-40 浅水": "shallow water, wet ground, reflections, ripples, mud"
+				},
+				"frame": {
+					"FR-01 全身竖": "full length shot, front view, centered composition",
+					"FR-02 全身竖+地面": "full length shot, standing on wet ground, front view, centered composition",
+					"FR-03 膝上": "cowboy shot, front view, centered composition",
+					"FR-04 半身": "upper body, front view, centered composition",
+					"FR-05 特写": "close-up, portrait, front view",
+					"FR-06 仰视": "from below, low angle shot, front view, centered composition",
+					"FR-07 俯视（躺姿）": "from above, front view, centered composition",
+					"FR-08 侧视": "from side, side view, centered composition",
+					"FR-09 全身横": "full length shot, front view, centered composition, wide framing",
+					"FR-10 极端仰视": "extreme low angle, worm's eye view, looking down at viewer, centered composition",
+					"FR-11 过肩": "over the shoulder, from behind, looking at viewer, centered composition",
+					"FR-12 正面近景": "face focus, portrait, looking at viewer, centered composition"
+				},
+				"preset": {
+					"PS-01 原版·主体段": "SUBJECT:, 1girl, solo, short white bob hair, bright red eyes, red drop earrings, delicate face, playful wink, bright mischievous smile, looking directly at viewer,",
+					"PS-02 套装·绷带": "masterpiece, best quality, amazing quality, very aesthetic, absurdres, newest, extreme aesthetic, rating:explicit, mochizuki_kei, 2d anime illustration, prominent clean lineart, expressive variable line weight, lineart, flat style, 1girl, solo, short white bob hair, wet hair, bright red eyes, bright red eyebrows, eyelashes, eyebrows visible through hair, delicate face, soft pale pink lips, parted lips, teeth, tongue out, slight blush, soft blush, playful wink, one eye closed, mischievous smile, looking at viewer, bandages only, bandage bikini, bandages on chest, covered nipples, bandage around thigh, loose bandage ends, bare shoulders, bare legs, sitting, wariza, on knees, hands on thighs, legs apart, sitting on wet floor, rain, wet skin, wet floor, puddle, simple background, dark grey background, blue roses, minimal background, flat perspective, clear silhouette, black gloves, small round necklace, light blue flower hair clip, full length shot, front view, centered composition, symmetrical framing",
+					"PS-03 套装·战术": "masterpiece, best quality, amazing quality, absurdres, very aesthetic, rating:explicit, semi-realistic anime, detailed shading, heavy rendering, desaturated palette, muted colors, cinematic lighting, film grain, gritty atmosphere, volumetric dust, 1girl, solo, short white hair, short bob hair, bright red eyes, red eyes, dirty face, grime on face, blood on face, blood on cheek, scar on cheek, bandage on cheek, chapped lips, tired expression, looking at viewer, heavy protective suit, hazmat suit, nbc suit, gas mask, respirator, thick gloves, combat boots, plate carrier, body armor, tactical vest, straps, knee pads, pouches, backpack, torn suit, dirty clothes, blood on clothes, mud, missing left arm, severed left arm, stump, cross-section, exposed muscle, blood splatter, tourniquet on arm, standing, facing viewer, one arm at side, legs apart, upright posture, ruined city, rubble, broken concrete, smoke, embers, fire in background, war zone, overcast sky, dust, debris, minimal background, full length shot, front view, centered composition",
+					"PS-04 套装·战术": "masterpiece, best quality, amazing quality, very aesthetic, absurdres, newest, extreme aesthetic, rating:general, mochizuki_kei, 2d anime illustration, flat color, cel shading, flat shading, solid color blocks, clean crisp lineart, muted military palette, detailed equipment, realistic proportions, 1girl, solo, short white hair, short bob hair, bright red eyes, calm expression, serious, looking through scope, ghillie suit, camouflage, hood up, tactical gloves, combat boots, plate carrier, radio, ptt, bolt action sniper rifle, sniper scope, bipod, suppressor, long barrel, cheek rest, magazine, sling, holding rifle, both hands on rifle, prone, lying on stomach, elbows on ground, aiming, cheek on stock, one eye closed, dirt ground, grass, scattered leaves, outdoor, overcast, simple background, dark grey background, flat perspective, clear silhouette, cowboy shot, side view, from above",
+					"PS-05 套装·战术": "masterpiece, best quality, amazing quality, very aesthetic, absurdres, newest, extreme aesthetic, rating:general, mochizuki_kei, 2d anime illustration, flat color, cel shading, flat shading, solid color blocks, clean crisp lineart, cold palette, dense gear detail, realistic proportions, worn equipment, frost, condensation, dirt, grime, worn gear, 1girl, solo, short white bob hair, bright red eyes, black helmet, thermal goggles, cold, silent, black tactical gear, matte black plate carrier, side plates, neck guard, no camouflage, black combat uniform, black knee pads, black gloves, black high cut helmet, detachable face shield, thermal goggles, headset, radio, ptt, magazine pouches, ifak, assault rifle, black rifle, suppressor, thermal scope, laser, sling, pmag, standing, facing viewer, rifle at low ready, legs apart, upright, icebreaker deck, ice, snow, metal railing, blue cold light, aurora, simple background, dark grey background, flat perspective, clear silhouette, full length shot, front view",
+					"PS-06 套装·水手服": "masterpiece, best quality, amazing quality, very aesthetic, absurdres, newest, extreme aesthetic, rating:general, mochizuki_kei, 2d anime illustration, flat color, cel shading, flat shading, solid color blocks, clean crisp lineart, bright uniform colors, dense gear detail, realistic proportions, 1girl, solo, short white bob hair, bright red eyes, calm, determined, serafuku, white shirt, navy sailor collar, red neckerchief, short pleated skirt, black thighhighs, loafers, plate carrier over uniform, magazine pouches, tactical gloves, knee pads, headset, ballistic goggles, school bag, assault rifle, suppressor, red dot sight, sling, pmag, standing, facing viewer, rifle at low ready, legs apart, school corridor, lockers, broken windows, dust light, simple background, dark grey background, flat perspective, clear silhouette, full length shot, front view",
+					"PS-07 套装·其他": "masterpiece, best quality, amazing quality, very aesthetic, absurdres, newest, extreme aesthetic, rating:general, mochizuki_kei, 2d anime illustration, flat color, cel shading, flat shading, solid color blocks, clean crisp lineart, realistic proportions, 1girl, solo, short white bob hair, bright red eyes, heavy-lidded eyes, leaning forward, chest towards viewer, shoulders forward, upper body bent forward, arched back, standing, legs apart, head up, looking at viewer, eye contact, face towards viewer, chin raised, smug smile, one hand on own hip, other hand up, hand near face, peace sign, front view, centered composition, full length shot, simple background, dark grey background, blue roses, flat perspective, clear silhouette",
+					"PS-08 套装·水手服": "masterpiece, best quality, amazing quality, very aesthetic, absurdres, newest, extreme aesthetic, rating:general, mochizuki_kei, 2d anime illustration, flat color, cel shading, flat shading, solid color blocks, clean crisp lineart, dynamic pose, motion blur on hair, realistic proportions, 1girl, solo, short white bob hair, bright red eyes, eyelashes, soft pale pink lips, slight blush, excited, mouth open, hair floating, skirt floating, serafuku, white shirt, sailor collar, pleated skirt, black thighhighs, loafers, jumping, mid-air, legs bent, arms up, one leg forward, dynamic angle, simple background, dark grey background, speed lines, flat perspective, full length shot, low angle shot, centered composition",
+					"PS-09 套装·战术": "masterpiece, best quality, amazing quality, absurdres, very aesthetic, rating:explicit, 2d anime illustration, heavy shading, thick lineart, desaturated palette, gritty atmosphere, dramatic rim light, dust particles, 1girl, solo, short white hair, short bob hair, bright red eyes, red eyes, dirty face, grime on face, blood on face, blood on cheek, scar on cheek, bandage on cheek, chapped lips, tired expression, looking at viewer, heavy protective suit, hazmat suit, nbc suit, gas mask, respirator, thick gloves, combat boots, plate carrier, body armor, tactical vest, straps, knee pads, pouches, backpack, torn suit, dirty clothes, blood on clothes, mud, double amputee, missing both legs, stumps, cross-section, exposed bone, heavy blood loss, blood pool, pale skin, lying, on back, arms at sides, head turned, from above, collapsed concrete, rebar, smoke, embers, blood pool, cowboy shot, front view, centered composition",
+					"PS-10 套装·其他": "mochizuki_kei, flat color, cel shading, flat shading, solid color blocks, clean crisp lineart, minimal gradient, 2d anime illustration, masterpiece, best quality, very aesthetic, absurdres, 1girl, solo, 19 years old, adult woman, university student, tareme, droopy eyes, half-closed eyes, calm expression, closed mouth, sharp face, v-shaped chin, angular jawline, slender neck, portrait, upper body, face focus, white hair, long hair, her hairstyle is a mullet, ..., bright pupils, red eyes, blue flower hair ornament, red drop earrings, white coat, open coat, white shirt, light blue bowtie, looking at viewer, simple background, flat solid color background, dark grey background",
+					"PS-11 套装·其他": "positive: \"(from below:1.5), (low angle shot:1.4), EMBEDDED: (@mochizuki_kei, mochizuki_kei style), 2d anime illustration, prominent clean lineart, expressive variable line weight, (lineart:1.4), flat style, extreme aesthetic, newest, masterpiece, best quality, amazing quality, very aesthetic, absurdres, HDR, BREAK, SUBJECT:, 1girl, solo, short white bob hair, bright red eyes, red drop earrings, delicate face, playful wink, bright mischievous smile, looking directly at viewer,\"",
+					"PS-12 套装·其他": "masterpiece, best quality, amazing quality, very aesthetic, absurdres, rating:safe, mature female, adult woman, tall, long legs, narrow waist, medium breasts, 1girl, solo, white hair, mullet, medium hair, hair intakes, multicolored hair, two-tone hair, gradient hair, colored tips, blue hair, pink hair, streaked hair, bright red eyes, glowing pupils, blue flower hair ornament, red drop earrings, white long coat, open coat, white shirt, collared shirt, light blue bowtie, light blue pleated skirt, white thighhighs, zettai ryouiki, white high heel boots, standing, full body, looking at viewer, gentle smile, simple background, dark background",
+					"PS-13 套装·其他": "mochizuki_kei, flat color, cel shading, solid color blocks, clean crisp lineart, 2d anime illustration, masterpiece, best quality, very aesthetic, absurdres, mature female, adult woman, tall, slender, long legs, narrow waist, 1girl, solo, white hair, mullet, long hair in the back, short hair on top, hair intakes, multicolored hair, gradient hair, colored tips, blue hair, pink hair, bright pupils, red eyes, blue flower hair ornament, red drop earrings, white long coat, open coat, white shirt, light blue bowtie, light blue pleated skirt, white thighhighs, zettai ryouiki, white high heel boots, standing, full body, looking at viewer, gentle smile, simple background, dark grey background",
+					"PS-14 套装·其他": "mochizuki_kei, flat color, cel shading, flat shading, solid color blocks, clean crisp lineart, minimal gradient, 2d anime illustration, masterpiece, best quality, very aesthetic, absurdres, mature female, adult woman, 1girl, solo, portrait, upper body, face focus, white hair, her hairstyle is a mullet, ..., bright pupils, red eyes, blue flower hair ornament, red drop earrings, white coat, open coat, white shirt, light blue bowtie, looking at viewer, gentle smile, simple background, flat solid color background, dark grey background",
+					"PS-15 套装·其他": "STYLE, QUALITY, 1girl solo, BODY, mood, eyes, char.face, char.hair, char.eyes, char.acc, char.outfit, framing, pose, background",
+					"PS-16 套装·其他": "mochizuki_kei, (flat color:1.4), (cel shading:1.4), (flat shading:1.3), (solid color blocks:1.2), (clean crisp lineart:1.2), (minimal gradient:1.3), 2d anime illustration, masterpiece, best quality, very aesthetic, absurdres, score_9, score_8, score_7, highres, 1girl, solo, ...",
+					"PS-17 套装·其他": "masterpiece, best quality, amazing quality, very aesthetic, absurdres, rating:safe, mature female, adult woman, tall, long legs, wide hips, narrow waist, medium breasts, 1girl, solo, white hair, short hair, red eyes, blue flower hair ornament, red earrings, white coat, open coat, white shirt, light blue bowtie, light blue pleated skirt, white thighhighs, white boots, standing, cowboy shot, looking at viewer, waving, arm up, hand up, peace sign, one eye close, wink, smile, open mouth, simple background, dark background",
+					"PS-18 套装·其他": "mochizuki_kei, flat color, cel shading, flat shading, solid color blocks, clean crisp lineart, minimal gradient, 2d anime illustration, masterpiece, best quality, very aesthetic, absurdres, 1girl, solo, short white hair, bright red eyes, blue flower hair ornament, red drop earrings, white long coat, light blue bowtie, light blue pleated skirt, white thighhighs, white boots, standing, full body, looking at viewer, gentle smile, simple background, flat solid color background",
+					"PS-19 套装·其他": "L23: 'SUBJECT:, 1girl, solo, short white bob hair, bright red eyes, red drop earrings, delicate face, playful wink, bright mischievous smile, looking directly at viewer,',",
+					"PS-20 套装·其他": "L44: 'SUBJECT:, 1girl, solo, short white bob hair, bright red eyes, red drop earrings, delicate face, playful wink, bright mischievous smile, looking directly at viewer,',",
+					"PS-21 套装·其他": "L62: 'SUBJECT:, 1girl, solo, short white bob hair, bright red eyes, red drop earrings, delicate face, playful wink, bright mischievous smile, looking directly at viewer,',"
+				}
+			},
+			"count": {
+				"style": 10,
+				"character": 20,
+				"outfit": 73,
+				"prop": 55,
+				"pose": 60,
+				"scene": 40,
+				"frame": 12,
+				"preset": 21
+			}
+		};
 		// ==================== 预置预设（来自 lib/presets.js）====================
 		/**
 		 * 预置预设 —— 从用户的**官方预设**派生的几套。
@@ -1849,6 +2221,1017 @@ window.__ModuleLoader__.load({
 		        showSettings?h(OnlineSourceSettings,{theme,provider:params.provider,onClose:()=>{setShowSettings(false);ONLINE_ACCESS_CACHE.clear();setAccessMap({});setSearchRefresh(n=>n+1);}}):null,
 		        selected?h(OnlineModelDetail,{key:selected.provider+':'+selected.id,item:selected,theme,onClose:()=>setSelected(null),onSettings:()=>{setSelected(null);setShowSettings(true);},onDownload:job=>{setJobs(p=>[job,...p]);setSelected(null);setShowJobs(true);onMessage?.('已加入下载队列：'+job.filename);}}):null);
 		}
+		// ==================== 随机系统资料库（来自 lib/randomlib.js）====================
+		// ============================================================================
+		// 随机系统专用资料库（0.7.125）
+		//
+		// 和 lib/dict.js 的 SEG 词库分开，互不影响：
+		//   SEG      = 手动挑的槽位表，会进词库页 UI，改它会动到既有提示词
+		//   RND_LIB  = 只被生成页三个随机按钮读取的素材池，可以任意扩写
+		//
+		// 抽取时按槽位把 SEG.blocks[k] 与 RND_LIB[k] 合并成一个池再抽，
+		// 所以两边都可以独立扩充，互不覆盖。
+		//
+		// 所有值统一 danbooru 标签风格，小写、逗号分隔，不带权重括号。
+		//
+		// 槽位职责：
+		//   look   —— 决定「这是谁」：发色 / 发型 / 瞳色 / 肤色 / 体型。每段自带 1girl, solo。
+		//   mood   —— 只写表情与神态，不含任何发色瞳色，可叠在任意 look 上。
+		//   extra  —— 可叠加的附加特征：兽耳 / 角 / 眼镜 / 纹身 / 饰品 / 伤痕。不含发色瞳色。
+		//   outfit —— 服饰。prop —— 持有物与穿戴小件。
+		//   pose   —— 动作。scene —— 环境。frame —— 机位与取景。style —— 画风。
+		//
+		// pose 与 frame 在抽取时走「换族」而不是均匀抽：把池子按基础姿态 / 距离 / 角度归类，
+		// 每次排除最近两族再抽。90 条姿势里「站」占 21%，62 条分镜里「全身+正面」占大头，
+		// 纯均匀抽的话三张里有四成会撞族，肉眼看就是"一直一个姿势、一直一个机位"。
+		// ============================================================================
+
+		const RND_LIB = {
+			version: 3,
+
+			// ===== 外观：60 种人物本体 =====
+			look: {
+				"LK-01 黑长直·琥珀瞳": "1girl, solo, long straight black hair, blunt bangs, amber eyes, fair skin, slender",
+				"LK-02 白短发·红瞳（默认）": "1girl, solo, short white bob hair, short hair, bright red eyes, pale skin, petite",
+				"LK-03 粉双马尾·青瞳": "1girl, solo, long pastel pink hair, twin tails, aqua eyes, fair skin, petite",
+				"LK-04 银长发·紫瞳": "1girl, solo, very long silver hair, hime cut, purple eyes, pale skin, tall",
+				"LK-05 金卷发·绿瞳": "1girl, solo, long blonde hair, wavy hair, green eyes, tan skin, curvy",
+				"LK-06 蓝短发·金瞳": "1girl, solo, short blue hair, bob cut, golden eyes, fair skin, athletic",
+				"LK-07 黑双马尾·异色瞳": "1girl, solo, long black hair, twin tails, heterochromia, red eye, blue eye, fair skin",
+				"LK-08 栗色卷发·棕瞳": "1girl, solo, medium chestnut brown hair, curly hair, brown eyes, fair skin",
+				"LK-09 白长直·蓝瞳": "1girl, solo, very long white hair, straight hair, blue eyes, pale skin, slender",
+				"LK-10 紫狼尾·红瞳": "1girl, solo, purple hair, wolf cut, red eyes, fair skin, tomboy",
+				"LK-11 橙丸子头·绿瞳": "1girl, solo, orange hair, hair bun, green eyes, tan skin, freckles",
+				"LK-12 黑长直·金瞳·高挑": "1girl, solo, long black hair, straight hair, golden eyes, tall, mature, slender",
+				"LK-13 粉波波·紫瞳": "1girl, solo, pink bob hair, short hair, purple eyes, fair skin",
+				"LK-14 银灰短发·灰瞳": "1girl, solo, short silver hair, grey eyes, pale skin, cold beauty",
+				"LK-15 蓝渐变长发·蓝瞳": "1girl, solo, long blue hair, gradient hair, blue eyes, fair skin",
+				"LK-16 红长发·绿瞳": "1girl, solo, long red hair, straight hair, green eyes, fair skin",
+				"LK-17 黑单马尾·琥珀瞳": "1girl, solo, black hair, ponytail, amber eyes, athletic build, fair skin",
+				"LK-18 白金双钻·蓝瞳": "1girl, solo, blonde hair, drill hair, twin tails, blue eyes, fair skin",
+				"LK-19 深蓝长发·紫瞳": "1girl, solo, dark blue hair, very long hair, purple eyes, pale skin",
+				"LK-20 绿短发·红瞳": "1girl, solo, short green hair, bright red eyes, fair skin, petite",
+				"LK-21 银白长发·异色瞳": "1girl, solo, very long white hair, heterochromia, golden eye, purple eye, pale skin",
+				"LK-22 棕双马尾·棕瞳": "1girl, solo, brown hair, twin tails, brown eyes, freckles, cute",
+				"LK-23 黑长卷·红瞳·成熟": "1girl, solo, long black hair, wavy hair, red eyes, mature, curvy",
+				"LK-24 亚麻短卷·蓝瞳": "1girl, solo, short ash blonde hair, wavy hair, blue eyes, fair skin",
+				"LK-25 灰白长发·绿瞳": "1girl, solo, very long ash white hair, straight hair, green eyes, pale skin, slender",
+				"LK-26 深棕中分·琥珀瞳": "1girl, solo, medium dark brown hair, center part, amber eyes, fair skin, mature",
+				"LK-27 青绿短发·异色瞳": "1girl, solo, short teal hair, bob cut, heterochromia, green eye, blue eye, fair skin",
+				"LK-28 玫瑰金长发·紫瞳": "1girl, solo, long rose gold hair, wavy hair, purple eyes, fair skin, curvy",
+				"LK-29 银蓝双马尾·红瞳": "1girl, solo, long silver blue hair, twin tails, bright red eyes, pale skin, petite",
+				"LK-30 黑短发·金瞳": "1girl, solo, short black hair, blunt bangs, golden eyes, fair skin, athletic",
+				"LK-31 奶金卷发·琥珀瞳": "1girl, solo, long cream blonde hair, curly hair, amber eyes, fair skin, cute",
+				"LK-32 紫长发·绿瞳": "1girl, solo, long purple hair, straight hair, green eyes, pale skin, tall",
+				"LK-33 白双钻·蓝瞳": "1girl, solo, very long white hair, drill hair, twin tails, blue eyes, pale skin, ojou",
+				"LK-34 棕狼尾·灰瞳": "1girl, solo, brown hair, wolf cut, grey eyes, tan skin, tomboy",
+				"LK-35 蓝长直·紫瞳": "1girl, solo, long blue hair, straight hair, purple eyes, fair skin, slender",
+				"LK-36 黑丸子头·红瞳": "1girl, solo, black hair, hair bun, bright red eyes, fair skin, mature",
+				"LK-37 青长卷·金瞳": "1girl, solo, long teal hair, wavy hair, golden eyes, pale skin, curvy",
+				"LK-38 橙短发·蓝瞳": "1girl, solo, short orange hair, bob cut, blue eyes, tan skin, freckles, energetic",
+				"LK-39 银短发·紫瞳": "1girl, solo, short silver hair, blunt bangs, purple eyes, pale skin, petite",
+				"LK-40 粉渐变长发·红瞳": "1girl, solo, long pink hair, gradient hair, bright red eyes, fair skin, cute",
+				"LK-41 黑长直·绿瞳·高挑": "1girl, solo, long straight black hair, green eyes, tall, slender, mature",
+				"LK-42 白波波·金瞳": "1girl, solo, white bob hair, short hair, golden eyes, pale skin, cute",
+				"LK-43 深紫长卷·琥珀瞳": "1girl, solo, long dark purple hair, curly hair, amber eyes, fair skin, mature",
+				"LK-44 亚麻双马尾·绿瞳": "1girl, solo, long ash blonde hair, twin tails, green eyes, fair skin, cute",
+				"LK-45 红短发·灰瞳": "1girl, solo, short red hair, bob cut, grey eyes, fair skin, tomboy",
+				"LK-46 银白长直·蓝瞳·高挑": "1girl, solo, very long white hair, straight hair, blue eyes, tall, slender",
+				"LK-47 棕丸子头·紫瞳": "1girl, solo, brown hair, hair bun, purple eyes, tan skin, mature",
+				"LK-48 蓝双马尾·金瞳": "1girl, solo, long blue hair, twin tails, golden eyes, fair skin, energetic",
+				"LK-49 黑长卷·异色瞳": "1girl, solo, long black hair, wavy hair, heterochromia, red eye, grey eye, pale skin",
+				"LK-50 青绿长直·琥珀瞳": "1girl, solo, long teal hair, straight hair, amber eyes, fair skin, slender",
+				"LK-51 金短发·红瞳": "1girl, solo, short blonde hair, bob cut, bright red eyes, fair skin, athletic",
+				"LK-52 紫双马尾·蓝瞳": "1girl, solo, long purple hair, twin tails, blue eyes, pale skin, cute",
+				"LK-53 白长发·绿瞳·成熟": "1girl, solo, very long white hair, green eyes, mature, curvy, pale skin",
+				"LK-54 深蓝短发·紫瞳": "1girl, solo, short dark blue hair, blunt bangs, purple eyes, fair skin, cold beauty",
+				"LK-55 粉长发·琥珀瞳": "1girl, solo, long pink hair, straight hair, amber eyes, fair skin, petite",
+				"LK-56 黑波波·蓝瞳": "1girl, solo, black bob hair, short hair, blue eyes, fair skin, cute",
+				"LK-57 银长卷·红瞳": "1girl, solo, long silver hair, wavy hair, bright red eyes, pale skin, mature",
+				"LK-58 棕长直·绿瞳": "1girl, solo, long brown hair, straight hair, green eyes, tan skin, athletic",
+				"LK-59 蓝白挑染·金瞳": "1girl, solo, two-tone hair, blue and white hair, long hair, golden eyes, pale skin, fantasy",
+				"LK-60 黑发挑染·紫瞳": "1girl, solo, black hair, colored inner hair, purple inner hair, long hair, purple eyes, fair skin, edgy",
+				// ---- 外观补充（LK-61~LK-100）：把发长×发色×瞳色×体型的组合铺开 ----
+				"LK-61 红棕长发·榛瞳": "1girl, solo, very long wavy auburn hair, hazel eyes, mature, fair skin",
+				"LK-62 暗红乱短发·紫瞳": "1girl, solo, short messy dark red hair, purple eyes, tomboy, sharp",
+				"LK-63 薰衣草编发·紫瞳": "1girl, solo, long lavender hair, braided hair, violet eyes, slender",
+				"LK-64 棕双辫·绿瞳雀斑": "1girl, solo, twin braids brown hair, freckles, green eyes, cheerful",
+				"LK-65 白金超短·红瞳": "1girl, solo, short platinum blonde hair, red eyes, pale skin, cold",
+				"LK-66 薄荷马尾·金瞳": "1girl, solo, long mint green hair, ponytail, gold eyes, sporty",
+				"LK-67 深棕短发·琥珀瞳": "1girl, solo, dark brown hair, short hair, amber eyes, athletic",
+				"LK-68 深红超长·金瞳": "1girl, solo, very long crimson hair, straight hair, gold eyes, tall",
+				"LK-69 白侧马尾·蓝瞳": "1girl, solo, white hair, side ponytail, blue eyes, petite",
+				"LK-70 深蓝姬发·银瞳": "1girl, solo, long navy hair, hime cut, silver eyes, formal",
+				"LK-71 粉双马尾·青瞳": "1girl, solo, short pink hair, twin tails, teal eyes, cheerful",
+				"LK-72 灰白卷发·绿瞳": "1girl, solo, long ash grey hair, curly hair, green eyes, mature",
+				"LK-73 黑半扎·红瞳": "1girl, solo, black hair, half updo, red eyes, serious",
+				"LK-74 铜色卷发·棕瞳": "1girl, solo, long copper hair, wavy hair, brown eyes, freckles",
+				"LK-75 银短削发·灰瞳": "1girl, solo, short silver hair, undercut, grey eyes, tomboy",
+				"LK-76 淡蓝超长·粉瞳": "1girl, solo, very long pale blue hair, straight hair, pink eyes, ethereal",
+				"LK-77 脏金丸子头·绿瞳": "1girl, solo, dirty blonde hair, messy bun, green eyes, casual",
+				"LK-78 墨绿侧辫·琥珀瞳": "1girl, solo, long dark green hair, side braid, amber eyes, quiet",
+				"LK-79 黑短刺发·红瞳": "1girl, solo, short black hair, spiky hair, red eyes, fierce",
+				"LK-80 白双马尾·异色瞳": "1girl, solo, long white hair, twin tails, heterochromia, pale",
+				"LK-81 棕短发·蓝瞳": "1girl, solo, brown hair, short bob, blue eyes, student, neat",
+				"LK-82 洋红钻卷·金瞳": "1girl, solo, long magenta hair, drill hair, gold eyes, ojou, haughty",
+				"LK-83 灰棕中长·灰瞳": "1girl, solo, ash brown hair, medium length, grey eyes, calm",
+				"LK-84 铂金长直·紫瞳": "1girl, solo, long platinum hair, straight hair, violet eyes, elegant",
+				"LK-85 橙短乱发·绿瞳": "1girl, solo, short orange hair, messy hair, green eyes, energetic",
+				"LK-86 黑姬发·紫瞳": "1girl, solo, long black hair, hime cut, purple eyes, tall, composed",
+				"LK-87 银短发·红瞳": "1girl, solo, silver hair, short hair, red eyes, pale, cold",
+				"LK-88 青绿编发·蓝瞳": "1girl, solo, long teal hair, braided hair, blue eyes, gentle",
+				"LK-89 暗红长发·琥珀瞳": "1girl, solo, dark red hair, long hair, amber eyes, mature",
+				"LK-90 金双辫·蓝瞳": "1girl, solo, blonde hair, twin braids, blue eyes, young, bright",
+				"LK-91 灰长直·银瞳": "1girl, solo, long grey hair, straight hair, silver eyes, mysterious",
+				"LK-92 蓝短精灵·金瞳": "1girl, solo, short blue hair, pixie cut, gold eyes, athletic",
+				"LK-93 栗色卷发·榛瞳": "1girl, solo, long chestnut hair, wavy hair, hazel eyes, warm",
+				"LK-94 白发盲眼·素瞳": "1girl, solo, white hair, long hair, blind eyes, serene, pale",
+				"LK-95 黑双马尾·蓝瞳": "1girl, solo, black hair, twin tails, blue eyes, petite",
+				"LK-96 翡翠卷发·绿瞳": "1girl, solo, long emerald hair, curly hair, green eyes, rich",
+				"LK-97 棕锅盖头·棕瞳": "1girl, solo, short brown hair, bowl cut, brown eyes, quiet",
+				"LK-98 草莓金长发·粉瞳": "1girl, solo, long strawberry blonde hair, pink eyes, soft",
+				"LK-99 深紫长发·红瞳": "1girl, solo, dark purple hair, long hair, red eyes, gothic",
+				"LK-100 灰白长发·淡蓝瞳": "1girl, solo, ash white hair, long hair, pale blue eyes, ethereal",
+				"LK-101 金单辫·蓝瞳": "1girl, solo, long blonde hair, single braid, braided hair, blue eyes",
+				"LK-102 黑侧辫·棕瞳": "1girl, solo, black hair, side braid, braided hair, brown eyes",
+				"LK-103 银冠编·灰瞳": "1girl, solo, silver hair, crown braid, braided hair, grey eyes",
+				"LK-104 棕粗辫·绿瞳": "1girl, solo, brown hair, thick braid, braided hair, green eyes",
+			},
+
+			// ===== 情绪：40 种表情神态，可叠在任意 look 上 =====
+			mood: {
+				"MD-01 浅笑": "slight smile, looking at viewer, relaxed",
+				"MD-02 冷淡": "expressionless, half-closed eyes, blank stare",
+				"MD-03 挑衅": "smug smile, eyelids lowered, head tilted",
+				"MD-04 害羞": "heavy blush, looking away, embarrassed, sweatdrop",
+				"MD-05 惊讶": "wide eyes, open mouth, surprised, sweatdrop",
+				"MD-06 委屈": "teary eyes, pout, trembling lips, looking down",
+				"MD-07 疲惫": "tired eyes, dark circles, sighing, slouching",
+				"MD-08 专注": "focused, serious, narrowed eyes, closed mouth",
+				"MD-09 愉悦": "happy, closed eyes, wide smile, blush",
+				"MD-10 困惑": "confused, tilted head, question mark, raised eyebrow",
+				"MD-11 生气": "angry, frown, furrowed brow, puffed cheeks",
+				"MD-12 慵懒": "sleepy, half-closed eyes, yawning, relaxed",
+				"MD-13 深情": "looking at viewer, soft eyes, gentle smile, blush",
+				"MD-14 兴奋": "excited, sparkling eyes, open mouth, bright smile",
+				"MD-15 无表情凝视": "expressionless, staring, dead eyes, still",
+				"MD-16 苦笑": "forced smile, wry smile, half-closed eyes",
+				"MD-17 害羞别头": "blush, looking to the side, covering mouth, shy",
+				"MD-18 自信": "confident, smirk, chin up, sharp eyes",
+				"MD-19 得意": "proud, smug, hands on hips, chin raised",
+				"MD-20 失落": "sad, downcast eyes, drooping shoulders",
+				"MD-21 平静": "calm, neutral expression, serene",
+				"MD-22 思索": "thinking, hand on chin, looking up, thoughtful",
+				"MD-23 嘲笑": "grin, mocking smile, half-closed eyes",
+				"MD-24 紧张": "nervous, sweatdrop, darting eyes, stiff",
+				"MD-25 期待": "anticipation, sparkling eyes, slight smile, leaning forward",
+				"MD-26 满足": "satisfied, relaxed smile, closed eyes",
+				"MD-27 惊讶张嘴": "surprised, open mouth, wide eyes, raised eyebrows",
+				"MD-28 哭泣": "crying, tears, streaming tears, sad",
+				"MD-29 微笑闭眼": "gentle smile, closed eyes, peaceful",
+				"MD-30 冷漠侧目": "side glance, cold expression, unimpressed",
+				"MD-31 神秘微笑": "enigmatic smile, half-lidded eyes, mysterious",
+				"MD-32 蓄势": "determined, gritted teeth, intense stare",
+				"MD-33 恍惚": "dazed, unfocused eyes, parted lips",
+				"MD-34 惊喜": "surprised smile, bright eyes, open mouth",
+				"MD-35 厌恶": "disgusted, frowning, narrowed eyes, turned away",
+				"MD-36 沉默": "silent, closed mouth, lowered gaze",
+				"MD-37 威压": "intimidating, sharp stare, slight frown",
+				"MD-38 温柔": "tender expression, soft smile, warm eyes",
+				"MD-39 疲倦微笑": "tired smile, half-closed eyes, faint blush",
+				"MD-40 恍惚失神": "absent-minded, staring into space, blank expression",
+				"MD-41 冷眼蔑视": "scornful look, looking down on viewer, disdain, half-lidded",
+				"MD-42 惊愕": "shocked, wide eyes, open mouth, startled, recoiling",
+				"MD-43 强忍泪": "holding back tears, watery eyes, trembling lip, quivering",
+				"MD-44 戏谑挑逗": "smirk, teasing look, playful, half-lidded eyes, tongue out",
+				"MD-45 疲惫": "exhausted, tired eyes, sighing, drained, half-closed eyes",
+				"MD-46 专注凝视": "intense focus, fixed stare, determined, furrowed brow",
+				"MD-47 愉悦眯眼": "happy, closed eyes, gentle smile, content, relaxed",
+				"MD-48 恐惧": "fear, frightened expression, pale, trembling, wide eyes",
+				"MD-49 傲然": "proud, chin up, confident, imposing, superior gaze",
+				"MD-50 沉醉": "dazed, blissful, dreamy expression, half-lidded, flushed",
+				"MD-51 冷淡": "expressionless, deadpan, blank stare, unreadable, cold",
+				"MD-52 狂气": "manic grin, unhinged smile, wild eyes, crazed",
+				// ---- 表情补充（MD-53~MD-90）：正/负/怒/冷/强五族各自铺开 ----
+				"MD-53 愉悦微笑": "amused, light smile, eyes crinkled, relaxed",
+				"MD-54 怅然": "melancholic, distant gaze, faint sigh, quiet",
+				"MD-55 温柔凝视": "tender, soft gaze, slight blush, warm",
+				"MD-56 戒备": "wary, narrowed eyes, tense jaw, guarded",
+				"MD-57 释然": "relieved, exhaling, shoulders dropping, soft",
+				"MD-58 期待": "hopeful, bright eyes, small smile, leaning forward",
+				"MD-59 绝望": "desperate, grasping, wide eyes, strained",
+				"MD-60 认命": "resigned, closed eyes, slow breath, slack",
+				"MD-61 哀求": "pleading, upturned eyes, wet lashes, trembling",
+				"MD-62 好奇": "curious, head tilt, raised brow, bright",
+				"MD-63 懊悔": "regretful expression, looking down, tight mouth",
+				"MD-64 感激": "grateful, warm smile, moist eyes, sincere",
+				"MD-65 羞愧": "ashamed, averting eyes, red ears, shrinking",
+				"MD-66 孤寂": "lonely, empty stare, hollow, distant",
+				"MD-67 紧绷": "tense, clenched jaw, tight lips, rigid",
+				"MD-68 安详": "peaceful, closed eyes, faint smile, still",
+				"MD-69 挑衅": "challenging, stare down, grin, daring",
+				"MD-70 崩溃": "broken, unfocused eyes, tear tracks, slack jaw",
+				"MD-71 狡黠": "sly, side glance, smirk, knowing",
+				"MD-72 纯真": "innocent, wide eyes, soft smile, open",
+				"MD-73 悲恸": "grieving, eyes closed, tears welling, hunched",
+				"MD-74 惊骇": "horrified, frozen, wide eyes, pale, rigid",
+				"MD-75 满足": "content, half smile, relaxed brow, easy",
+				"MD-76 抱歉": "apologetic, wry smile, hand up, sheepish",
+				"MD-77 痛苦": "pained, grimace, eyes shut, strained",
+				"MD-78 惊叹": "amazed, open mouth, bright eyes, leaning in",
+				"MD-79 狐疑": "suspicious, side eye, frown, skeptical",
+				"MD-80 惘然": "wistful, faraway look, faint smile, distant",
+				"MD-81 倔强": "defiant, chin up, hard stare, unyielding",
+				"MD-82 慌乱": "flustered, red face, hands up, stammering",
+				"MD-83 木然": "stoic, flat expression, steady eyes, unmoved",
+				"MD-84 雀跃": "giddy, bright grin, bouncing, energetic",
+				"MD-85 悲凉": "sorrowful, downcast, quiet tears, heavy",
+				"MD-86 猎食": "predatory, intense stare, slight grin, hungry",
+				"MD-87 脆弱": "vulnerable, exposed, uncertain gaze, open",
+				"MD-88 烦躁": "irritated, clicking tongue, averted eyes, sharp",
+				"MD-89 入迷": "mesmerized, parted lips, fixed stare, absorbed",
+				"MD-90 得意": "triumphant, raised chin, sharp smile, victorious",
+			},
+
+			// ===== 附加特征：26 种可叠加的外观小件（不含发色瞳色）=====
+			extra: {
+				"EX-01 猫耳": "cat ears, animal ears",
+				"EX-02 狼耳": "wolf ears, animal ears, fluffy ears",
+				"EX-03 狐耳": "fox ears, animal ears, large ears",
+				"EX-04 兽尾": "animal tail, fluffy tail",
+				"EX-05 恶魔角": "demon horns, curved horns",
+				"EX-06 光环": "halo, glowing halo",
+				"EX-07 羽翼": "angel wings, feathered wings",
+				"EX-08 蝙蝠翼": "bat wings, demon wings",
+				"EX-09 细框眼镜": "glasses, thin frames, round glasses",
+				"EX-10 墨镜": "sunglasses, dark lenses",
+				"EX-11 口罩": "surgical mask, mouth mask",
+				"EX-12 面纱": "veil, translucent veil",
+				"EX-13 发带": "hairband, ribbon hairband",
+				"EX-14 发夹": "hair clip, hairpin, star hair ornament",
+				"EX-15 耳环": "earrings, dangling earrings",
+				"EX-16 项链": "necklace, pendant, choker",
+				"EX-17 项圈": "collar, leather collar, bell",
+				"EX-18 臂纹身": "tattoo, arm tattoo, tribal tattoo",
+				"EX-19 背纹身": "back tattoo, large tattoo",
+				"EX-20 脸部伤疤": "scar, scar on cheek, facial scar",
+				"EX-21 手臂绷带": "bandages, arm bandages, wrapped arm",
+				"EX-22 创可贴": "bandaid, bandaid on cheek",
+				"EX-23 唇环": "lip piercing, lip ring",
+				"EX-24 脐环": "navel piercing, navel ring",
+				"EX-25 指甲油": "nail polish, painted nails, black nails",
+				"EX-26 花冠": "flower crown, wreath of flowers",
+				// ---- 兽类特征（EX-27~EX-31、EX-48~EX-51）----
+				"EX-27 兔耳": "rabbit ears, long ears, fluffy",
+				"EX-28 熊耳": "bear ears, round ears, small",
+				"EX-29 羊角": "sheep horns, curled horns, ridged",
+				"EX-30 鹿角": "antlers, branching horns, tall",
+				"EX-31 龙角": "dragon horns, spiked horns, swept back",
+				"EX-32 独角": "single horn, unicorn horn, spiral",
+				"EX-33 猫尾": "cat tail, long tail, curled",
+				"EX-34 恶魔尾": "devil tail, pointed tail, thin",
+				"EX-35 蜥蜴尾": "lizard tail, scaled tail, thick",
+				"EX-36 狐尾": "fox tail, fluffy tail, large",
+				// ---- 翼与光环（EX-37~EX-41）----
+				"EX-37 虫翼": "insect wings, translucent wings, veined",
+				"EX-38 机械翼": "mechanical wings, metal wings, articulated",
+				"EX-39 幽灵翼": "spectral wings, ghostly wings, faint glow",
+				"EX-40 破损光环": "broken halo, cracked halo, dim",
+				"EX-41 黑色光环": "dark halo, black halo, hovering",
+				// ---- 面具与头饰（EX-42~EX-51）----
+				"EX-42 眼罩": "eyepatch, medical eyepatch, strap",
+				"EX-43 单片眼镜": "monocle, chain monocle, rimless",
+				"EX-44 头巾": "headscarf, wrapped head, cloth",
+				"EX-45 兜帽": "hood, hooded, shadow over eyes",
+				"EX-46 小王冠": "crown, small crown, jeweled",
+				"EX-47 头冠": "tiara, jewel tiara, delicate",
+				"EX-48 尖顶帽": "wizard hat, pointed hat, wide brim",
+				"EX-49 贝雷帽": "beret, tilted beret, soft",
+				"EX-50 修女头巾": "nun veil, habit, white coif",
+				"EX-51 护士帽": "nurse cap, white cap, pinned",
+				// ---- 耳型异变（EX-52~EX-55）----
+				"EX-52 尖耳": "pointed ears, elf ears, elegant",
+				"EX-53 长尖耳": "long pointed ears, elf ears, swept",
+				"EX-54 鳍耳": "fin ears, fish fins, webbed",
+				"EX-55 鳃": "gills, neck gills, slits",
+				// ---- 皮肤特征（EX-56~EX-63）----
+				"EX-56 鳞片": "scales, arm scales, iridescent",
+				"EX-57 结晶": "crystal growth, crystalline skin, faceted",
+				"EX-58 发光纹路": "glowing marks, faint glow, luminous lines",
+				"EX-59 符文刺青": "runic tattoo, glowing tattoo, symbols",
+				"EX-60 全身刺青": "full body tattoo, intricate tattoo, ink",
+				"EX-61 面部刺青": "facial tattoo, cheek tattoo, lines",
+				"EX-62 编号": "serial number, tattooed number, forearm",
+				"EX-63 分叉舌": "split tongue, forked tongue, unnatural",
+				// ---- 妆容与肤色（EX-64~EX-68）----
+				"EX-64 腮红纹": "blush marks, painted blush, cheek",
+				"EX-65 黑眼圈": "eyebags, dark circles, tired",
+				"EX-66 雀斑": "freckles, sun freckles, scattered",
+				"EX-67 泪痣": "mole under eye, beauty mark, single",
+				"EX-68 苍白皮肤": "pale skin, porcelain skin, translucent",
+				// ---- 伤痕（EX-69~EX-74）----
+				"EX-69 缝合伤": "stitches, stitched wound, thread",
+				"EX-70 烧伤疤": "burn scar, healed burn, textured",
+				"EX-71 爪痕": "claw marks, three scars, parallel",
+				"EX-72 淤青": "bruise, bruised cheek, purple",
+				"EX-73 眼部伤疤": "scarred eye, scar over eye, pale",
+				"EX-74 绷带眼": "bandaged eye, eye bandage, white",
+				// ---- 束具与链饰（EX-75~EX-80）----
+				"EX-75 铃铛颈环": "choker with bell, ribbon choker, small bell",
+				"EX-76 身体束带": "harness straps, body harness, leather",
+				"EX-77 臂环": "armband, arm band, tight",
+				"EX-78 腿环": "thigh strap, leg strap, garter",
+				"EX-79 脚链": "anklet, chain anklet, small links",
+				"EX-80 身体链": "body chain, chain jewelry, draped",
+			},
+
+			// ===== 服饰：40 段（与 SEG 的 73 段互补，合并后共 113 种）=====
+			outfit: {
+				"RO-01 洛丽塔洋装": "lolita fashion, frilled dress, layered skirt, petticoat, ribbon",
+				"RO-02 芭蕾舞裙": "ballet outfit, tutu, leotard, ballet slippers",
+				"RO-03 汉服襦裙": "hanfu, ruqun, wide sleeves, flowing fabric, sash",
+				"RO-04 修女服": "nun habit, wimple, black robe with white collar",
+				"RO-05 三角比基尼": "bikini, string bikini, triangle bikini",
+				"RO-06 吊带睡裙": "camisole, short slip dress, thin straps",
+				"RO-07 开衫加T恤": "cardigan, t-shirt, casual outfit, jeans",
+				"RO-08 牛仔短裤背心": "denim shorts, tank top, casual, bare arms",
+				"RO-09 百褶裙衬衫": "pleated skirt, white blouse, ribbon tie",
+				"RO-10 毛衣裙": "sweater dress, turtleneck, knitwear, long sleeves",
+				"RO-11 长风衣": "long coat, trench coat, belted waist",
+				"RO-12 皮夹克": "leather jacket, black jacket, zipper",
+				"RO-13 运动短裤背心": "sports bra, shorts, athletic wear",
+				"RO-14 露背长裙": "backless dress, long dress, open back",
+				"RO-15 真丝睡袍": "silk robe, bathrobe, loose robe, sash",
+				"RO-16 敞开衬衫内衣": "open shirt, underwear, unbuttoned shirt",
+				"RO-17 浴衣半脱": "yukata, off shoulder, loose yukata",
+				"RO-18 泳池泳装": "one-piece swimsuit, swimwear, wet",
+				"RO-19 制服丝袜": "school uniform, pantyhose, black tights",
+				"RO-20 高叉连体泳衣": "highleg swimsuit, competitive swimsuit",
+				"RO-21 背带裤": "overalls, denim overalls, straps",
+				"RO-22 紧身牛仔短上衣": "skinny jeans, crop top, midriff",
+				"RO-23 针织连衣裙": "knit dress, ribbed knit, fitted",
+				"RO-24 雪纺衬衫": "chiffon blouse, sheer fabric, translucent",
+				"RO-25 斗篷": "cloak, hooded cloak, cape",
+				"RO-26 皮裤": "leather pants, tight leather, shiny",
+				"RO-27 腰带连衣裙": "dress, belt, cinched waist",
+				"RO-28 校服外套": "blazer, school blazer, uniform",
+				"RO-29 沙滩罩衫": "beach cover-up, sheer cover-up, sarong",
+				"RO-30 无袖短连衣裙": "sleeveless dress, short dress, bare shoulders",
+				"RO-31 马甲衬衫": "vest, waistcoat, dress shirt, tie",
+				"RO-32 短款皮草": "fur coat, cropped fur jacket, fluffy",
+				"RO-33 工装裤": "cargo pants, utility pants, pockets",
+				"RO-34 露肩针织衫": "off shoulder sweater, loose knit, bare shoulders",
+				"RO-35 丝绸睡裙": "silk nightgown, satin, thin straps, long",
+				"RO-36 吊带袜": "garter belt, thighhighs, stockings",
+				"RO-37 运动紧身衣": "bodysuit, sportswear, tight fit, athletic",
+				"RO-38 泳衣外披衬衫": "swimsuit, open shirt, beach outfit",
+				"RO-39 短款和服": "short kimono, modified kimono, obi",
+				"RO-40 女式西装三件套": "three-piece suit, tailored, waistcoat, trousers",
+				// ---- 服饰补充（RO-41~RO-77）：职业制服、民族装、功能装各线铺开 ----
+				"RO-41 军装常服": "military dress uniform, epaulettes, medals, crisp",
+				"RO-42 飞行夹克": "bomber jacket, shearling collar, patches, worn",
+				"RO-43 风衣礼帽": "trench coat, fedora, rain, collar up",
+				"RO-44 睡衣衬衫": "oversized sleep shirt, bare legs, loose",
+				"RO-45 缎面吊带裙": "slip dress, satin, thin straps, midi",
+				"RO-46 宽针织开衫": "oversized cardigan, knit, sleeves past hands",
+				"RO-47 高领毛衣": "turtleneck sweater, fitted, long sleeves",
+				"RO-48 皮草披肩": "fur stole, draped over shoulders, glamorous",
+				"RO-49 复古运动外套": "track jacket, zip up, stripes, retro",
+				"RO-50 棒球服": "baseball jersey, baggy, number print",
+				"RO-51 潜水服": "wetsuit, neoprene, tight, zipper back",
+				"RO-52 羽绒服": "down jacket, puffy, hood, winter",
+				"RO-53 雨披": "rain poncho, plastic, translucent, hood",
+				"RO-54 厨房围裙": "apron, tied at back, kitchen, flour stains",
+				"RO-55 白大褂配围巾": "lab coat, scarf, clipboard, professional",
+				"RO-56 燕尾服": "tuxedo, tailcoat, bow tie, formal",
+				"RO-57 舞会长裙": "ball gown, voluminous skirt, corset bodice",
+				"RO-58 阿拉伯长袍": "abaya, flowing robe, headscarf, modest",
+				"RO-59 纱丽": "sari, draped fabric, gold trim, elegant",
+				"RO-60 韩服": "hanbok, jeogori, chima, colorful",
+				"RO-61 哥特修女": "gothic nun, black habit, silver cross, veiled",
+				"RO-62 战地军医": "field medic uniform, red cross, pouches",
+				"RO-63 消防战斗服": "firefighter turnout gear, reflective stripes, helmet",
+				"RO-64 赛车服": "racing suit, sponsor logos, tight, helmet",
+				"RO-65 击剑服": "fencing uniform, white, mask under arm",
+				"RO-66 马术装": "riding habit, breeches, tall boots, helmet",
+				"RO-67 舞会短裙": "prom dress, tulle, glitter, strapless",
+				"RO-68 毛衣背心裙": "sweater vest, pleated skirt, school",
+				"RO-69 吊带热裤": "camisole, hot pants, bare legs, summer",
+				"RO-70 素色浴衣": "yukata, cotton, simple pattern, obi",
+				"RO-71 战术裙装": "tactical dress, straps, holster, boots",
+				"RO-72 破损礼服": "torn gown, ripped fabric, dirt stains, ruined",
+				"RO-73 机甲驾驶服": "plug suit, skin tight, interface ports, glossy",
+				"RO-74 太空服": "spacesuit, helmet under arm, patches, bulky",
+				"RO-75 教士袍": "cassock, clerical collar, floor length",
+				"RO-76 侦察伪装": "recon camouflage, scrim net, face paint",
+				"RO-77 潜水装备": "diving gear, wetsuit, mask, oxygen tank",
+			},
+
+			// ===== 道具：30 段（与 SEG 的 55 段互补，合并后共 85 种）=====
+			prop: {
+				"RI-01 书本": "book, holding book, open book",
+				"RI-02 茶杯": "teacup, holding cup, tea",
+				"RI-03 花束": "bouquet, holding flowers",
+				"RI-04 黑伞": "black umbrella, holding umbrella",
+				"RI-05 手机": "smartphone, holding phone, phone",
+				"RI-06 相机": "camera, holding camera, photographing",
+				"RI-07 吉他": "guitar, holding guitar, acoustic guitar",
+				"RI-08 小提琴": "violin, holding violin, bow",
+				"RI-09 猫咪": "cat, holding cat, cat on lap",
+				"RI-10 玩偶": "plush toy, holding stuffed animal, doll",
+				"RI-11 蜡烛": "candle, holding candle, candlelight",
+				"RI-12 手镜": "hand mirror, holding mirror",
+				"RI-13 折扇": "folding fan, holding fan, paper fan",
+				"RI-14 蕾丝伞": "lace parasol, frilled umbrella, holding parasol",
+				"RI-15 吊坠项链": "pendant, locket, holding pendant",
+				"RI-16 长耳坠": "long earrings, dangling jewelry",
+				"RI-17 戒指": "ring, jewelry, ring on finger",
+				"RI-18 发簪": "hair stick, hairpin, kanzashi",
+				"RI-19 花冠": "flower crown, wearing wreath",
+				"RI-20 蝴蝶结": "ribbon, hair ribbon, bow",
+				"RI-21 围巾": "scarf, muffler, wrapped scarf",
+				"RI-22 手套": "gloves, long gloves, black gloves",
+				"RI-23 长筒袜": "thighhighs, stockings, zettai ryouiki",
+				"RI-24 高跟鞋": "high heels, stiletto heels",
+				"RI-25 长靴": "boots, knee boots, leather boots",
+				"RI-26 背包": "backpack, shoulder bag, satchel",
+				"RI-27 行李箱": "suitcase, luggage, holding suitcase",
+				"RI-28 提灯": "lantern, holding lantern, glowing",
+				"RI-29 怀表": "pocket watch, holding watch, chain",
+				"RI-30 羽毛笔": "quill, feather pen, writing",
+				"RI-31 长柄黑伞": "black umbrella, long handle, held over shoulder",
+				"RI-32 复古相机": "vintage camera, film camera, neck strap, held to eye",
+				"RI-33 纸提灯": "paper lantern, warm glow, held by handle",
+				"RI-34 团扇": "round fan, uchiwa, flat face, held by handle",
+				"RI-35 烟斗": "smoking pipe, thin smoke, held between fingers",
+				"RI-36 锁链": "chain, shackle, wrapped around wrist, hanging links",
+				"RI-37 干花束": "dried flowers, wrapped in kraft paper, muted colors",
+				"RI-38 半脸面具": "half mask, held in hand, ornate",
+				"RI-39 咖啡杯": "coffee cup, ceramic mug, steam rising, saucer",
+				"RI-40 匕首": "dagger, blade, held reverse grip, glint",
+				"RI-41 羽扇": "feather fan, large, colorful plumes",
+				"RI-42 旧书与怀表": "old book, pocket watch, chain, antique leather",
+				// ---- 冷兵器（RI-43~RI-50）----
+				"RI-43 长剑": "longsword, steel blade, held with both hands, guard",
+				"RI-44 日本刀": "katana, sheathed at side, scabbard, hilt wrap",
+				"RI-45 弓": "bow, drawn string, arrow nocked, archery stance",
+				"RI-46 长枪": "spear, long shaft, held upright, spearhead",
+				"RI-47 战斧": "battle axe, heavy head, held one handed",
+				"RI-48 苦无": "kunai, short blade, held point down",
+				"RI-49 双匕首": "dual daggers, one in each hand, reverse grip",
+				"RI-50 巨镰": "scythe, long curved blade, resting on shoulder",
+				// ---- 乐器（RI-51~RI-56）----
+				"RI-51 钢琴": "piano, seated at keyboard, hands on keys",
+				"RI-52 长笛": "flute, held to lips, fingers on holes",
+				"RI-53 大提琴": "cello, bow across strings, seated",
+				"RI-54 手风琴": "accordion, held with both arms, bellows",
+				"RI-55 太鼓": "taiko drum, drumsticks raised, wide stance",
+				"RI-56 口琴": "harmonica, held to mouth, cupped hands",
+				// ---- 食物饮品（RI-57~RI-64）----
+				"RI-57 苹果": "apple, held, bite taken, red skin",
+				"RI-58 面包": "bread loaf, held, torn crust",
+				"RI-59 咖啡纸杯": "paper coffee cup, steam, held with both hands",
+				"RI-60 酒瓶": "wine bottle, held by neck, glass",
+				"RI-61 冰淇淋": "ice cream cone, licking, melting drip",
+				"RI-62 便当": "bento box, chopsticks, held open",
+				"RI-63 蛋糕": "cake slice, fork, small plate",
+				"RI-64 棒棒糖": "lollipop, held, candy swirl",
+				// ---- 电子设备（RI-65~RI-70）----
+				"RI-65 笔记本电脑": "laptop, open screen, typing, glow on face",
+				"RI-66 耳机": "headphones, over ears, worn, cord",
+				"RI-67 掌机": "handheld console, controller, both hands, screen glow",
+				"RI-68 平板": "tablet, stylus, drawing on screen",
+				"RI-69 收音机": "radio, antenna extended, dial, static",
+				"RI-70 显示器": "monitor, screen glow, desk setup, cables",
+				// ---- 工具（RI-71~RI-76）----
+				"RI-71 扳手": "wrench, held, grease on hands",
+				"RI-72 锤子": "hammer, nails, workshop bench",
+				"RI-73 锯": "saw, wood plank, sawdust",
+				"RI-74 螺丝刀": "screwdriver, small parts, workbench",
+				"RI-75 手电筒": "flashlight, narrow beam, dark surroundings",
+				"RI-76 绳索": "rope coil, over shoulder, knotted",
+				// ---- 植物（RI-77~RI-81）----
+				"RI-77 单枝玫瑰": "single rose, thorny stem, held up",
+				"RI-78 向日葵": "sunflower, tall stem, held, bright petals",
+				"RI-79 盆栽": "potted plant, small ceramic pot, held",
+				"RI-80 落叶": "fallen leaf, resting in palm, autumn color",
+				"RI-81 藤蔓": "vine, wrapped around arm, green leaves",
+				// ---- 动物（RI-82~RI-86）----
+				"RI-82 黑猫": "black cat, held in arms, tail curled",
+				"RI-83 白鸽": "white dove, perched on hand, wings half open",
+				"RI-84 蝴蝶": "butterfly, resting on fingertip, wings open",
+				"RI-85 蛇": "snake, coiled around arm, scales, tongue out",
+				"RI-86 乌鸦": "crow, perched on shoulder, black feathers",
+				// ---- 织物（RI-87~RI-92）----
+				"RI-87 披风": "cape, flowing in wind, clasped at neck",
+				"RI-88 面纱": "veil, translucent, over face, drifting",
+				"RI-89 绷带卷": "bandage roll, unwinding, white gauze",
+				"RI-90 毛毯": "blanket, wrapped around shoulders, thick",
+				"RI-91 旗帜": "flag on pole, fabric rippling, wind",
+				"RI-92 长丝带": "long ribbon, flowing, held at one end",
+				// ---- 家具（RI-93~RI-97）----
+				"RI-93 木椅": "wooden chair, sitting sideways, arm over back",
+				"RI-94 全身镜": "standing mirror, full length, reflection",
+				"RI-95 沙发": "sofa, sinking into cushions, sprawling",
+				"RI-96 梯子": "ladder, leaning on wall, climbing",
+				"RI-97 浴缸": "bathtub, water surface, edge, steam",
+				// ---- 车辆与大型（RI-98~RI-102）----
+				"RI-98 自行车": "bicycle, standing beside, hand on handlebar",
+				"RI-99 摩托车": "motorcycle, straddling seat, helmet in hand",
+				"RI-100 滑板": "skateboard, foot on deck, held by truck",
+				"RI-101 船桨": "oar, rowing motion, water dripping",
+				"RI-102 风筝线": "kite string, held taut, wind pull, kite above",
+			},
+
+			// ===== 动作：30 段（与 SEG 的 60 段互补，合并后共 90 种）=====
+			pose: {
+				"RQ-01 双手交叠身前": "standing, hands clasped, hands in front",
+				"RQ-02 手指抵唇": "finger to mouth, shushing, hand near face",
+				"RQ-03 侧身撩发": "hand in hair, brushing hair, looking away",
+				"RQ-04 双手插兜": "hands in pockets, standing, casual",
+				"RQ-05 单手撑下巴": "hand on own cheek, resting chin, elbow on surface",
+				"RQ-06 抱臂站立": "crossed arms, standing, confident",
+				"RQ-07 背手站立": "arms behind back, standing, chest out",
+				"RQ-08 抬腿踩台阶": "one leg up, foot on step, leaning",
+				"RQ-09 侧身回望": "looking back, turning head, side view",
+				"RQ-10 蹲下摸猫": "crouching, petting cat, hand extended",
+				"RQ-11 坐地双腿伸展": "sitting, legs extended, sitting on floor",
+				"RQ-12 屈膝抱腿": "knees up, hugging knees, sitting",
+				"RQ-13 趴在桌上": "lying on table, head down, arms folded",
+				"RQ-14 仰躺举手": "lying on back, arms up, looking up",
+				"RQ-15 侧卧托头": "lying on side, head resting on hand, propped up",
+				"RQ-16 靠墙单脚站": "leaning against wall, one leg bent, standing",
+				"RQ-17 跪坐双手放膝": "seiza, hands on lap, kneeling",
+				"RQ-18 俯身拾物": "bending over, reaching down, picking up",
+				"RQ-19 转身甩发": "turning, hair flip, motion blur",
+				"RQ-20 踮脚伸手": "tiptoes, reaching up, arm extended",
+				"RQ-21 双手合十": "hands together, praying, pleading",
+				"RQ-22 单手比心": "finger heart, hand gesture, smiling",
+				"RQ-23 敬礼": "salute, hand to forehead, standing",
+				"RQ-24 张开双臂": "outstretched arms, open arms, welcoming",
+				"RQ-25 背对回头": "from behind, looking back, over shoulder",
+				"RQ-26 双手抱头": "hands on own head, holding head, elbows out",
+				"RQ-27 托腮趴卧": "lying on stomach, hand on chin, looking at viewer",
+				"RQ-28 交叉腿坐": "crossed legs, sitting, on chair",
+				"RQ-29 单手扶额": "hand on own forehead, sighing, exasperated",
+				"RQ-30 蜷缩抱膝": "fetal position, curled up, hugging knees",
+				"RQ-31 凌空跃起": "jumping, midair, arms spread, legs apart, dynamic",
+				"RQ-32 回眸": "looking back, turning head, over shoulder, walking away",
+				"RQ-33 单手撑地": "one hand on ground, low stance, crouched, supporting weight",
+				"RQ-34 倒挂": "hanging upside down, inverted, suspended, hair falling",
+				"RQ-35 悬空漂浮": "floating, levitating, weightless, hair flowing, off ground",
+				"RQ-36 全身伸展": "stretching, arms up, arching back, elongated, reaching",
+				"RQ-37 俯身向前": "leaning forward, bending over, reaching out, low",
+				"RQ-38 跪伏叩首": "prostrating, bowing, forehead to ground, kneeling low",
+				"RQ-39 双手抱头": "hands on head, holding head, distressed, elbows out",
+				"RQ-40 单腿独立": "standing on one leg, one leg raised, balancing, graceful",
+				"RQ-41 侧身扭转": "twisting torso, side bend, contrapposto, twisted waist",
+				"RQ-42 冲锋": "charging forward, running toward viewer, aggressive, dynamic",
+				"RQ-43 后仰倒落": "falling backward, mid-fall, arms out, off balance",
+				"RQ-44 角落蜷缩": "curled up in corner, defensive, small, hugging self",
+				"RQ-45 盘腿而坐": "cross-legged sitting, lotus position, meditating, upright",
+				"RQ-46 斜倚侧卧": "reclining on side, propped on elbow, lounging, relaxed",
+				"RQ-47 举手示意": "raising hand, waving, greeting, arm up",
+				"RQ-48 背后共手": "hands behind back, standing straight, formal, chin up",
+				"RQ-49 战斗架势": "fighting stance, guard up, ready, martial arts, wide footing",
+				"RQ-50 失重下坠": "falling, free fall, weightless, arms trailing, upside",
+				// ---- 动态族补充（RQ-51~RQ-60）：跑跳爬蹲靠是最容易缺的，原来各只有一两条 ----
+				"RQ-51 疾跑侧身": "sprinting, side view, arms pumping, leaning far forward, motion blur",
+				"RQ-52 起跑冲刺": "crouched start, one knee down, hands on ground, ready to run",
+				"RQ-53 跃起伸展": "leaping, legs extended, arms wide, airborne, stretched",
+				"RQ-54 落地缓冲": "landing pose, knees bent, one hand on ground, absorbing impact",
+				"RQ-55 攀爬": "climbing, gripping ledge, one leg up, muscles tense, straining",
+				"RQ-56 匍匐前进": "crawling prone, on elbows, dragging body, low to ground",
+				"RQ-57 蹲伏观察": "crouching low, one knee down, peering forward, alert",
+				"RQ-58 深蹲": "deep squat, heels down, hands forward, balanced",
+				"RQ-59 靠墙滑坐": "sliding down wall, sitting, legs out, slumped",
+				"RQ-60 背靠墙站": "back against wall, one foot on wall, arms crossed, standing",
+				// ---- 双人互动（RQ-61~RQ-68）：单人池里补出关系张力 ----
+				"RQ-61 背对背": "back to back, two people, standing, tension",
+				"RQ-62 牵手": "holding hands, two people, walking together",
+				"RQ-63 拥抱": "hugging, embrace, arms around, close",
+				"RQ-64 肩扛": "carrying over shoulder, fireman carry, holding legs",
+				"RQ-65 公主抱": "bridal carry, held in arms, arms around neck",
+				"RQ-66 对峙": "facing off, two people, tense, locked eye contact",
+				"RQ-67 俯身耳语": "leaning in, whispering, very close, hand on shoulder",
+				"RQ-68 推开": "pushing away, hand on chest, resisting, recoiling",
+				// ---- 特殊环境（RQ-69~RQ-74）----
+				"RQ-69 涉水前行": "wading, waist deep water, pushing forward, wet clothes",
+				"RQ-70 水下漂浮": "floating underwater, hair drifting, arms out, bubbles",
+				"RQ-71 水中悬浮": "submerged, suspended, bubbles rising, light from above",
+				"RQ-72 雪地跪坐": "kneeling in snow, hands on thighs, breath fog, cold",
+				"RQ-73 风中站立": "standing against wind, clothes whipping, hair streaming",
+				"RQ-74 逆光剪影": "standing silhouette, backlit, arms at sides, stark outline",
+				// ---- 情绪化姿态（RQ-75~RQ-82）----
+				"RQ-75 抱头蹲下": "crouching, hands over ears, rocking, overwhelmed",
+				"RQ-76 掩面": "covering face with hands, crying, shoulders shaking",
+				"RQ-77 仰天张臂": "arms spread wide, head back, mouth open, dramatic",
+				"RQ-78 攥拳": "clenched fists, tense arms, standing, anger",
+				"RQ-79 护住胸口": "arms crossed over chest, defensive, hunched, guarding",
+				"RQ-80 后退半步": "stepping back, recoiling, off balance, startled",
+				"RQ-81 颤抖抱臂": "hugging self, shivering, shoulders up, cold",
+				"RQ-82 低头垂手": "head down, arms limp at sides, defeated, empty",
+				// ---- 倚靠放松（RQ-83~RQ-90）----
+				"RQ-83 斜靠栏杆": "leaning on railing, elbows, gazing out, relaxed",
+				"RQ-84 倚门框": "leaning on doorframe, shoulder, one leg crossed",
+				"RQ-85 半躺沙发": "reclining on sofa, one leg over armrest, lounging",
+				"RQ-86 趴在栏杆": "draped over railing, arms hanging, limp",
+				"RQ-87 靠树而坐": "sitting against tree trunk, legs stretched, resting",
+				"RQ-88 悬坐边缘": "sitting on edge, legs dangling, hands gripping",
+				"RQ-89 趴地看书": "lying on stomach, elbows on ground, book in front",
+				"RQ-90 侧躺望天": "lying on side, gazing up, arm under head, idle",
+				// ---- 动态补充（RQ-91~RQ-100）：跑族原来只有两条，抽三次等于没换 ----
+				"RQ-91 全速冲刺": "full sprint, body horizontal, arms wide, speed lines, dynamic",
+				"RQ-92 急停转身": "skidding stop, turning, dust kick, momentum, abrupt",
+				"RQ-93 越过障碍": "vaulting over, one hand on obstacle, legs tucked, clearing",
+				"RQ-94 被拖行": "being dragged, arm pulled, resistance, limp legs",
+				"RQ-95 挣脱": "breaking free, twisting out of grip, torn clothes, struggling",
+				"RQ-96 追击": "pursuing, running toward, reaching out, intense, closing in",
+				"RQ-97 逃离": "fleeing, running away, glancing back, panic, urgency",
+				"RQ-98 疾走": "walking fast, long stride, coat flaring, determined",
+				"RQ-99 腾空翻转": "mid-air twist, flipping, limbs loose, upside, airborne",
+				"RQ-100 跃下": "jumping down, arms out, coat billowing, height, falling",
+				// ---- 爬与趴（RQ-101~RQ-106）：这两族被跑族吃掉大半判定词后只剩三四条 ----
+				"RQ-101 攀岩": "rock climbing, gripping hold, body stretched, straining, vertical",
+				"RQ-102 翻越窗台": "climbing through window, one leg over sill, leaning in",
+				"RQ-103 贴地爬行": "belly crawl, flat on ground, arms forward, dragging",
+				"RQ-104 四肢着地": "on hands and knees, head down, back arched, low",
+				"RQ-105 伏地": "flat on ground, face down, arms out, motionless",
+				"RQ-106 扑倒": "diving low, body flat, arms forward, tackling",
+			},
+
+			// ===== 场景：30 段（与 SEG 的 40 段互补，合并后共 70 种）=====
+			scene: {
+				"RS-01 樱花树下": "cherry blossoms, sakura tree, petals falling, spring",
+				"RS-02 向日葵花田": "sunflower field, summer, blue sky",
+				"RS-03 竹林": "bamboo forest, green, dappled light",
+				"RS-04 神社": "shrine, torii gate, stone steps",
+				"RS-05 温泉": "hot spring, steam, rocks, outdoor bath",
+				"RS-06 泳池边": "poolside, swimming pool, water surface",
+				"RS-07 咖啡馆": "cafe, interior, window seat, coffee",
+				"RS-08 酒吧": "bar, dim lighting, bottles, counter",
+				"RS-09 面包店": "bakery, bread display, warm light",
+				"RS-10 书店": "bookstore, bookshelves, narrow aisle",
+				"RS-11 音乐教室": "music room, piano, window light",
+				"RS-12 天台黄昏": "rooftop, sunset, orange sky, railing",
+				"RS-13 河堤": "riverbank, grass, water, slope",
+				"RS-14 桥上": "bridge, railing, river below",
+				"RS-15 码头": "dock, pier, wooden planks, sea",
+				"RS-16 灯塔": "lighthouse, rocky shore, ocean",
+				"RS-17 雪中小屋": "snowy cabin, winter, warm light from window",
+				"RS-18 森林小径": "forest path, trees, moss, sunlight",
+				"RS-19 洞穴": "cave, stalactites, dark, dripping water",
+				"RS-20 沙丘": "desert dunes, sand, heat haze",
+				"RS-21 火山口": "volcano, crater, lava glow, ash",
+				"RS-22 太空站": "space station, stars, weightless, metal interior",
+				"RS-23 赛博街道": "cyberpunk street, neon signs, night, rain",
+				"RS-24 废墟教堂": "ruined church, broken windows, debris",
+				"RS-25 地下酒吧": "underground bar, brick walls, low ceiling",
+				"RS-26 列车顶": "on top of train, moving, wind, sky",
+				"RS-27 天台泳池": "rooftop pool, city view, night",
+				"RS-28 温室": "greenhouse, glass roof, plants, humid",
+				"RS-29 图书馆深处": "library, tall shelves, dusty light",
+				"RS-30 雨夜街道": "rainy street at night, wet asphalt, reflections",
+				"RS-31 暴雨街头": "heavy rain, storm, wet street, puddles, dark sky, downpour",
+				"RS-32 暴雪荒原": "snowfield, blizzard, bare tree, whiteout, freezing air",
+				"RS-33 废墟都市": "ruined city, collapsed buildings, debris, overgrown ruins",
+				"RS-34 霓虹窄巷": "neon alley, narrow street, hanging signs, wet ground, night",
+				"RS-35 樱花回廊": "cherry blossom tunnel, petals falling, pink canopy, spring",
+				"RS-36 废弃教堂": "abandoned church, broken stained glass, dust beams, pews",
+				"RS-37 巨型图书馆": "vast library, towering bookshelves, warm lamplight, dust motes",
+				"RS-38 玻璃温室": "greenhouse, glass panels, overgrown plants, humid air, condensation",
+				"RS-39 城市天台": "rooftop, city skyline, dusk, wind, metal railing",
+				"RS-40 深夜地铁": "empty subway car, fluorescent light, late night, swaying strap",
+				"RS-41 神社参道": "shrine path, torii gates, stone lanterns, mist, gravel",
+				"RS-42 昏暗酒吧": "dim bar interior, bottle shelves, amber light, smoke haze",
+				"RS-43 海底遗迹": "underwater ruins, submerged columns, caustics, blue light",
+				"RS-44 云海之上": "above the clouds, sea of clouds, sunrise, high altitude",
+				"RS-45 荒漠公路": "desert highway, heat haze, endless road, empty horizon",
+				"RS-46 竹林深处": "bamboo forest, green filtered light, narrow path, mist",
+				"RS-47 工厂废墟": "abandoned factory, rusted machinery, shattered windows, industrial",
+				"RS-48 花海斜坡": "flower field, hillside slope, full bloom, breeze, sunlight",
+				"RS-49 夜晚海边": "night beach, dark waves, moonlight reflection, wet sand",
+				"RS-50 镜面房间": "mirror room, infinite reflection, white void, endless corridor",
+				// ---- 自然地貌（RS-51~RS-65）：明亮、开阔、有呼吸感的户外 ----
+				"RS-51 高山草甸": "alpine meadow, distant peaks, wildflowers, thin air, clear sky",
+				"RS-52 峡谷深处": "deep canyon, red rock walls, narrow light shaft, river below",
+				"RS-53 火山口": "volcanic crater, lava glow, ash clouds, scorched ground",
+				"RS-54 冰川裂隙": "glacier crevasse, blue ice, deep crack, frozen silence",
+				"RS-55 沼泽湿地": "swamp, stagnant water, hanging moss, fog, reeds",
+				"RS-56 洞穴深处": "cave interior, stalactites, dripping water, absolute dark",
+				"RS-57 瀑布底部": "waterfall base, spray, mossy rocks, rainbow mist",
+				"RS-58 秋季山林": "autumn forest, red and gold leaves, fallen leaves, crisp air",
+				"RS-59 湖泊清晨": "lakeside dawn, still water, mist on surface, mirror reflection",
+				"RS-60 沙漠绿洲": "desert oasis, palm trees, water pool, dunes beyond",
+				"RS-61 悬崖边缘": "cliff edge, sheer drop, wind, sea far below",
+				"RS-62 草原孤树": "grassland, single lone tree, wide sky, wind in grass",
+				"RS-63 苔原冻土": "tundra, permafrost, sparse moss, grey sky, emptiness",
+				"RS-64 早春樱枝": "bare cherry branches, scattered blossoms, early spring, cold air",
+				"RS-65 岩石海岸": "rocky shore, tide pools, waves crashing, salt spray, gulls",
+				// ---- 城市肌理（RS-66~RS-77）----
+				"RS-66 十字路口": "city intersection, crosswalk, traffic lights, crowd",
+				"RS-67 高架桥下": "under overpass, concrete pillars, graffiti, hard shadows",
+				"RS-68 便利店": "convenience store interior, fluorescent, shelves, late night",
+				"RS-69 教室午后": "classroom, desks in rows, blackboard, afternoon light",
+				"RS-70 医院走廊2": "hospital corridor, white walls, gurney, sterile, echoing",
+				"RS-71 停车场": "parking garage, concrete, fluorescent tubes, empty cars",
+				"RS-72 码头栈桥": "harbor pier, wooden planks, moored boats, gulls, salt air",
+				"RS-73 铁路道口": "railway crossing, tracks, warning lights, gravel, waiting",
+				"RS-74 商业街": "shopping street, shop signs, awnings, pedestrians, daytime",
+				"RS-75 学校天台2": "school rooftop, water tank, chain fence, city below",
+				"RS-76 天桥": "pedestrian bridge, glass walls, traffic below, night",
+				"RS-77 旧公寓楼": "old apartment building, balconies, laundry lines, narrow stairs",
+				// ---- 室内（RS-78~RS-87）----
+				"RS-78 卧室": "bedroom, unmade bed, curtains, morning light, lived-in",
+				"RS-79 浴室": "bathroom, tiled walls, fogged mirror, steam",
+				"RS-80 厨房": "kitchen, counter, hanging pots, window light, warm",
+				"RS-81 书房": "study room, desk lamp, stacked books, scattered papers",
+				"RS-82 咖啡馆": "cafe interior, wooden tables, espresso machine, warm tones",
+				"RS-83 剧院观众席": "theater seats, red velvet, stage light, empty house",
+				"RS-84 博物馆展厅": "museum hall, glass cases, spotlights, marble floor",
+				"RS-85 实验室": "laboratory, glassware, monitors, cold light, clean",
+				"RS-86 拘留室": "holding cell, iron bars, concrete bench, single bulb",
+				"RS-87 机房": "server room, racks, blinking lights, cold air, hum",
+				// ---- 废墟（RS-88~RS-95）----
+				"RS-88 废弃游乐园": "abandoned amusement park, rusty ferris wheel, weeds, silence",
+				"RS-89 战后街区": "war-torn street, rubble, broken walls, smoke, ruin",
+				"RS-90 荒村": "abandoned village, collapsed roofs, overgrown, utter silence",
+				"RS-91 沉船内部": "sunken ship interior, tilted corridor, algae, dark water",
+				"RS-92 废弃泳池": "empty swimming pool, cracked tiles, dead leaves, echo",
+				"RS-93 废墟图书馆": "ruined library, fallen shelves, scattered books, dust",
+				"RS-94 废弃车站": "abandoned train station, stopped clock, empty platform",
+				"RS-95 倒塌教堂": "collapsed cathedral, broken arches, rubble, light through holes",
+				// ---- 幻想异界（RS-96~RS-103）----
+				"RS-96 浮空岛": "floating islands, waterfalls into void, clouds below",
+				"RS-97 魔法阵": "magic circle, glowing runes, floating particles, dark hall",
+				"RS-98 神殿内部": "ancient temple interior, colossal pillars, torchlight",
+				"RS-99 异界城堡": "otherworldly castle, impossible architecture, purple sky",
+				"RS-100 龙巢": "dragon's lair, scattered bones, gold hoard, immense cavern",
+				"RS-101 水晶洞": "crystal cavern, glowing crystals, prismatic light",
+				"RS-102 深渊边缘": "abyss edge, bottomless dark, faint glow far below",
+				"RS-103 星门": "stargate, ring structure, energy field, cosmic scale",
+				// ---- 水域（RS-104~RS-108）----
+				"RS-104 珊瑚礁": "coral reef, colorful fish, clear water, sunlight shafts",
+				"RS-105 海面风暴": "stormy sea surface, huge waves, dark clouds, spray",
+				"RS-106 冰湖": "frozen lake, cracked ice, snow dust, absolute silence",
+				"RS-107 水下森林": "underwater kelp forest, green filtered light, drifting",
+				"RS-108 温泉": "hot spring, rising steam, wet rocks, mountain backdrop",
+				// ---- 高空与太空（RS-109~RS-115）----
+				"RS-109 云层之上": "above cloud layer, sun, endless white, airplane wing",
+				"RS-110 热气球": "hot air balloon basket, open sky, distant ground far below",
+				"RS-111 空间站舷窗": "space station window, earth below, stars, silence",
+				"RS-112 外星地表": "alien terrain, strange rock formations, twin suns",
+				"RS-113 星云": "nebula, cosmic dust, dense stars, deep space",
+				"RS-114 陨石坑": "meteor crater, scorched rim, starry sky, desolation",
+				"RS-115 高空缆车": "cable car, glass cabin, mountains below, swaying",
+				// ---- 极端天气（RS-116~RS-123）----
+				"RS-116 龙卷风": "tornado, funnel cloud, debris flying, green-black sky",
+				"RS-117 沙暴": "sandstorm, orange haze, near-zero visibility, wind",
+				"RS-118 暴雪": "blizzard, whiteout, deep snow drifts, howling wind",
+				"RS-119 雷暴": "thunderstorm, lightning strike, heavy rain, black clouds",
+				"RS-120 洪水": "flooded street, waist-deep water, floating debris",
+				"RS-121 火山灰雨": "volcanic ash fall, grey sky, falling ash, dim light",
+				"RS-122 极光": "aurora borealis, green sky, snow field, polar night",
+				"RS-123 雾凇": "hoarfrost, frozen trees, white branches, still air",
+				// ---- 特殊空间（RS-124~RS-130）----
+				"RS-124 镜面空间": "mirror space, infinite reflection, white void",
+				"RS-125 虚空": "void, empty darkness, floating, no ground",
+				"RS-126 梦境": "dreamscape, surreal, melting geometry, impossible",
+				"RS-127 抽象空间": "abstract space, geometric shapes, floating planes",
+				"RS-128 数据空间": "digital space, wireframe, flowing data, neon lines",
+				"RS-129 纸片世界": "paper world, flat layered scenery, origami",
+				"RS-130 倒悬世界": "inverted world, sky below, ground above, reversed gravity",
+				// ---- 城市细分（RS-131~RS-150）：街道、交通、商业、工业区 ----
+				"RS-131 商业步行街": "pedestrian shopping street, glass storefronts, crowd, daytime",
+				"RS-132 老城窄巷": "old town alley, narrow, hanging laundry, cobblestone, evening",
+				"RS-133 金融区高楼": "financial district, glass towers, reflective facades, dusk",
+				"RS-134 夜市": "night market, food stalls, paper lanterns, steam, crowd",
+				"RS-135 地铁车厢": "subway car interior, hand straps, fluorescent, commuters",
+				"RS-136 地下通道": "underground passage, tiled walls, fluorescent, echo",
+				"RS-137 公交站": "bus stop, shelter, timetable, street light, rain",
+				"RS-138 停车楼顶": "parking structure rooftop, city view, painted lines",
+				"RS-139 钟楼广场": "clock tower square, pigeons, stone paving, overcast",
+				"RS-140 河岸步道": "riverside promenade, railing, skyline across water, evening",
+				"RS-141 施工工地": "construction site, scaffolding, cranes, dust, raw concrete",
+				"RS-142 集装箱码头": "container port, stacked containers, cranes, salt air",
+				"RS-143 高速路上": "highway, lane markings, guardrail, distant traffic",
+				"RS-144 加油站夜景": "gas station at night, lit canopy, empty pumps",
+				"RS-145 便利店外": "outside convenience store, glowing sign, sidewalk, night",
+				"RS-146 学校门口": "school gate, bicycle racks, cherry trees, morning",
+				"RS-147 公寓玄关": "apartment entryway, mailboxes, tiled floor, dim",
+				"RS-148 自助洗衣店": "laundromat, row of machines, fluorescent, warm",
+				"RS-149 售货机角落": "street corner, vending machines, glowing, night",
+				"RS-150 天台围栏": "rooftop fence, chain link, city lights beyond, wind",
+			},
+
+			// ===== 取景：18 段（与 SEG 的 12 段互补，合并后共 30 种）=====
+			frame: {
+				"RF-01 大远景": "extreme wide shot, scenery focus, small figure",
+				"RF-02 全景": "wide shot, full body, environment visible",
+				"RF-03 中景": "medium shot, waist up, medium distance",
+				"RF-04 腰上": "cowboy shot, from waist up",
+				"RF-05 胸上": "upper body, chest up",
+				"RF-06 面部特写": "close-up, face focus",
+				"RF-07 眼部特写": "extreme close-up, eyes focus",
+				"RF-08 手部特写": "hand focus, close-up on hands",
+				"RF-09 背面全身": "from behind, full body, back view",
+				"RF-10 低角度全景": "low angle, from below, wide shot",
+				"RF-11 高角度全景": "high angle, from above, wide shot",
+				"RF-12 三分法": "rule of thirds, off-center composition",
+				"RF-13 中心构图": "centered composition, symmetrical",
+				"RF-14 对角线构图": "diagonal composition, dynamic angle",
+				"RF-15 框中框": "framed, framing device, doorway framing",
+				"RF-16 前景虚化": "foreground blur, depth of field, bokeh",
+				"RF-17 广角畸变": "wide angle lens, fisheye, distortion",
+				"RF-18 长焦压缩": "telephoto, compressed perspective, background blur",
+				"RF-19 半身侧后": "from behind, upper body, three-quarter view, looking away",
+				"RF-20 大腿以上": "cowboy shot, mid-thigh up, standing",
+				"RF-21 膝上取景": "knee-up shot, three-quarter body",
+				"RF-22 腰部特写": "close-up, waist focus, midriff",
+				"RF-23 头顶俯拍": "from above, top-down, overhead view, looking up at viewer",
+				"RF-24 贴地仰拍": "from below, worm's eye view, ground level, low angle",
+				"RF-25 四分之三侧脸": "three-quarter view, portrait, face focus",
+				"RF-26 正侧面": "profile, side view, side profile",
+				"RF-27 背影远景": "from behind, wide shot, distant figure",
+				"RF-28 背影特写": "from behind, close-up, back of head, nape",
+				"RF-29 过肩近景": "over the shoulder, close-up, shoulder in frame",
+				"RF-30 双人过肩": "over the shoulder, two subjects, one in focus",
+				"RF-31 由下往上全景": "low angle, from below, full body, wide shot",
+				"RF-32 由上往下全身": "high angle, from above, full body",
+				"RF-33 广角近距": "wide angle lens, close distance, exaggerated perspective",
+				"RF-34 长焦人像": "telephoto portrait, shallow depth of field, bokeh background",
+				"RF-35 微距细节": "macro shot, extreme detail, tiny subject",
+				"RF-36 眼瞳特写": "extreme close-up, eye focus, iris detail",
+				"RF-37 唇部特写": "extreme close-up, lips focus, mouth",
+				"RF-38 锁骨以上": "close-up, collarbone up, shoulders and neck",
+				"RF-39 足部特写": "close-up, feet focus, low framing",
+				"RF-40 镜中倒影": "mirror reflection, reflected image, framed by mirror",
+				"RF-41 门缝窥视": "through doorway, narrow gap, voyeuristic framing",
+				"RF-42 窗框构图": "framed by window, window frame, natural framing",
+				"RF-43 前景遮挡": "obscured by foreground object, partial view, depth layering",
+				"RF-44 对称构图": "symmetrical composition, mirror symmetry, centered",
+				"RF-45 低地平线": "low horizon, sky dominant, small figure",
+				"RF-46 高地平线": "high horizon, ground dominant, sweeping foreground",
+				"RF-47 荷兰角": "dutch angle, tilted framing, skewed horizon",
+				"RF-48 鱼眼视角": "fisheye lens, extreme distortion, circular framing",
+				"RF-49 主观视角": "pov, first person view, looking down at self",
+				"RF-50 监控视角": "security camera view, cctv angle, high corner placement",
+				// ---- 大角度冲击力构图（RF-51~RF-80）：靠透视畸变和极端机位拉张力 ----
+				"RF-51 极端仰拍广角": "extreme low angle, from below, wide angle lens, extreme perspective",
+				"RF-52 鸟瞰俯冲": "bird's eye view, from above, extreme high angle, looking up at viewer",
+				"RF-53 荷兰角斜切": "dutch angle, tilted frame, skewed composition, dynamic",
+				"RF-54 鱼眼贴脸": "fisheye lens, extreme distortion, close to camera, curved edges",
+				"RF-55 前缩透视": "foreshortening, extreme perspective, limbs toward viewer, dramatic depth",
+				"RF-56 强制透视": "forced perspective, exaggerated scale contrast, dramatic depth",
+				"RF-57 超广角怼脸": "ultra wide angle, close-up, distorted perspective, looming",
+				"RF-58 贴地仰视": "worm's eye view, ground level, towering figure, extreme low angle",
+				"RF-59 垂直下拍": "top-down, overhead shot, vertical view, looking straight down",
+				"RF-60 对角线动势": "diagonal composition, dynamic angle, motion lines, tilted",
+				"RF-61 旋转画框": "rotated image, 45 degree tilt, disorienting angle, canted",
+				"RF-62 超长焦压缩": "super telephoto, extreme compression, layered depth, distant subject",
+				"RF-63 微距极近": "macro, extreme close-up, texture detail, razor shallow depth",
+				"RF-64 极远景孤影": "extreme wide shot, tiny figure, vast landscape, isolation, negative space",
+				"RF-65 仰躺第一视角": "pov, lying down perspective, looking up, first person view",
+				"RF-66 低机位跟拍": "low angle tracking shot, ground level, motion blur, dynamic",
+				"RF-67 高机位俯瞰": "high angle, looking down, elevated viewpoint, sweeping vista",
+				"RF-68 逆光光晕": "backlit, lens flare, sun behind subject, silhouette",
+				"RF-69 缝隙窥视": "framed through narrow gap, voyeuristic angle, aperture framing",
+				"RF-70 对称仰视": "symmetrical composition, low angle, centered, monumental",
+				"RF-71 墙角监控": "ceiling corner view, from above, surveillance, wide lens",
+				"RF-72 横移侧拍": "side view, profile, horizontal framing, cinematic wide",
+				"RF-73 眼瞳倒影": "extreme close-up, eye reflection, iris detail, macro",
+				"RF-74 超宽幅": "ultra wide aspect, panoramic, cinematic framing, letterbox",
+				"RF-75 竖幅压顶": "vertical composition, towering subject, cramped framing, looming",
+				"RF-76 极高俯拍小人": "extreme high angle, tiny subject, vast negative space, isolation",
+				"RF-77 对峙过肩": "over the shoulder, confrontation framing, foreground shoulder",
+				"RF-78 手持晃动": "handheld camera, shaky framing, pov, spontaneous angle",
+				"RF-79 背对背双人": "two subjects, back to back, symmetrical, centered wide shot",
+				"RF-80 破格裁切": "breaking the frame, cropped limbs, out of frame, extreme close",
+			},
+
+			// ===== 画风：20 段（与 SEG 的 10 段互补，合并后共 30 种）=====
+			style: {
+				"RY-01 厚涂写实": "painterly, thick brushstrokes, detailed rendering, semi-realistic",
+				"RY-02 赛璐璐动画": "cel shading, anime screencap, flat color, crisp lineart",
+				"RY-03 水彩淡彩": "watercolor, pale wash, soft edges, paper texture",
+				"RY-04 油画": "oil painting, impasto, rich texture, classical",
+				"RY-05 铅笔素描": "pencil sketch, graphite, crosshatching, monochrome",
+				"RY-06 钢笔画": "ink drawing, pen and ink, hatching, lineart focus",
+				"RY-07 浮世绘": "ukiyo-e, woodblock print, flat colors, bold outlines",
+				"RY-08 蒸汽波": "vaporwave, retro gradient, neon pink and cyan, glitch",
+				"RY-09 复古胶片": "film photograph, grain, faded colors, vintage",
+				"RY-10 赛博朋克": "cyberpunk, neon lighting, high contrast, chrome",
+				"RY-11 暗黑哥特": "dark gothic, desaturated, moody lighting, ornate",
+				"RY-12 明亮清新": "bright and clean, pastel colors, soft lighting, airy",
+				"RY-13 莫兰迪色": "muted colors, morandi palette, low saturation",
+				"RY-14 高饱和": "vivid colors, high saturation, punchy",
+				"RY-15 单色调": "monochrome, single hue, duotone",
+				"RY-16 霓虹灯光": "neon lights, glowing edges, night, luminous",
+				"RY-17 逆光剪影": "backlighting, silhouette, rim light",
+				"RY-18 柔光雾面": "soft focus, hazy, diffused light, dreamy",
+				"RY-19 强对比硬光": "harsh lighting, high contrast, hard shadows",
+				"RY-20 3D渲染": "3d render, cg, subsurface scattering, ray tracing",
+				// ---- 画风补充（RY-21~RY-50）：媒介、时代、流派、摄影四条线铺开 ----
+				"RY-21 炭笔素描": "charcoal sketch, rough texture, smudged, monochrome",
+				"RY-22 铜版画": "engraving, cross-hatched, black and white, fine lines",
+				"RY-23 水墨": "ink wash, sumi-e, flowing strokes, negative space",
+				"RY-24 印象派": "impressionist, visible brushwork, light and color, soft",
+				"RY-25 新艺术": "art nouveau, ornamental lines, flowing curves, decorative",
+				"RY-26 装饰艺术": "art deco, geometric, gold accents, sleek",
+				"RY-27 巴洛克": "baroque, dramatic chiaroscuro, ornate, rich",
+				"RY-28 蒸汽朋克": "steampunk, brass, gears, sepia, industrial",
+				"RY-29 赛博雨夜": "cyberpunk, neon, rain-slick, high contrast, night",
+				"RY-30 黑暗奇幻": "dark fantasy, desaturated, ominous, mist",
+				"RY-31 治愈系": "soft pastel, gentle light, cozy, warm, gentle",
+				"RY-32 少女漫": "shoujo manga, sparkles, screentone, delicate lines",
+				"RY-33 少年漫": "shounen manga, dynamic lines, speed lines, bold",
+				"RY-34 厚涂写实": "thick paint, realistic rendering, detailed, textured",
+				"RY-35 低多边形": "low poly, faceted, geometric, flat shading",
+				"RY-36 波普": "pop art, bold colors, halftone dots, graphic",
+				"RY-37 超现实": "surrealism, dreamlike, impossible, symbolic",
+				"RY-38 极简": "minimalist, flat color, few elements, clean",
+				"RY-39 复古海报": "vintage poster, limited palette, print texture, retro",
+				"RY-40 柯达胶片": "kodak film, warm grain, halation, analog",
+				"RY-41 黑白摄影": "black and white photograph, high contrast, silver",
+				"RY-42 红外摄影": "infrared photograph, surreal colors, glowing foliage",
+				"RY-43 长曝光": "long exposure, motion trails, light streaks",
+				"RY-44 双重曝光": "double exposure, overlapping, ghostly",
+				"RY-45 玻璃质感": "glass rendering, refraction, translucent, sharp",
+				"RY-46 油画棒": "oil pastel, waxy texture, vibrant, sketchy",
+				"RY-47 剪纸": "paper cutout, layered, sharp edges, flat shadow",
+				"RY-48 拼贴": "collage, torn paper, mixed media, layered",
+				"RY-49 高精度像素": "high res pixel art, crisp, detailed dithering",
+				"RY-50 3D卡通": "3d cartoon, stylized, soft shading, rounded",
+			},
+
+			// ===== 光影：30 段（独立槽位，不属于 SEG.order，只被随机按钮写入）=====
+			// 这一维不是「画风」——画风决定介质与笔触，光影决定光从哪来、多硬、怎么落。
+			// 同一套 look + outfit + pose + frame，换个光就是完全不同的照片。
+			// 归画面侧（随机画面 / 随机全部会换，随机角色不动），因为它是状态不是本体。
+			light: {
+				"LS-01 电影布光": "cinematic lighting, dramatic light, film look, motivated light",
+				"LS-02 轮廓光": "rim light, backlit edges, separation from background, glowing outline",
+				"LS-03 体积光": "volumetric lighting, god rays, light shafts, atmospheric beams",
+				"LS-04 霓虹溢光": "neon glow, colored rim light, cyberpunk lighting, saturated spill",
+				"LS-05 明暗对比": "chiaroscuro, strong shadow, low key lighting, deep blacks",
+				"LS-06 高调柔光": "high key lighting, soft light, bright, airy, low contrast",
+				"LS-07 逆光剪影": "backlighting, contre-jour, silhouette, blown background",
+				"LS-08 丁达尔": "tyndall effect, dust particles in sunbeam, visible light path",
+				"LS-09 冷调夜光": "cool blue tone, night lighting, moonlight, silver cast",
+				"LS-10 黄金时刻": "golden hour, warm sunlight, sunset glow, long shadows",
+				"LS-11 单光源": "single light source, hard shadow, spotlight, isolation",
+				"LS-12 环境反射": "bounce light, reflected light, ambient glow, fill from below",
+				"LS-13 散景光斑": "bokeh, light spots, shallow depth of field, defocused highlights",
+				"LS-14 胶片颗粒": "film grain, analog texture, halation, vintage look",
+				"LS-15 镜头光晕": "lens flare, anamorphic flare, streak, sun in frame",
+				"LS-16 雾霭弥散": "haze, fog, diffused atmosphere, misty light, low visibility",
+				"LS-17 烛光": "candlelight, warm flicker, intimate glow, soft falloff",
+				"LS-18 荧光灯": "fluorescent light, cold white, clinical, flat illumination",
+				"LS-19 火星飞溅": "sparks, embers, glowing particles, flying ash",
+				"LS-20 水面反光": "water reflections, shimmer, caustics, ripples of light",
+				"LS-21 侧光塑形": "side lighting, three-dimensional, form defining, half-lit face",
+				"LS-22 顶光压迫": "top lighting, harsh overhead, eye socket shadow, oppressive",
+				"LS-23 底光诡异": "underlighting, unnatural direction, eerie, horror light",
+				"LS-24 交叉布光": "cross lighting, two sources, dramatic fill, edge conflict",
+				"LS-25 剪影描边": "silhouette with rim light, glowing outline, dark form",
+				"LS-26 棱镜折射": "prism light, rainbow refraction, chromatic dispersion",
+				"LS-27 阴影图案": "shadow pattern, gobo, striped shadow, venetian blind shadow",
+				"LS-28 霓虹条带": "neon strips, colored bars, reflective surfaces, linear glow",
+				"LS-29 过曝高光": "overexposed, blown highlights, harsh sun, washed out",
+				"LS-30 暗角": "vignette, darkened corners, focused center, falloff",
+				"LS-31 炉火光": "firelight, warm orange glow, flickering, ember light",
+				"LS-32 夕阳侧逆": "sunset backlight, orange rim, long cast shadow, low sun",
+				"LS-33 灯笼暖光": "lantern glow, warm pool of light, paper lantern, amber",
+				"LS-34 青色冷调": "teal tone, cold cyan cast, desaturated, sterile light",
+				"LS-35 月光冷光": "moonlight only, pale blue, hard moon shadow, night",
+				"LS-36 昼夜交界": "split lighting, half warm half cool, dusk boundary",
+				"LS-37 烟雾逆光": "backlit smoke, volumetric haze, light beams through smoke",
+				"LS-38 镜面反射": "mirror reflection light, doubled highlights, reflective floor",
+				// ---- 光影补充（LS-39~LS-60）：光源、透射、时段、色彩各线铺开 ----
+				"LS-39 窗光斜切": "window light, slanted beam, dust motes, hard edge",
+				"LS-40 百叶窗光影": "blinds shadow, striped light, venetian",
+				"LS-41 烛光单源": "candlelight only, warm flicker, deep shadow",
+				"LS-42 霓虹双色": "dual neon, pink and cyan, wet reflection",
+				"LS-43 火光辉映": "fire glow, orange flicker, warm rim",
+				"LS-44 雪地反光": "snow bounce, cool fill, bright ground",
+				"LS-45 水面波纹光": "water caustics, rippling light, moving patterns",
+				"LS-46 舞台聚光": "stage spotlight, single beam, dark surround",
+				"LS-47 逆光雾霭": "backlit fog, glowing haze, soft edges",
+				"LS-48 硬闪直打": "direct flash, harsh shadow, blown highlight",
+				"LS-49 柔光箱": "softbox, even light, beauty light, smooth",
+				"LS-50 双色温": "mixed color temperature, warm and cool, split",
+				"LS-51 雷电闪": "lightning flash, stark white, freeze frame",
+				"LS-52 屏幕冷光": "monitor glow, blue face light, dark room",
+				"LS-53 车灯扫过": "headlight sweep, moving beam, motion",
+				"LS-54 探照灯": "searchlight, hard beam, dust in air",
+				"LS-55 篝火侧光": "campfire side light, warm orange, flickering",
+				"LS-56 荧光绿": "fluorescent green, sickly, industrial",
+				"LS-57 极夜蓝": "polar night blue, faint, cold, silent",
+				"LS-58 黄昏逆光": "dusk backlight, orange gradient, long shadows",
+				"LS-59 水下光柱": "underwater light shafts, blue green, drifting",
+				"LS-60 镜面反射光": "reflected light, doubled source, glossy floor",
+			},
+		};
 		// ==================== 界面与注册（来自 lib/app.js）====================
 		/**
 		 * DSH × ComfyUI 绘图台 —— 界面主体
@@ -1981,8 +3364,33 @@ window.__ModuleLoader__.load({
 		 *  OPEN_MODEL_PICKER_SINK(kind, currentName) 打开弹窗；选完由 A 线反向回调 MODEL_PICKED_SINK(name)
 		 *  把名字写回生成页自己的 ckpt（两边是两套 state，靠 USER.last 只共享初值，必须显式回传）。 */
 		let OPEN_MODEL_PICKER_SINK = null;
+		/** 0.7.130：清掉「当前挂着的角色卡插入状态」——lockCards（生图时按锁剔词的）+ INSERTED（卡片蓝框、
+		 *  再点解除）。历史页「套用此图生成设置」跨组件拿不到 Console 闭包里的 lockCards：
+		 *  套用了新提示词却留着上一张角色卡的禁词锁，出图时 stabilizePrompt 会拿旧锁把新词剔掉，
+		 *  表现就是「同样的提示词，换一张卡再出图构图就不对」。 */
+		let CLEAR_CARD_STATE_SINK = null;
 		let MODEL_PICKED_SINK = null;
 		function MSG(text) { try { if (MSG_SINK) MSG_SINK(String(text)); } catch (e) { /* ignore */ } }
+		/** 自动适配的取证通道。
+		 *
+		 *  为什么不只用 MSG：setMsg 是 PreviewConsole 的 state，模型库弹窗关掉后它那条提示行
+		 *  不一定还挂在视口里，用户很容易「什么都看不到」。这里同时打控制台并留一份到
+		 *  localStorage，事后可以：
+		 *      localStorage.getItem('dsh-adapt-log')
+		 *  直接读出完整的判定轨迹，不用盯着界面猜。 */
+		function DIAG(text) {
+			const line = String(text);
+			try { console.warn("[适配] " + line); } catch (e) { /* ignore */ }
+			try { MSG(line); } catch (e) { /* ignore */ }
+			try {
+				const KEY = "dsh-adapt-log";
+				const old = window.localStorage.getItem(KEY);
+				const arr = old ? JSON.parse(old) : [];
+				arr.push(new Date().toISOString().slice(11, 19) + "  " + line);
+				while (arr.length > 40) arr.shift();
+				window.localStorage.setItem(KEY, JSON.stringify(arr));
+			} catch (e) { /* ignore */ }
+		}
 		const LS_KEY = "dsh-comfyui-console/v1";
 		/** 存档结构版本：字段改名/改语义时 +1，并在 STATE_MIGRATIONS 里补一条迁移。老数据一律保留。 */
 		const STATE_VERSION = 2;
@@ -2033,9 +3441,44 @@ window.__ModuleLoader__.load({
 			clip: "qwen_3_06b_base.safetensors",
 			clipType: "qwen_image",
 			vae: "qwen_image_vae.safetensors",
-			unet: "<底模>.safetensors",
+			unet: "anima-aesthetic-v1.1.safetensors",
 			loras: [],
 		};
+
+		/**
+		 * UNet 族 → 该族要求的空 latent 节点。
+		 *
+		 * ⚠️ 2026-10-31：原来 buildGraph 无条件用 EmptyLatentImage（4 通道 latent）。
+		 *    MOSS-Image 在 FLUX.2 latent space 里跑，要用 EmptyFlux2LatentImage —— 这个节点名
+		 *    取自本仓 presets.js 里现成的 `moss-sft` / `moss-base` 条目（那边的 `latent` 字段
+		 *    就是 EmptyFlux2LatentImage），不是猜的。用 EmptyLatentImage 会在 KSampler 接
+		 *    latent 时通道不匹配。qwen_image（Anima）沿用 4 通道不变。
+		 */
+		const UNET_LATENT_NODE = {
+			qwen_image: "EmptyLatentImage",
+			moss_image: "EmptyFlux2LatentImage",
+		};
+		function latentNodeFor(clipType, override) {
+			if (override) return String(override);
+			return UNET_LATENT_NODE[String(clipType || "")] || "EmptyLatentImage";
+		}
+
+		/**
+		 * 哪些「编码器类型」代表底模取自 diffusion_models（走 UNETLoader）而不是 checkpoints。
+		 *
+		 * ⚠️ 2026-10-31：原来这两条链的判据写死成 `clipType === "qwen_image"`，等于把
+		 *    「这个底模是不是 UNet 型（单文件 DiT + 外挂文本编码器）」错等价成「是不是 qwen_image」。
+		 *    MOSS-Image 正是 UNet 型（moss_image_* 放 diffusion_models，Qwen3.5-9B 作外挂 TE，
+		 *    FLUX.2 VAE 单独加载），选它时会掉进 CheckpointLoaderSimple 分支，表现是
+		 *    「底模不在 checkpoints 里」或 ComfyUI 回 400。
+		 *
+		 * 加新模型族只需往这个数组补一行。CLIPLoader 的合法 type 值本身是从
+		 * ComfyUI `/object_info/CLIPLoader` 动态枚举的，这里只负责「走哪条链」。
+		 */
+		const UNET_CLIP_TYPES = ["qwen_image", "moss_image"];
+		function isUnetClipType(t) {
+			return UNET_CLIP_TYPES.indexOf(String(t || "")) >= 0;
+		}
 
 		const USER = migrateState(Object.assign({
 			presets: [],       // [{name, cat, pos, neg, w, h, steps, cfg, sampler, scheduler, ckpt, loras}]
@@ -2119,7 +3562,7 @@ window.__ModuleLoader__.load({
 		// 都在内层作用域里 —— 以前只要 tags 为空（导出时没写 tags、只有 parts 的卡包就是这样）
 		// 就会抛 ReferenceError，整条导入链路静默死掉：「导入瞬间结束、绘图台里没有、消息卡在正在解析」。
 		// 这里给它一份自带的顶层实现，不再依赖内层函数。
-		const CF_ORDER = ["trigger", "base", "hair", "eyes", "glasses", "outfit", "extra"];
+		const CF_ORDER = ["trigger", "base", "hair", "eyes", "glasses", "outfit", "proportion", "extra"];
 		function cfNormPart(v) {
 		  if (Array.isArray(v)) return v.map((x) => (typeof x === "string")
 		    ? { t: x, n: zhOf(x) || x }
@@ -2134,6 +3577,7 @@ window.__ModuleLoader__.load({
 		  if (trg) out.push(trg);
 		  for (const k of CF_ORDER) {
 		    if (k === "trigger") continue;
+		    if (k === "proportion") { const sp = (typeof proportionTags === "function") ? proportionTags(p[k]) : ""; if (sp) out.push(sp); continue; }
 		    const s = cfNormPart(p[k]).map((x) => String(x.t || "").trim()).filter(Boolean).join(", ");
 		    if (s) out.push(s);
 		  }
@@ -3000,8 +4444,11 @@ window.__ModuleLoader__.load({
 		}
 		/** 卡上的底模字段：编辑中的文本域优先，其次是已存的数组 */
 		function _cardBm(d) {
-			const t = (d && d.baseModelsText != null) ? d.baseModelsText
-				: (d && Array.isArray(d.baseModels) ? d.baseModels.join(", ") : "");
+			// 0.7.130：以前 baseModelsText 只要不是 null 就优先，于是空字符串会把已有数组吃掉
+			// （编辑器没带值 → 输入框空 → 保存即清空底模）。改成"非空文本才优先"。
+			const txt = (d && d.baseModelsText != null) ? String(d.baseModelsText).trim() : "";
+			const arr = (d && Array.isArray(d.baseModels)) ? d.baseModels.join(", ") : "";
+			const t = txt || arr;
 			return String(t).split(",").map((x) => x.trim()).filter(Boolean);
 		}
 		/** 风格卡的底模：新字段 baseModels 优先，老的 ckpt 兜底（1.0 的风格卡只有 ckpt） */
@@ -3032,7 +4479,7 @@ window.__ModuleLoader__.load({
 				};
 			}
 			if (fam) return { text: fam, full: "适配底模：" + fam, muted: false };
-			return { text: "未标注底模", full: "这张卡还没填适配底模。点「编辑」→「适配底模」补上，之后右上角就会显示模型名。", muted: true };
+			return { text: "未标注底模", full: "这张卡还没填底模。点「编辑」→「底模」补上，之后右上角就会显示模型名。", muted: true };
 		}
 
 		/** 把「拖文件进来」统一成一条通道。
@@ -3317,12 +4764,15 @@ window.__ModuleLoader__.load({
 		/** 拼 ComfyUI API 格式的工作流 */
 		function buildGraph(o) {
 			const g = {};
-			// Anima 链：底模是 UNET（不是 checkpoint），文本编码器必须用 qwen_image。
-			// 面板「CLIP 类型」选到 qwen_image 时走这一支；其余情况维持原行为。
-			const animaUNet = String(o.clipType || "") === "qwen_image";
+			// UNet 链：底模是单文件 DiT（UNETLoader 读 diffusion_models），文本编码器外挂。
+			// 判据是「这个编码器类型是否属于 UNet 族」（UNET_CLIP_TYPES），不是只认 qwen_image ——
+			// MOSS-Image 也是这一族（moss_image_* DiT + Qwen3.5-9B TE + FLUX.2 VAE）。
+			const animaUNet = isUnetClipType(o.clipType);
 			if (animaUNet) {
 				g["1"] = { class_type: "UNETLoader", inputs: { unet_name: o.unet || o.ckpt || MODEL_DEFAULTS.unet, weight_dtype: "default" } };
-				g["2"] = { class_type: "CLIPLoader", inputs: { clip_name: o.clip, type: "qwen_image" } };
+				// type 必须跟着面板选的那个走：qwen_image 与 moss_image 的 TE 实现不同，
+				// 写死会让 CLIPLoader 用错编码器（MOSS 会被当成 Qwen-Image，回 400 或出噪声）。
+				g["2"] = { class_type: "CLIPLoader", inputs: { clip_name: o.clip, type: o.clipType || "qwen_image" } };
 			} else {
 				g["1"] = { class_type: "CheckpointLoaderSimple", inputs: { ckpt_name: o.ckpt } };
 				// checkpoint 自带 CLIP，直接取 ["1",1]。原来这里无条件另建 CLIPLoader，
@@ -3336,7 +4786,7 @@ window.__ModuleLoader__.load({
 			let vaeSrc = animaUNet ? null : ["1", 2];
 			if (o.vae) { g["3"] = { class_type: "VAELoader", inputs: { vae_name: o.vae } }; vaeSrc = ["3", 0]; }
 			if (!vaeSrc) throw new Error("当前底模需要外部 VAE，请在「VAE」里选一个");
-			if (animaUNet && !o.clip) throw new Error("当前底模需要外部文本编码器（qwen），请在「文本编码器」里选一个");
+			if (animaUNet && !o.clip) throw new Error("当前底模需要外部文本编码器（" + (o.clipType || "qwen") + "），请在「文本编码器」里选一个");
 			let modelSrc = ["1", 0], clipSrc = g["2"] ? ["2", 0] : ["1", 1];
 			(o.loras || []).forEach((L, i) => {
 				const id = String(10 + i);
@@ -3348,7 +4798,7 @@ window.__ModuleLoader__.load({
 			});
 			g["4"] = { class_type: "CLIPTextEncode", inputs: { text: o.pos, clip: clipSrc } };
 			g["5"] = { class_type: "CLIPTextEncode", inputs: { text: o.neg, clip: clipSrc } };
-			g["6"] = { class_type: "EmptyLatentImage", inputs: { width: o.w, height: o.h, batch_size: 1 } };
+			g["6"] = { class_type: latentNodeFor(o.clipType, o.latent), inputs: { width: o.w, height: o.h, batch_size: 1 } };
 			// 身份控制：ComfyUI 原生 ModelPatchLoader + AnimaLLLiteApply（控制图与权重已由 sidecar staging 到它能读的目录）
 			let modelForSampler = modelSrc;
 			if (o.lllite && o.lllite.image && o.lllite.patch) {
@@ -3594,9 +5044,11 @@ window.__ModuleLoader__.load({
 				const d = (card && card.conditioning && card.conditioning.default) || "";
 				return (d && presets.indexOf(d) >= 0) ? d : (presets[0] || "");
 			},
-			async resolve(card, canvas) {
+			/** force=true：忽略卡里的 conditioning.enabled，供生成页的「身份控制」开关临时启用。
+			 *  卡文件保持 enabled=false（场景出图默认不挂 LLLite），开关只影响本次会话的出图。 */
+			async resolve(card, canvas, force) {
 				const cond = (card && card.conditioning) || {};
-				if (!cond || !cond.enabled) { this.set({ status: "off", reason: "未启用条件图" }, card && card.name); return null; }
+				if (!cond || (!cond.enabled && !force)) { this.set({ status: "off", reason: "未启用条件图" }, card && card.name); return null; }
 				const presets = Object.keys(cond.presets || {});
 				const framing = COND.pickOf(card, presets);
 				try {
@@ -4166,8 +5618,10 @@ window.__ModuleLoader__.load({
 		    throw new Error("输出图片数量超过本次扫描支持的分页上限");
 		}
 
-		function savedOutputUrl(path) {
-		    return EXPANDER + "/outputs/view?path=" + encodeURIComponent(path);
+		function savedOutputUrl(path, version) {
+		    /* 0.7.131：加 version 参数（通常是 mtime）当缓存版本号，避免原图被覆盖后仍显示旧图。 */
+		    const base = EXPANDER + "/outputs/view?path=" + encodeURIComponent(path);
+		    return version ? base + "&v=" + encodeURIComponent(String(version)) : base;
 		}
 
 		const MODEL_PROFILES={
@@ -4185,6 +5639,11 @@ window.__ModuleLoader__.load({
 		 "flux-dev":{label:"FLUX.1 Dev",family:"flux",negative:false,style:"natural",latent:"EmptySD3LatentImage",modes:["checkpoint","diffusion"],clipType:"flux",encoders:2,guidance:true,modelOnlyLora:true,recommended:{steps:20,cfg:1,guidance:3.5,sampler:"euler",scheduler:"simple",w:1024,h:1024}},
 		 "flux-schnell":{label:"FLUX.1 Schnell",family:"flux",negative:false,style:"natural",latent:"EmptySD3LatentImage",modes:["checkpoint","diffusion"],clipType:"flux",encoders:2,modelOnlyLora:true,recommended:{steps:4,cfg:1,sampler:"euler",scheduler:"simple",w:1024,h:1024}},
 		 "flux-krea":{label:"FLUX.1 Krea Dev",family:"flux",negative:false,style:"natural",latent:"EmptySD3LatentImage",modes:["checkpoint","diffusion"],clipType:"flux",encoders:2,guidance:true,modelOnlyLora:true,recommended:{steps:20,cfg:1,guidance:4.5,sampler:"euler",scheduler:"simple",w:1024,h:1024}},
+		 // MOSS-Image：5B single-stream DiT（放 diffusion_models）+ Qwen3.5-9B 文本编码器 + FLUX.2 VAE，
+		 // 三者都不复用 Anima 那套。以下字段照抄本仓 presets.js 的 moss-sft 条目（那边是 A 线工作台口径）：
+		 // latent = EmptyFlux2LatentImage、sizeStep 16、25 步 / cfg 2.5 / er_sde + simple。
+		 // 官方文档另给 50 步 / CFG 3 / euler 一组，SFT 上 25 步已经够用。
+		 "moss-image":{label:"MOSS-Image SFT",family:"moss",negative:true,style:"natural",latent:"EmptyFlux2LatentImage",modes:["diffusion"],clipType:"moss_image",modelOnlyLora:true,sizeStep:16,slgNode:"SkipLayerGuidanceDiTSimple",recommended:{steps:25,cfg:2.5,sampler:"er_sde",scheduler:"simple",w:1024,h:1024}},
 		};
 		/** 由底模元数据里的 base_type 文本推出 MODEL_PROFILES 的 key。
 		 *  生成页要让"选底模 → 文本编码器自动适配"，而 A 线原本是让用户手动选模型类型（profile）。
@@ -4193,6 +5652,7 @@ window.__ModuleLoader__.load({
 		function profileKeyFromModelBase(baseType){
 		 const t=String(baseType||"").toLowerCase().replace(/[\s._\-/]+/g,"");
 		 if(!t)return "";
+		 if(/moss/.test(t))return "moss-image";
 		 if(/krea/.test(t))return "flux-krea";
 		 if(/flux/.test(t))return /schnell|flux1s$|fluxs$/.test(t)?"flux-schnell":"flux-dev";
 		 if(/sd3\.?5|sd35/.test(t))return /turbo/.test(t)?"sd35-turbo":/medium/.test(t)?"sd35-medium":"sd35-large";
@@ -4213,6 +5673,7 @@ window.__ModuleLoader__.load({
 		function profileKeyFromModelName(name){
 		 const t=String(name||"").toLowerCase().replace(/\.(safetensors|ckpt|pt|pth|bin|gguf|sft)$/,"");
 		 if(!t||/anima/.test(t))return "";
+		 if(/moss/.test(t))return "moss-image";
 		 if(/flux/.test(t))return /schnell/.test(t)?"flux-schnell":"flux-dev";
 		 if(/sd3|sd_?3/.test(t))return "sd3-medium";
 		 if(/xl/.test(t))return "sdxl";
@@ -4225,12 +5686,18 @@ window.__ModuleLoader__.load({
 		 *  buildGraph 已经改成取 ["1",1] / ["1",2]，不需要外挂文件。
 		 *  只有拿不到内置件的家族（anima 必须外挂 qwen 编码器）才在这里给出文件名线索。 */
 		const PROFILE_CLIP_HINT = {
-			anima: [/qwen/i],
+			// Anima 的 TE 是 Qwen3 0.6B（qwen_3_06b_base）。原来写 /qwen/i 太宽 ——
+			// 2026-10-31 装进 MOSS 的 qwen3.5_9b 之后，切到 Anima 会先命中 9B 那个，编码器直接选错。
+			anima: [/qwen_?3?[._\-]?0?6b/i, /_06b/i],
+			// MOSS 的 TE 是 Qwen3.5-9B（float/int8/w4a8 三种量化版），文件名以 qwen3.5 打头
+			moss: [/qwen_?3[._\-]?5/i, /9b/i],
 			sd3: [/t5xxl/i, /t5/i, /clip_l/i],
 			flux: [/t5xxl/i, /t5/i, /clip_l/i],
 		};
 		const PROFILE_VAE_HINT = {
 			anima: [/qwen[_-]?image[_-]?vae/i, /qwen.*vae/i],
+			// FLUX.2 VAE；小体积版 flux2-vae_small 同源，优先大的
+			moss: [/flux2?[_-]?vae\.safetensors$/i, /flux2?[_-]?vae/i],
 			sdxl: [/sdxl[._-]?vae/i],
 			sd15: [/vae-ft-mse/i, /840000/i],
 			"sd2": [/840000/i, /vae/i],
@@ -5846,6 +7313,10 @@ window.__ModuleLoader__.load({
 		.dsh-comfy-ui .cc-output-icon-btn[data-cc-tooltip]::after{top:calc(100% + 7px);bottom:auto;z-index:190}
 		.dsh-comfy-ui .cc-output-icon-btn:is(:hover,:focus-visible){z-index:5}
 		.dsh-comfy-ui .cc-output-refresh{margin-left:2px;border:1px solid var(--cc-border);background:var(--cc-control)}
+		.dsh-comfy-ui .cc-output-refresh-text{flex:0 0 auto;display:inline-flex;align-items:center;gap:5px;height:29px;margin-left:auto;padding:0 10px;border:1px solid var(--cc-border);border-radius:7px;background:var(--cc-control);color:var(--cc-text);font:inherit;font-size:11.5px;font-weight:600;cursor:pointer;white-space:nowrap;transition:background .12s ease,border-color .12s ease,color .12s ease}
+		.dsh-comfy-ui .cc-output-refresh-text:is(:hover,:focus-visible){border-color:var(--cc-accent);background:var(--cc-accent-bg);color:var(--cc-accent-text)}
+		.dsh-comfy-ui .cc-output-refresh-text:disabled{opacity:.6;cursor:progress}
+		.dsh-comfy-ui .cc-output-refresh-text+.cc-output-counter{margin-left:0}
 		.dsh-comfy-ui .cc-output-counter{margin-left:auto;flex:0 0 auto;display:inline-flex;align-items:center;gap:6px;padding:4px 8px;border-radius:999px;background:var(--cc-control);font-size:10px;color:var(--cc-muted);white-space:nowrap}
 		.dsh-comfy-ui .cc-output-quality{flex:0 0 auto;display:inline-flex;align-items:center;gap:4px;margin-left:2px;min-width:0;padding:3px 4px 3px 7px;border:1px solid var(--cc-border);border-radius:8px;background:var(--cc-control);font-size:10px;color:var(--cc-muted)}
 		.dsh-comfy-ui .cc-output-quality-label{white-space:nowrap;margin-right:1px}
@@ -5910,6 +7381,16 @@ window.__ModuleLoader__.load({
 		.dsh-comfy-ui .cc-output-card-sub{display:flex;justify-content:space-between;align-items:center;gap:7px;min-width:0;font-size:9px;color:rgba(255,255,255,.78)}
 		.dsh-comfy-ui .cc-output-card-state{display:inline-flex;align-items:center;gap:4px;white-space:nowrap}
 		.dsh-comfy-ui .cc-output-card-state::before{content:"";width:5px;height:5px;border-radius:50%;background:currentColor;opacity:.9}
+		/* 0.7.130：历史卡片右上角按钮组（打开位置 / 删除）。平时隐藏，悬停或键盘聚焦才出现，
+		   避免盖住画面；触屏没有 hover，所以用 @media (hover:none) 常显。 */
+		.dsh-comfy-ui .cc-output-card-actions{position:absolute;top:8px;right:8px;z-index:3;display:flex;gap:6px;opacity:0;transition:opacity .14s ease}
+		.dsh-comfy-ui .cc-output-card:hover .cc-output-card-actions,.dsh-comfy-ui .cc-output-card:focus-within .cc-output-card-actions{opacity:1}
+		.dsh-comfy-ui .cc-output-card-act{display:inline-flex;align-items:center;justify-content:center;width:29px;height:29px;padding:0;border:1px solid rgba(255,255,255,.22);border-radius:7px;background:rgba(14,16,20,.6);color:#fff;cursor:pointer;transition:background .14s ease,border-color .14s ease,transform .06s ease;-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
+		.dsh-comfy-ui .cc-output-card-act:hover,.dsh-comfy-ui .cc-output-card-act:focus-visible{background:var(--cc-accent);border-color:var(--cc-accent);color:#fff}
+		.dsh-comfy-ui .cc-output-card-act.is-danger:hover,.dsh-comfy-ui .cc-output-card-act.is-danger:focus-visible{background:var(--cc-bad,#c0392b);border-color:var(--cc-bad,#c0392b);color:#fff}
+		.dsh-comfy-ui .cc-output-card-act:active{transform:translateY(1px)}
+		.dsh-comfy-ui .cc-output-card-act:focus-visible{opacity:1;outline:2px solid var(--cc-accent);outline-offset:2px}
+		@media (hover:none){.dsh-comfy-ui .cc-output-card-actions{opacity:1}}
 		.dsh-comfy-ui .cc-output-empty{display:flex;min-height:190px;align-items:center;justify-content:center;flex-direction:column;gap:8px;border:1px dashed var(--cc-border);border-radius:10px;color:var(--cc-muted);text-align:center;padding:20px}
 		.dsh-comfy-ui .cc-output-empty strong{font-size:12px;color:var(--cc-text)}
 		.dsh-comfy-ui .cc-output-load-sentinel{display:flex;justify-content:center;align-items:center;gap:8px;min-height:34px;padding:10px;color:var(--cc-muted);font-size:10px}
@@ -6209,6 +7690,179 @@ window.__ModuleLoader__.load({
 		    }
 		    return node;
 		}
+
+		/** ComfyUI 启动按钮（2026-10-31）。
+		 *
+		 *  原来的「连接 ComfyUI」是一个普通按钮：点下去 setStarting(true)，然后同步等
+		 *  `/comfy/start` 最多 125 秒，期间只有「处理中…」四个字，看不到卡在哪一步，
+		 *  也没有任何叫停的办法。
+		 *
+		 *  这个组件把那段等待变成可见、可停的：
+		 *    · 启动中显示转圈；鼠标移上去变成「■ 停止启动」，点一下取消本次启动
+		 *    · 悬浮或聚焦时在按钮下方展开 console 浮层：阶段文字、PID、耗时、
+		 *      本次后台的 stdout/stderr（按偏移增量拉，自动跟随到底部）
+		 *    · 浮层可滚动、可选中复制；鼠标移进浮层不会收起（离开按钮有 160ms 宽限）
+		 *
+		 *  进度来源是 sidecar 的 `/comfy/startup?attempt=`，取消走
+		 *  `/comfy/startup/cancel`。两个端点只对带 attempt 的启动有效，
+		 *  不影响其它地方同步调用 `/comfy/start` 的老路径。
+		 */
+		function ComfyStartupButton({ starting, online, session, stopping, onConnect, onStop }) {
+		    const [open, setOpen] = React.useState(false);
+		    const [hover, setHover] = React.useState(false);
+		    const [data, setData] = React.useState(null);
+		    const [error, setError] = React.useState("");
+		    const anchor = React.useRef(null);
+		    const panel = React.useRef(null);
+		    const consoleRef = React.useRef(null);
+		    const follow = React.useRef(true);
+		    const closeTimer = React.useRef(null);
+		    const [position, setPosition] = React.useState(null);
+
+		    const active = !!(starting && session);
+
+		    // 浮层定位：挂在按钮正下方，右侧对齐但不出屏
+		    const locate = () => {
+		        const r = anchor.current && anchor.current.getBoundingClientRect();
+		        if (!r) return;
+		        const w = Math.min(560, Math.max(240, window.innerWidth - 16));
+		        setPosition({ top: r.bottom + 6, left: Math.max(8, Math.min(r.right - w, window.innerWidth - w - 8)), width: w });
+		    };
+		    const show = () => {
+		        clearTimeout(closeTimer.current);
+		        if (session) { locate(); setOpen(true); }
+		    };
+		    const hide = () => {
+		        clearTimeout(closeTimer.current);
+		        closeTimer.current = setTimeout(() => setOpen(false), 160);
+		    };
+
+		    // 换了一次启动就重置浮层里的旧内容
+		    React.useEffect(() => {
+		        setData(null); setError(""); follow.current = true;
+		    }, [session && session.id]);
+
+		    // 每秒拉一次进度；启动结束后停掉轮询
+		    React.useEffect(() => {
+		        if (!session) return;
+		        let dead = false, pending = false;
+		        const tick = async () => {
+		            if (dead || pending) return;
+		            pending = true;
+		            try {
+		                const r = await jget(EXPANDER + "/comfy/startup?attempt=" + encodeURIComponent(session.id), 6000);
+		                if (dead) return;
+		                if (r && r.snapshot) { setData(r.snapshot); setError(""); }
+		                else if (r && r.message) setError(r.message);
+		            } catch (e) {
+		                if (!dead) setError("读取启动进度失败：" + errText(e));
+		            } finally { pending = false; }
+		        };
+		        tick();
+		        const timer = starting ? setInterval(tick, 1000) : null;
+		        return () => { dead = true; clearInterval(timer); };
+		    }, [session && session.id, starting]);
+
+		    // 日志跟随到底部（用户手动往上翻就不再抢滚动条）
+		    React.useEffect(() => {
+		        if (follow.current && consoleRef.current) {
+		            consoleRef.current.scrollTop = consoleRef.current.scrollHeight;
+		        }
+		    }, [data && data.logs && data.logs.stdout, data && data.logs && data.logs.stderr, open]);
+
+		    React.useEffect(() => {
+		        if (!open) return;
+		        const dismiss = (e) => { if (e.key === "Escape") { setOpen(false); anchor.current && anchor.current.focus(); } };
+		        window.addEventListener("keydown", dismiss);
+		        return () => window.removeEventListener("keydown", dismiss);
+		    }, [open]);
+
+		    React.useEffect(() => () => clearTimeout(closeTimer.current), []);
+
+		    const elapsed = (() => {
+		        if (!data) return 0;
+		        const base = data.startedAt ? data.startedAt * 1000 : Date.now();
+		        return Math.max(0, Math.floor((Date.now() - base) / 1000));
+		    })();
+
+		    const logText = [
+		        data && data.logs && data.logs.stdout ? "[stdout]\n" + data.logs.stdout : "",
+		        data && data.logs && data.logs.stderr ? "[stderr]\n" + data.logs.stderr : "",
+		    ].filter(Boolean).join("\n\n");
+
+		    const spinner = h("span", { className: "cc-icon-spinner", "aria-hidden": true }, h(PromptIcon, { name: "spinner", size: 15 }));
+
+		    const label = stopping ? "正在停止…"
+		        : active ? (hover ? "停止启动" : "启动中…")
+		        : starting ? "正在关闭…"
+		        : online ? "关闭 ComfyUI" : "连接 ComfyUI";
+		    return h(React.Fragment, null,
+		        h("button", {
+		            ref: anchor, type: "button", "data-cc-guide": "connection-action",
+		            style: Object.assign({}, S.btn2, { display: "inline-flex", alignItems: "center", gap: 7, fontWeight: 700, minWidth: 132 }),
+		            disabled: stopping || (!active && (starting || online === null)),
+		            onMouseEnter: () => { setHover(true); show(); },
+		            onMouseLeave: () => { setHover(false); hide(); },
+		            onFocus: () => { setHover(true); show(); },
+		            onBlur: (e) => {
+		                const to = e.relatedTarget;
+		                if (!(anchor.current && anchor.current.contains(to)) && !(panel.current && panel.current.contains(to))) hide();
+		            },
+		            onClick: active ? onStop : onConnect,
+		            "aria-label": stopping ? "正在停止启动" : active ? "停止启动" : online ? "关闭 ComfyUI" : "连接 ComfyUI",
+		            "aria-expanded": !!(open && position && session),
+		            title: session ? undefined : online
+		                ? "完全关闭 ComfyUI：终止生成与排队任务、结束进程并释放模型显存"
+		                : "尝试启动并连接本机 ComfyUI",
+		        },
+		            stopping ? spinner
+		                : active ? (hover ? h(PromptIcon, { name: "stop", size: 15 }) : spinner)
+		                : starting ? spinner
+		                : h(OfflineComfyMark, { size: 15 }),
+		            label),
+
+		        (open && position && session) ? floating(h("div", {
+		            ref: panel, className: "dsh-comfy-floating", role: "region", "aria-label": "ComfyUI 启动进度",
+		            onMouseEnter: show, onMouseLeave: hide, onFocus: show, onBlur: (e) => {
+		                const to = e.relatedTarget;
+		                if (!(anchor.current && anchor.current.contains(to)) && !(panel.current && panel.current.contains(to))) hide();
+		            },
+		            style: {
+		                position: "fixed", top: position.top, left: position.left, width: position.width,
+		                zIndex: 2147482000,
+		                background: "var(--cc-bg, #1b1b1f)", color: "var(--cc-fg, #e8e8ea)",
+		                border: "1px solid var(--cc-line, #34343a)", borderRadius: 10, padding: 12,
+		                boxShadow: "0 18px 48px rgba(0,0,0,.45)", fontSize: 12, lineHeight: 1.5,
+		            },
+		        },
+		            h("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 } },
+		                h("strong", null, "ComfyUI · 启动进度"),
+		                h("span", { style: { color: "var(--cc-muted)", fontVariantNumeric: "tabular-nums" } },
+		                    "已用 " + elapsed + " 秒")),
+		            h("div", { role: "status", style: { color: "var(--cc-muted)", marginTop: 6 } },
+		                stopping ? "正在停止本次启动进程…" : (data && data.phase) || "正在准备启动…",
+		                data && data.pid ? " · PID " + data.pid : ""),
+		            error ? h("div", { role: "status", style: { color: "#ff8a80", marginTop: 6 } }, error) : null,
+		            h("pre", {
+		                ref: consoleRef, tabIndex: 0, "aria-label": "后台输出",
+		                onScroll: (e) => {
+		                    const el = e.currentTarget;
+		                    follow.current = el.scrollHeight - el.scrollTop - el.clientHeight < 24;
+		                },
+		                style: {
+		                    margin: 0, marginTop: 8, padding: 10, minHeight: 100, maxHeight: 260,
+		                    overflow: "auto", whiteSpace: "pre-wrap", overflowWrap: "anywhere",
+		                    background: "var(--cc-bg2, #141417)", border: "1px solid var(--cc-line, #34343a)",
+		                    borderRadius: 8, fontSize: 11, lineHeight: 1.45, color: "var(--cc-fg2, #d0d0d4)",
+		                },
+		            }, logText || "（暂无输出）"),
+		            h("div", { style: { display: "flex", justifyContent: "space-between", gap: 10, marginTop: 8 } },
+		                h("span", { style: { color: "var(--cc-muted)" } }, "实时后台输出（stdout / stderr 各保留 32 KiB）"),
+		                (data && data.ok === true) ? h("span", { style: { color: "#8fd18f" } }, "✔ 已就绪")
+		                    : (data && data.ok === false) ? h("span", { style: { color: "#ff8a80" } }, "✘ " + (data.message || "失败"))
+		                    : null))) : null);
+		}
+
 
 		function CompatibilityCheck({S}) {
 		    const [report,setReport]=React.useState(null);
@@ -7366,6 +9020,11 @@ window.__ModuleLoader__.load({
 		    const [pathConfig, setPathConfig] = React.useState({outputDirectory:"",tempDirectory:"",extraModelPathsConfig:[]});
 			const [connNotice, setConnNotice] = React.useState("");
 			const [starting, setStarting] = React.useState(false);
+			// 2026-10-31：带 attempt 的启动会话。有值时按钮变成「启动中…」，可悬浮停止，
+			// 下方浮层轮询 /comfy/startup 显示阶段与后台日志。
+			const [startSession, setStartSession] = React.useState(null);
+			const [stoppingStart, setStoppingStart] = React.useState(false);
+			const launchAttempt = React.useRef(null);
 			const operationRef = React.useRef(false);
 			const onlineRef = React.useRef(null);
 			onlineRef.current = online;
@@ -7432,6 +9091,15 @@ window.__ModuleLoader__.load({
 		    const modelTaskRef=React.useRef(null);
 
 		    const [modelLibraryError,setModelLibraryError]=React.useState("");
+		    /**
+		     * 底模扁平清单：底模选择场景下不再走文件夹树，直接列全机所有底模。
+		     *
+		     * 2026-10-31：模型库与生成面板是两个独立组件，这里没有 unets 状态，
+		     * 所以自己从 ComfyUI 的两个 loader 枚举取一次，合并成扁平列表。
+		     * 每项 {name, source:"diffusion"|"checkpoint", size}。
+		     */
+		    const [flatBaseModels,setFlatBaseModels]=React.useState([]);
+		    const [flatBaseLoading,setFlatBaseLoading]=React.useState(false);
 		    const [modelFolderBusy,setModelFolderBusy]=React.useState(false);
 		    const [modelActiveFolder,setModelActiveFolder]=React.useState({root_id:0,path:""});
 		    const [modelDropTarget,setModelDropTarget]=React.useState("");
@@ -7903,8 +9571,32 @@ window.__ModuleLoader__.load({
 		                return;
 		            }
 		            setMsg("正在通过本机启动脚本启动 ComfyUI…");
-		            const r = await jpost(EXPANDER + "/comfy/start", {mode}, 125000);
+		            // 2026-10-31：带 attempt 提交，启动改在 sidecar 的后台线程里跑，
+		            // 前端拿得到阶段文字和后台日志，也能中途叫停。
+		            // 提交后自己在这儿轮询到结束，保持「等到真正就绪才刷新模型列表」的老语义。
+		            const _aid = (typeof crypto !== "undefined" && crypto.randomUUID)
+		                ? crypto.randomUUID()
+		                : "att-" + Date.now() + "-" + Math.random().toString(16).slice(2);
+		            launchAttempt.current = { id: _aid, startedAt: Date.now() };
+		            setStartSession(launchAttempt.current);
+		            const r = await jpost(EXPANDER + "/comfy/start", { mode, attempt: _aid }, 30000);
 		            if (!r?.ok) throw new Error(r?.message || "启动失败");
+		            if (r.started) {
+		                const deadline = Date.now() + 120000;
+		                let snap = null;
+		                while (Date.now() < deadline) {
+		                    await new Promise((res) => setTimeout(res, 1000));
+		                    try {
+		                        const sp = await jget(EXPANDER + "/comfy/startup?attempt=" + encodeURIComponent(_aid), 6000);
+		                        snap = sp && sp.snapshot;
+		                    } catch (e) { /* sidecar 忙，下一轮再问 */ }
+		                    if (snap && snap.finishedAt) break;
+		                }
+		                if (!snap || !snap.finishedAt) throw new Error("启动超时（120 秒内没有结果）");
+		                if (snap.cancelled) { setMsg("已停止启动"); return; }
+		                if (!snap.ok) throw new Error(snap.message || "启动失败");
+		                setMsg(snap.message || "已启动");
+		            }
 		            if(mode==="browser"){
 		                // 原脚本直启时由脚本/ComfyUI 自己开网页；只有 sidecar 明确报告失败才兜底。
 		                if(r.browserOpened===false){ await openBrowser(); }
@@ -7919,6 +9611,23 @@ window.__ModuleLoader__.load({
 		            if (onlineRef.current !== true) setOnline(false);
 		        } finally {
 		            operationRef.current = false; setStarting(false);
+		            // 启动会话结束，按钮回到常态、浮层轮询停掉
+		            launchAttempt.current = null;
+		            setStartSession(null);
+		        }
+		    }
+		    /** 停止本次启动：只终止这次启动拉起的进程树，已在跑的外部服务不受影响。 */
+		    async function stopStartup() {
+		        const attempt = launchAttempt.current;
+		        if (!attempt) return;
+		        setStoppingStart(true);
+		        try {
+		            const r = await jpost(EXPANDER + "/comfy/startup/cancel", { attempt: attempt.id }, 30000);
+		            setMsg(r?.message || (r?.ok ? "已请求停止启动" : "停止启动失败"));
+		        } catch (e) {
+		            setMsg("停止启动失败：" + errText(e));
+		        } finally {
+		            setStoppingStart(false);
 		        }
 		    }
 		    function changeStartScript(value) {
@@ -8007,6 +9716,36 @@ window.__ModuleLoader__.load({
 		        setModelLibraryData({roots:[],folders:[],models:[]});setModelLibraryError("");
 		        setCreatingModelFolder(false);setNewModelFolderName("");setModelDropTarget("");setModelTreeOpen({});setModelCreateFolder("");
 		    }
+		    /** 底模选择场景：kind 为 all / unet / checkpoint / diffusion / ckpt 之一 */
+		    const isBaseModelPick=()=>{
+		        // ⚠️ 从底模卡进来时 componentPicker 被 openModelLibrary 置成 null，
+		        //    所以主判据只能是 modelLibraryKind；componentPicker 仅作补充。
+		        const k=String(modelLibraryKind||"").toLowerCase();
+		        if(k==="all"||k==="unet"||k==="checkpoint"||k==="diffusion"||k==="ckpt")return true;
+		        const pk=String((componentPicker&&componentPicker.kind)||"").toLowerCase();
+		        return pk==="all"||pk==="unet"||pk==="checkpoint"||pk==="diffusion"||pk==="ckpt";
+		    };
+		    /**
+		     * 拉全机底模清单（diffusion_models + checkpoints 合并）。
+		     * 直接问 ComfyUI 的两个 loader 枚举，和绘图台底模下拉同源，不用扫文件系统。
+		     */
+		    async function loadFlatBaseModels(){
+		        setFlatBaseLoading(true);
+		        const out=[];
+		        try{
+		            try{
+		                const u=await jget(COMFY+"/object_info/UNETLoader",20000);
+		                comboOptions(u,"UNETLoader","unet_name").filter(x=>!/^put_/.test(x)).forEach(n=>out.push({name:n,source:"diffusion"}));
+		            }catch(e){}
+		            try{
+		                const c=await jget(COMFY+"/object_info/CheckpointLoaderSimple",20000);
+		                comboOptions(c,"CheckpointLoaderSimple","ckpt_name").filter(x=>!/^put_/.test(x)).forEach(n=>out.push({name:n,source:"checkpoint"}));
+		            }catch(e){}
+		        }finally{
+		            setFlatBaseModels(out);
+		            setFlatBaseLoading(false);
+		        }
+		    }
 		    function openModelLibrary(kind=null,preferred=""){
 		        setComponentPicker(null);setModelPins(readModelPins());navigateModelFolder(kind,0,"",preferred||"");setShowModelLibrary(true);
 		    }
@@ -8049,9 +9788,11 @@ window.__ModuleLoader__.load({
 
 		    React.useEffect(()=>{
 		        if(!showModelLibrary)return;
+		        // 底模场景不走目录树，也就不必扫文件系统：直接问 ComfyUI 要两个 loader 的枚举。
+		        if(isBaseModelPick()){loadFlatBaseModels();return;}
 		        const timer=setTimeout(()=>loadModelLibrary(modelLibraryKind),modelLibraryQuery?180:0);
 		        return()=>{clearTimeout(timer);modelLibraryLoadRef.current?.abort();modelLibraryLoadRef.current=null;};
-		    },[showModelLibrary,modelLibraryKind,modelActiveFolder.root_id,modelActiveFolder.path,modelLibraryQuery]);
+		    },[showModelLibrary,modelLibraryKind,modelActiveFolder.root_id,modelActiveFolder.path,modelLibraryQuery,componentPicker&&componentPicker.kind]);
 		    React.useEffect(()=>{if(showModelLibrary)loadModelDetail(modelLibraryFocus);},[showModelLibrary,modelLibraryKind,modelLibraryFocus]);
 		    function visibleLibraryModels(){const q=modelLibraryQuery.trim().toLowerCase();return (modelLibraryData.models||[]).filter(x=>{
 		        if(q)return String(x.name).toLowerCase().includes(q);
@@ -8181,8 +9922,12 @@ window.__ModuleLoader__.load({
 		        if(saved){setClip(saved.clip||"");setClipType(saved.clipType||"stable_diffusion");setVae(saved.vae||"");setSelLoras((saved.loras||[]).map(x=>({...x})));setSteps(saved.steps??steps);setCfg(saved.cfg??cfg);setSampler(saved.sampler||sampler);setScheduler(saved.scheduler||scheduler);setW(saved.w||w);setHh(saved.h||hh);setSizeMultiplier(preciseSizeMultiplier(saved.sizeMultiplier));}
 		        else{setClip("");setVae("");setSelLoras(cur=>cur.map(x=>({...x,enabled:false})));}
 		        setMsg(saved?"已恢复该主模型的配置":"已选择主模型；请确认类型和组件，原 LoRA 已保留为暂停状态");
-		        // 在模型库点「使用」选中 checkpoint 时，把名字回传给生成页那份 ckpt（两套 state）。
-		        if(mode==="checkpoint"&&typeof MODEL_PICKED_SINK==="function"){try{MODEL_PICKED_SINK(name);}catch(e){/* 生成页未挂载时忽略 */}}
+		        // 在模型库点「使用」选中底模时，把名字回传给生成页那份 ckpt（两套 state）。
+		        //
+		        // ⚠️ 2026-10-31：原来只有 mode==="checkpoint" 才回传，于是选 diffusion 类底模
+		        //    （Anima / MOSS，住在 diffusion_models 里）时生成页根本收不到，界面看着
+		        //    像是「点了使用但没反应」。两条链都要回传。
+		        if(typeof MODEL_PICKED_SINK==="function"){try{MODEL_PICKED_SINK(name);}catch(e){/* 生成页未挂载时忽略 */}}
 		        return true;
 		    }
 
@@ -8314,6 +10059,42 @@ window.__ModuleLoader__.load({
 		    }
 		    function backModelFolder(){if(!componentPicker)navigateModelFolder();}
 		    function renderModelTree(){
+		        // —— 底模场景：扁平清单，不显示文件夹 ——
+		        //
+		        // 2026-10-31：底模分成 diffusion_models 与 checkpoints 两个目录，用户要记
+		        // 「哪个目录放哪类模型」才能找到东西，而点底模卡时 kind 又被写死成 checkpoint，
+		        // 于是 MOSS 这类放在 diffusion_models 的底模根本不出现在列表里。
+		        // 这里改成一次性列出两边全部底模，选完由 applyFocusedModel 回写并触发自动适配。
+		        if(isBaseModelPick()){
+		            const q=modelLibraryQuery.trim().toLowerCase();
+		            const list=flatBaseModels.filter(x=>!q||x.name.toLowerCase().includes(q));
+		            const rowFor=(x)=>{
+		                const kind=x.source==="diffusion"?"diffusion":"checkpoint";
+		                const item={name:x.name,file:x.name,kind,root_id:0,is_model:true};
+		                const key=libraryItemKey(item),selected=modelLibrarySelection.includes(key),focused=modelLibraryFocus&&modelLibraryFocus.name===x.name&&(modelLibraryFocus.kind||"")===kind;
+		                return h("button",{type:"button",key:"flat:"+kind+":"+x.name,
+		                    className:"cc-model-tree-row"+((selected||focused)?" is-selected":""),
+		                    "aria-pressed":!!(selected||focused),
+		                    title:x.name+"（"+kind+"）",
+		                    onClick:()=>{setModelLibraryFocus(item);setModelLibrarySelection([key]);}},
+		                    h("span",{className:"cc-model-tree-icon"},h(PromptIcon,{name:"file",size:14})),
+		                    h("span",{className:"cc-model-tree-name"},
+		                        h("span",null,x.name),
+		                        h("small",null,kind==="diffusion"?"diffusion_models · UNETLoader":"checkpoints · CheckpointLoader")),
+		                    h("span",{className:"cc-model-tree-meta"},kind==="diffusion"?"diffusion":"ckpt"));
+		            };
+		            return h("div",{className:"cc-model-tree","data-cc-guide":"model-library-left"},
+		                h("div",{className:"cc-model-tree-nav"},
+		                    h("span",{className:"cc-model-tree-root","aria-label":"底模清单"},(componentPicker&&componentPicker.label)||"全部底模"),
+		                    h("button",{type:"button",className:"cc-library-icon",style:S.btn2,"aria-label":"刷新底模清单","data-cc-tooltip":"刷新底模清单","aria-busy":flatBaseLoading,onClick:loadFlatBaseModels},
+		                        flatBaseLoading?h(PromptIcon,{name:"spinner",size:16}):h(PromptIcon,{name:"refresh",size:16}))),
+		                h("div",{className:"cc-model-tree-scroll"},
+		                    flatBaseLoading
+		                        ? h("div",{className:"cc-model-library-loading",role:"status"},h("span",{className:"cc-icon-spinner"},h(PromptIcon,{name:"spinner",size:14})),"正在读取底模清单…")
+		                        : list.length
+		                            ? list.map(rowFor)
+		                            : h("div",{className:"cc-model-library-empty"},q?"没有匹配的底模":"本机没有底模")));
+		        }
 		        const q=modelLibraryQuery.trim().toLowerCase(),catalog=!modelLibraryKind;
 		        const folders=(modelLibraryData.folders||[]).filter(x=>!catalog||!q||x.name.toLowerCase().includes(q));
 		        const files=(modelLibraryData.models||[]).filter(x=>!catalog||!q||(x.file||x.name).toLowerCase().includes(q));
@@ -8394,7 +10175,9 @@ window.__ModuleLoader__.load({
 		                modelLibraryError?h("div",{role:"status",style:modelLibraryError==="已停止读取目录"?S.dim:S.bad,className:"cc-model-library-message"},modelLibraryError):null,
 		                modelLibraryData.warnings?.length?h("div",{role:"status",style:S.warn,className:"cc-model-library-message"},modelLibraryData.warnings.join("；")):null,
 		                h("div",{className:"cc-model-library-body"},renderModelTree(),renderModelInspector()),
-		                h("div",{className:"cc-model-library-hint"},"目录内单击展开 · Ctrl/⌘ 多选 · Shift 连选 · 拖动模型或文件夹移动")));
+		                h("div",{className:"cc-model-library-hint"},isBaseModelPick()
+		                    ? "全部底模已合并列出（diffusion_models + checkpoints）· 单击选中 → 右侧「使用」→ 自动加载配套编码器与 VAE"
+		                    : "目录内单击展开 · Ctrl/⌘ 多选 · Shift 连选 · 拖动模型或文件夹移动")));
 		    }
 
 
@@ -8443,7 +10226,7 @@ window.__ModuleLoader__.load({
 		        try{
 		            const items=await fetchAllSavedOutputs(jget, EXPANDER+"/outputs?request_id="+encodeURIComponent(ctl.requestId),5000,ctl.signal);
 		            if(ctl.signal.aborted||outputRequestRef.current!==ctl)return;
-		            const saved=items.map(x=>({...x,saved:true,source:"output",url:savedOutputUrl(x.path)}));
+		            const saved=items.map(x=>({...x,saved:true,source:"output",url:savedOutputUrl(x.path, x.mtime)}));
 		            setSavedOutputItems(saved);outputLoadedRef.current=true;outputLoadedAtRef.current=Date.now();
 		        }catch(e){if(!ctl.signal.aborted&&outputRequestRef.current===ctl)setMsg("读取输出失败："+errText(e));}
 		        finally{if(outputRequestRef.current===ctl){outputRequestRef.current=null;outputLoadingRef.current=false;setOutputLoading(false);}}
@@ -8464,7 +10247,12 @@ window.__ModuleLoader__.load({
 		    }
 		    function outputPreviewSrc(item){
 		        if(!item?.path||outputPreviewQuality==="original")return item?.url||"";
-		        return EXPANDER+"/outputs/thumb?path="+encodeURIComponent(item.path)+"&quality="+encodeURIComponent(outputPreviewQuality);
+		        /* 0.7.131：把 mtime 拼进 URL 当版本号。侧车的 /outputs/thumb 带 `Cache-Control:
+		           private, max-age=300`，而 URL 里只有 path+quality——同名文件被重新生成/覆盖时
+		           URL 一字不变，浏览器 5 分钟内继续拿旧缩略图，卡片上的图就和文件对不上。
+		           侧车自己的缓存 key 含 mtime_ns，问题只出在浏览器这一层。 */
+		        const _v = item.mtime || item.createdAt || 0;
+		        return EXPANDER+"/outputs/thumb?path="+encodeURIComponent(item.path)+"&quality="+encodeURIComponent(outputPreviewQuality)+"&v="+encodeURIComponent(String(_v));
 		    }
 		    React.useEffect(()=>{
 		        if(tab!=="output"||typeof IntersectionObserver==="undefined")return;
@@ -8533,7 +10321,7 @@ window.__ModuleLoader__.load({
 		            });
 		        }catch(e){setMsg("图片信息读取失败："+errText(e));}
 		    }
-		    function applyOutputParams(item){if(expandPhaseRef.current!=="idle"){setMsg("请先完成或停止 AI 操作");return;}const p=item?.params?{...item.params,...(item.params.generationInputs||{})}:null;if(!p){setMsg("这张图片缺少可读取的 ComfyUI 生成参数，当前设置未改变");return;}if(p.pos!==undefined)updatePrompt({pos:p.pos||"",neg:p.negativeApplied===false?promptRef.current.neg:p.neg||""});if(p.ckpt||p.modelConfig){restoreModelSetup(p);}else{if(p.clip)setClip(p.clip);if(p.vae)setVae(p.vae);}if(p.clipType)setClipType(p.clipType);if(Array.isArray(p.loras))setSelLoras(p.loras);setW(p.baseW||p.w||w);setHh(p.baseH||p.h||hh);setSizeMultiplier(preciseSizeMultiplier(p.sizeMultiplier));if(p.steps)setSteps(p.steps);if(p.cfg!==undefined)setCfg(p.cfg);if(p.sampler)setSampler(p.sampler);if(p.scheduler)setScheduler(p.scheduler);if(p.usedSeed!==undefined||p.seed!==undefined)setSeed(p.usedSeed??p.seed);setSeedMode(p.seedMode||"lock");if(p.postControls||p.upscale!==undefined)setPostControls(normalizePost(p));if(p.upscale!==undefined)setUpscale(!!p.upscale);if(p.upscaleModel)setUpscaleModel(p.upscaleModel);if(p.upscaleFactor)setUpscaleFactor(p.upscaleFactor);setOutputDetail(null);switchTab("gen");setMsg("已用该图片的生成参数替换当前设置");}
+		    function applyOutputParams(item){if(expandPhaseRef.current!=="idle"){setMsg("请先完成或停止 AI 操作");return;}const p=item?.params?{...item.params,...(item.params.generationInputs||{})}:null;if(!p){setMsg("这张图片缺少可读取的 ComfyUI 生成参数，当前设置未改变");return;}/* 0.7.130：套用历史参数 = 完全还原这张图的状态，先把上一张卡挂着的插入与禁词锁清掉，否则 stabilizePrompt 会拿旧锁把新提示词里的词当禁词剔掉（<角色卡>的裙长闸 / 体型锁最明显，表现为「同样的词换个卡构图就不对」）。*/if(CLEAR_CARD_STATE_SINK){try{CLEAR_CARD_STATE_SINK();}catch(e){}}if(p.pos!==undefined)updatePrompt({pos:p.pos||"",neg:p.negativeApplied===false?promptRef.current.neg:p.neg||""});if(p.ckpt||p.modelConfig){restoreModelSetup(p);}else{if(p.clip)setClip(p.clip);if(p.vae)setVae(p.vae);}if(p.clipType)setClipType(p.clipType);if(Array.isArray(p.loras))setSelLoras(p.loras);setW(p.baseW||p.w||w);setHh(p.baseH||p.h||hh);setSizeMultiplier(preciseSizeMultiplier(p.sizeMultiplier));if(p.steps)setSteps(p.steps);if(p.cfg!==undefined)setCfg(p.cfg);if(p.sampler)setSampler(p.sampler);if(p.scheduler)setScheduler(p.scheduler);if(p.usedSeed!==undefined||p.seed!==undefined)setSeed(p.usedSeed??p.seed);setSeedMode(p.seedMode||"lock");if(p.postControls||p.upscale!==undefined)setPostControls(normalizePost(p));if(p.upscale!==undefined)setUpscale(!!p.upscale);if(p.upscaleModel)setUpscaleModel(p.upscaleModel);if(p.upscaleFactor)setUpscaleFactor(p.upscaleFactor);setOutputDetail(null);switchTab("gen");setMsg("已用该图片的生成参数替换当前设置");}
 		    function outputModelsFor(item){
 		        const p=item?.params||{},rows=Array.isArray(p.models)?p.models.map(x=>({...x})):[],seen=new Set(rows.map(x=>(x.kind||'')+'|'+(x.name||'')));
 		        const add=(kind,name,detail='')=>{name=String(name||'').trim();if(!name)return;const key=kind+'|'+name;if(seen.has(key))return;seen.add(key);rows.push({kind,name,detail});};
@@ -8597,9 +10385,24 @@ window.__ModuleLoader__.load({
 		    }
 		    function renderOutputPage(){
 		        const rows=filteredOutputs(),visible=rows.slice(0,outputVisible),active=outputFilterCount(outputFilter);
+		        // 0.7.130：历史卡片右上角加「打开图片位置」，直接调侧车 /outputs/manage
+		        // （详情页的「打开所在位置」按钮早就有了，但网格里每张图都得先点进详情才能用，
+		        //  找一张刚出的图要多两步）。stopPropagation 是必须的，否则会连带打开详情浮层。
+		        // 0.7.130：卡片右上角按钮组（打开位置 / 删除）。删除复用详情页的 manageOutput(item,"delete")，
+		        // 它自带 confirm 且删完会 loadOutputs 刷新；这里只负责阻止冒泡，别让点击穿透到卡片的 openOutputDetail。
+		        const cardBtn=(x,icon,title,action,danger)=>h("button",{type:"button",
+		            className:"cc-output-card-act"+(danger?" is-danger":""),
+		            title, "aria-label":title,
+		            onClick:e=>{e.stopPropagation();e.preventDefault();manageOutput(x,action);},
+		            onKeyDown:e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();e.stopPropagation();manageOutput(x,action);}}},
+		            h(PromptIcon,{name:icon,size:15}));
+		        const revealBtn=(x)=>h("div",{className:"cc-output-card-actions"},
+		            x.path?cardBtn(x,"folder","在资源管理器中打开图片位置","open",false):null,
+		            cardBtn(x,"trash",x.path?"永久删除这张图片":"从本次会话移除这条记录","delete",true));
 		        const card=(x,index=0)=>h("article",{key:outputKey(x),className:"cc-output-card",tabIndex:0,onClick:()=>openOutputDetail(x),onKeyDown:e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();openOutputDetail(x);}}},
+		            revealBtn(x),
 		            h("img",{src:outputPreviewSrc(x),
-		                onError:e=>{if(!e.currentTarget.dataset.fallback&&x.url&&e.currentTarget.src!==x.url){e.currentTarget.dataset.fallback="1";e.currentTarget.src=x.url;}},
+		                onError:e=>{/* 0.7.131：原来靠 dataset.fallback 防重入，但 React 复用节点时标记会留到下一张图，导致后续加载失败时不再回退。改成比对当前 src。 */const im=e.currentTarget;if(!x.url||!im.src||im.src===x.url)return;im.src=x.url;},
 		                loading:index<8?"eager":"lazy",decoding:"async",fetchPriority:index<4?"high":"low",alt:x.filename||"输出图片"}),
 		            h("div",{className:"cc-output-card-meta"},
 		                h("span",{className:"cc-output-card-name"},x.filename||"Temp 输出"),
@@ -8625,6 +10428,13 @@ window.__ModuleLoader__.load({
 		                    h("div",{className:"cc-output-quality",role:"group","aria-label":"预览画质"},
 		                        h("span",{className:"cc-output-quality-label"},"预览画质"),
 		                        ...qualityOptions.map(o=>h("button",{key:o.value,type:"button",className:"cc-output-quality-btn","aria-pressed":outputPreviewQuality===o.value,title:o.title,onClick:()=>changeOutputPreviewQuality(o.value)},o.label))),
+		                    /* 0.7.131：带文字的刷新按钮。原来只有一个 31px 的纯图标按钮，还挤在横向
+		                       可滚动的工具栏里（overflow-x:auto + nowrap），窗口一窄就被推到可视区外，
+		                       看上去就像历史页根本没有刷新功能。这里在计数器左侧补一个带文字的按钮，
+		                       点击强制重扫磁盘（force:true 绕过 60 秒缓存）。 */
+		                    h("button",{type:"button",className:"cc-output-refresh-text",title:"重新扫描输出目录，把新出的图拉进来",disabled:outputLoading,onClick:()=>loadOutputs({force:true,silent:false})},
+		                        outputLoading?h(PromptIcon,{name:"spinner",size:14}):h(PromptIcon,{name:"refresh",size:14}),
+		                        h("span",null,outputLoading?"刷新中…":"刷新")),
 		                    h("span",{className:"cc-output-counter"},rows.length===outputItems.length?(rows.length+" 张"):(rows.length+" / "+outputItems.length+" 张"))),
 		                h("div",{className:"cc-output-control-row","data-cc-guide":"output-controls"},
 		                    h("div",{className:"cc-output-search-field"},h(PromptIcon,{name:"search",size:15}),h("input",{type:"search",value:outputFilter.name,placeholder:"搜索文件名…","aria-label":"搜索文件名",autoComplete:"off",spellCheck:false,onChange:e=>updateOutputFilter("name",e.target.value)}),outputFilter.name?h("button",{type:"button",className:"cc-output-search-clear","aria-label":"清除文件名搜索",onClick:()=>updateOutputFilter("name","")},h(PromptIcon,{name:"x",size:14})):null),
@@ -8666,12 +10476,13 @@ window.__ModuleLoader__.load({
 						status, renderTaskSummary()),
 					h("div", { style: { display: "flex", gap: "6px", flexWrap: "wrap", justifyContent: "flex-end", minWidth: 0 } },
 						comfyUpdate?.available?h("button",{type:"button",className:"cc-update-btn",title:"ComfyUI 有新版本可用",onClick:()=>{setUpdateError("");setUpdateOpen(true);}},"可更新"):null,
-						h("button", {type:"button", "data-cc-guide":"connection-action",
-		                    style:Object.assign({}, S.btn2, {display:"inline-flex",alignItems:"center",gap:7,fontWeight:700}),
-		                    disabled:starting || online === null, onClick:connectionAction,
-		                    title:online ? "完全关闭 ComfyUI：终止生成与排队任务、结束进程并释放模型显存" : "尝试启动并连接本机 ComfyUI"},
-		                    h(OfflineComfyMark, {size:15}),
-		                    starting ? "处理中…" : online ? "关闭 ComfyUI" : "连接 ComfyUI"),
+						h(ComfyStartupButton, {
+							starting, online,
+							session: startSession,
+							stopping: stoppingStart,
+							onConnect: connectionAction,
+							onStop: stopStartup,
+						}),
 		                h("button", {type:"button",style:Object.assign({},S.btn2,{display:"inline-flex",alignItems:"center",gap:6}),
 		                    onClick:()=>openModelLibrary(),"aria-label":"打开模型库","data-cc-tooltip":"打开模型库"},
 		                    h(PromptIcon,{name:"folder",size:14})," 模型库"),
@@ -9115,6 +10926,61 @@ window.__ModuleLoader__.load({
 			};
 			const [online, setOnline] = React.useState(null);
 			const [conn, setConn] = React.useState(0);
+			// ---- 启动过程（顶栏「启动 ComfyUI」→ 转圈 + 停止启动）----
+			// 2026-11-01：原来是一个同步 jpost("/comfy/start", {}, 120000)，点完只有一行文字，
+			// 按钮本身不变，看起来"什么都没发生"。改成后端后台线程 + attempt 轮询：
+			// 点下去立刻换成红底「■ 停止启动」，每 800ms 拿一次阶段文字，结束时复原。
+			const [launchAtt, setLaunchAtt] = React.useState(null);
+			const [launchPhase, setLaunchPhase] = React.useState("");
+			const launchAttRef = React.useRef(null);
+			const launchLive = React.useRef(false);
+			launchAttRef.current = launchAtt;
+			React.useEffect(() => () => { launchLive.current = false; }, []);
+			const stopLaunch = React.useCallback(async () => {
+				const aid = launchAttRef.current;
+				launchLive.current = false;
+				setLaunchAtt(null); setLaunchPhase("");
+				if (!aid) return;
+				try { await jpost(EXPANDER + "/comfy/startup/cancel", { attempt: aid }, 15000); } catch (e) {}
+				setMsg("已停止启动"); setOnline(null); setConn((c) => c + 1);
+			}, []);
+			const beginLaunch = React.useCallback(async () => {
+				if (launchAttRef.current) return;
+				const aid = (typeof crypto !== "undefined" && crypto.randomUUID)
+					? crypto.randomUUID()
+					: "att-" + Date.now() + "-" + Math.random().toString(16).slice(2);
+				launchLive.current = true;
+				setLaunchAtt(aid); setLaunchPhase("正在准备启动…");
+				setOnline(null); setMsg("正在启动 ComfyUI…");
+				try {
+					const r = await jpost(EXPANDER + "/comfy/start", { mode: "background", attempt: aid }, 30000);
+					if (!r || !r.ok) throw new Error((r && r.message) || "start 失败");
+				} catch (e) {
+					if (!launchLive.current) return;
+					launchLive.current = false; setLaunchAtt(null); setLaunchPhase("");
+					setOnline(false); setMsg("启动失败：" + errText(e));
+					return;
+				}
+				const deadline = Date.now() + 180000;
+				let snap = null;
+				while (launchLive.current && Date.now() < deadline) {
+					await new Promise((res) => setTimeout(res, 800));
+					if (!launchLive.current) return;
+					try {
+						const sp = await jget(EXPANDER + "/comfy/startup?attempt=" + encodeURIComponent(aid), 6000);
+						snap = (sp && sp.snapshot) || null;
+					} catch (e) { continue; }
+					if (snap && snap.phase) { setLaunchPhase(snap.phase); setMsg(snap.phase); }
+					if (snap && snap.finishedAt) break;
+				}
+				if (!launchLive.current) return;
+				launchLive.current = false; setLaunchAtt(null); setLaunchPhase("");
+				if (snap && snap.cancelled) { setMsg("已停止启动"); setOnline(null); setConn((c) => c + 1); return; }
+				if (!snap || !snap.finishedAt) { setOnline(false); setMsg("启动超时（180 秒内没有结果）"); return; }
+				if (!snap.ok) { setOnline(false); setMsg("启动失败：" + (snap.message || "?")); return; }
+				setMsg(snap.message || "ComfyUI 已启动");
+				setOnline(null); setConn((c) => c + 1);
+			}, []);
 
 			// 元数据
 			const [ckpts, setCkpts] = React.useState([]);
@@ -9131,7 +10997,12 @@ window.__ModuleLoader__.load({
 			const [ckpt, setCkpt] = React.useState(L.ckpt || "");
 			// 模型库（A 线弹窗）里点「使用」选中底模后，名字经模块级钩子回到这里。
 			React.useEffect(() => {
-				MODEL_PICKED_SINK = (name) => { if (name) setCkpt((cur) => (cur === name ? cur : name)); };
+				MODEL_PICKED_SINK = (name) => {
+					// 诊断：确认模型库的「使用」真的把名字回传到了这一侧。
+					// 看不到这句 = 生成页没挂载（停在别的 tab）或 chooseMainModel 没调到钩子。
+					DIAG("[诊断1] 收到底模 " + String(name));
+					if (name) setCkpt((cur) => (cur === name ? cur : name));
+				};
 				return () => { MODEL_PICKED_SINK = null; };
 			}, []);
 			const [clip, setClip] = React.useState(L.clip || MODEL_DEFAULTS.clip);
@@ -9146,52 +11017,191 @@ window.__ModuleLoader__.load({
 			React.useEffect(() => {
 				if (!ckpt) return;
 				let dead = false;
+				// 诊断：effect 每次触发都把现场打出来，能直接看出是列表没到齐还是提前 return。
+				try {
+					DIAG("[诊断2] effect 触发 底模=" + ckpt + " | unets=" + unets.length + " ckpts=" + ckpts.length
+						+ " clips=" + clips.length + " vaes=" + vaes.length + " | 已适配=" + (adaptedCkptRef.current || "无"));
+				} catch (e) { }
 				const FAMILY_CLIP_TYPE = {
 					sdxl: "stable_diffusion", sd15: "stable_diffusion", sd2: "stable_diffusion", legacy: "stable_diffusion",
-					flux: "flux", sd3: "sd3", anima: "qwen_image",
+					flux: "flux", sd3: "sd3", anima: "qwen_image", moss: "moss_image",
 				};
 				(async () => {
 					try {
-						const d = await jget(EXPANDER + "/models/detail?kind=checkpoint&name=" + encodeURIComponent(ckpt), 15000);
+						// ⚠️ 2026-10-31：kind 直接按底模实际所在目录定，不再拿 clipType 猜。
+						//    原来猜的方向是「先有 clipType 才知道去哪个目录读元数据」，而 clipType
+						//    又要靠这次适配来定 —— 循环依赖，切到 moss_image 时必然读错目录、
+						//    拿到 d=null 然后静默放弃适配。
+						//
+						//    侧车的 kind 词表见 sidecar_aline.py 的 _MODEL_DIR_KEYS：
+						//    diffusion_models 对应的 key 是 "diffusion"，不是 "unet"
+						//    （传 "unet" 会被 /models/detail 直接退 400）。
+						const _kind = unets.indexOf(ckpt) >= 0 ? "diffusion" : "checkpoint";
+						let d = null;
+						try {
+							d = await jget(EXPANDER + "/models/detail?kind=" + _kind + "&name=" + encodeURIComponent(ckpt), 15000);
+						} catch (e0) { d = null; }
+						if (!d) {
+							const _alt = _kind === "diffusion" ? "checkpoint" : "diffusion";
+							try {
+								d = await jget(EXPANDER + "/models/detail?kind=" + _alt + "&name=" + encodeURIComponent(ckpt), 15000);
+							} catch (e1) { d = null; }
+						}
 						if (dead) return;
 						const key = profileKeyFromModelBase(d && d.base_type) || profileKeyFromModelName(ckpt);
 						const p = key ? MODEL_PROFILES[key] : null;
-						if (!p) return;
+						// 注意：「未命中 profile」不等于出错。Anima 的 A 线 profile 用 stable_diffusion
+						// 编码器，而本地面板要 qwen_image，套错会把底模当 checkpoint 送进去直接 400，
+						// 所以 profileKeyFromModelBase 对 anima 故意返回空 —— 让它走下面按目录判链的兜底分支。
+						const _dirSide = unets.indexOf(ckpt) >= 0 ? "diffusion_models" : "checkpoints";
+						DIAG("[诊断3] base_type=" + ((d && d.base_type) || "读不到")
+							+ " → key=" + (key || "空")
+							+ " → " + (p ? "命中 " + (p.label || key) : "按目录判链"
+								+ "（" + _dirSide + " ⇒ " + (unets.indexOf(ckpt) >= 0 ? "UNet 链" : "Checkpoint 链") + "，正常）"));
+						// 元数据读不到、文件名也猜不出家族时，至少把链切对：
+						// 底模在 diffusion_models 里就必须走 UNet 链，否则 ComfyUI 会拿它去
+						// CheckpointLoaderSimple，直接报找不到该 checkpoint。
+						if (!p) {
+							const wantUnet = unets.indexOf(ckpt) >= 0;
+							// ⚠️ 时序：clips / vaes 是异步填的，effect 第一次跑时可能还是空数组。
+							//    这时挑不到编码器就不能记 ref，否则列表到齐后 effect 重跑会被拦，
+							//    编码器永远是空的。只有该设的都设上了才落 ref。
+							const fam2 = wantUnet ? (/moss/i.test(ckpt) ? "moss" : "anima") : "";
+							const c2 = fam2 ? pickByHints(clips, PROFILE_CLIP_HINT[fam2]) : "";
+							const v2 = fam2 ? pickByHints(vaes, PROFILE_VAE_HINT[fam2]) : "";
+							const ready = wantUnet ? (!!c2 && !!v2) : (clips.length > 0 || vaes.length > 0 || ckpts.length > 0);
+							if (adaptedCkptRef.current === ckpt && ready) return;
+							if (!ready) return;   // 列表还没到齐，等下一次 effect
+							adaptedCkptRef.current = ckpt;
+							// ⚠️ 2026-10-31：这里原来是
+							//        if (wantUnet) return isUnetClipType(cur) ? cur : "qwen_image";
+							//    同一处病根：isUnetClipType 只分「UNet / 非 UNet」，不区分
+							//    qwen_image 与 moss_image。从 MOSS 换成 Anima 时 cur 还是 moss_image，
+							//    判定为「已经在 UNet 链上」就原样保留 —— 于是选 Anima 显示 moss_image。
+							//    兜底分支本来就已经按文件名算出了 fam2，直接用它定具体类型。
+							const wantType = wantUnet ? (fam2 === "moss" ? "moss_image" : "qwen_image") : "";
+							setClipType((cur) => {
+								if (wantUnet) return cur === wantType ? cur : wantType;
+								return isUnetClipType(cur) ? (ckpts.length ? "stable_diffusion" : cur) : cur;
+							});
+							// 链切对了还得把配套件带上，否则首次使用时光有底模、编码器空着提交必 400。
+							// 家族按文件名粗分：含 moss 的走 MOSS 那套（Qwen3.5-9B + FLUX.2 VAE），
+							// 其余 UNet 族按 Anima（Qwen3 0.6B + Qwen-Image VAE）。
+							if (wantUnet) {
+								if (c2) setClip((cur) => (cur === c2 ? cur : c2));
+								if (v2) setVae((cur) => (cur === v2 ? cur : v2));
+								try { MSG("已按底模切换加载链 → " + (fam2 === "moss" ? "MOSS-Image" : "Anima（qwen_image）") + (c2 ? "、编码器 " + c2 : "") + (v2 ? "、VAE " + v2 : "")); } catch (e) { /* ignore */ }
+							} else {
+								// checkpoint 自带 CLIP 与 VAE，外挂件必须清空，否则会盖掉内置的
+								setClip((cur) => (cur === "" ? cur : ""));
+								setVae((cur) => (cur === "" ? cur : ""));
+							}
+							return;
+						}
 						const fam = p.family;
 						// 同一个底模只适配一次：之后用户手改编码器/VAE 不被反复覆盖。
-						if (adaptedCkptRef.current === ckpt) return;
+						// 同样要等列表到齐，否则 MOSS 这种需要外挂编码器的会被空列表卡住。
+						const needEnc = fam === "anima" || fam === "moss";
+						const cNeed = needEnc ? pickByHints(clips, PROFILE_CLIP_HINT[fam]) : "";
+						const vNeed = pickByHints(vaes, PROFILE_VAE_HINT[fam]);
+						const ready2 = needEnc ? !!cNeed : true;
+						if (adaptedCkptRef.current === ckpt && ready2) return;
+						if (needEnc && !ready2) return;   // 等 clips 到齐再适配
 						adaptedCkptRef.current = ckpt;
 						const notes = [];
 						const next = p.clipType || FAMILY_CLIP_TYPE[fam] || "";
-						if (next && next !== "qwen_image") {
+						// UNet 族（qwen_image / moss_image）必须显式切过去，否则会留在 checkpoint 链上。
+						//
+						// ⚠️ 2026-10-31：这里原来有一句「同族内不覆盖用户细分选择」：
+						//        if (isUnetClipType(cur) === isUnetClipType(next)) return cur;
+						//    但 isUnetClipType 只回答「是不是 UNet 链」，qwen_image 与 moss_image
+						//    都算 true，于是 Anima → MOSS 这一跳被判成「同族」直接 return，
+						//    编码器类型永远停在 qwen_image —— 这正是「编码器类型还是不变」。
+						//    profile 已经明确给出该用的具体类型，按它切就行，不需要这层拦。
+						if (next) {
 							setClipType((cur) => (cur === next ? cur : next));
-							notes.push("类型 " + next);
+							if (next !== clipType) notes.push("类型 " + next);
 						}
 						// VAE：按家族线索从 vaes 里挑；checkpoint 系没有线索就走内置（清空）。
 						const v = pickByHints(vaes, PROFILE_VAE_HINT[fam]);
 						setVae((cur) => {
 							if (v) return cur === v ? cur : v;
-							return fam === "anima" ? cur : "";   // checkpoint 系用内置 VAE
+							return fam === "anima" || fam === "moss" ? cur : "";   // checkpoint 系用内置 VAE
 						});
 						if (v) notes.push("VAE " + v);
-						// 编码器：anima 必须外挂 qwen 编码器；checkpoint 系清空走内置 CLIP。
-						if (fam === "anima") {
-							const c = pickByHints(clips, PROFILE_CLIP_HINT.anima);
+						// 编码器：anima / moss 这类 UNet 族必须外挂文本编码器；checkpoint 系清空走内置 CLIP。
+						//
+						// ⚠️ 2026-10-31：原来只有 fam === "anima" 这一支，MOSS 选完底模后
+						//    「文本编码器」还空着，直接提交会因为 CLIPLoader 拿不到 clip 而 400。
+						if (fam === "anima" || fam === "moss") {
+							const c = pickByHints(clips, PROFILE_CLIP_HINT[fam]);
 							if (c) { setClip((cur) => (cur === c ? cur : c)); notes.push("编码器 " + c); }
 						} else {
 							setClip((cur) => (cur === "" ? cur : ""));
 						}
 						if (notes.length) {
 							try { MSG("已按底模自动适配：" + (p.label || key) + " → " + notes.join("、") +
-								(fam === "anima" ? "" : "（编码器与 VAE 走 checkpoint 内置）")); } catch (e) { /* ignore */ }
+								(fam === "anima" || fam === "moss" ? "" : "（编码器与 VAE 走 checkpoint 内置）")); } catch (e) { /* ignore */ }
 						}
 					} catch (e) { /* 读不到元数据就保持现状，不猜 */ }
 				})();
 				return () => { dead = true; };
-			}, [ckpt, vaes, clips]);
+			}, [ckpt, vaes, clips, unets.length, ckpts.length]);
 			const [selLoras, setSelLoras] = React.useState((L.loras && L.loras.length) ? L.loras : MODEL_DEFAULTS.loras);
 			const [pos, setPos] = React.useState(L.pos || "");
 			const [neg, setNeg] = React.useState(L.neg || "");
+			/* 随机系统账本：记录每个槽位当前由随机按钮写进提示词的那段文本。
+			   再按任意一个随机按钮时，先把这些旧值逐词剥掉，再写新值 —— 这就是「再按一次换掉旧的随机词」。
+			   用户自己敲的词不在账上，永远不会被删。用 ref 而不是 state：它只影响下一次点击的替换口径，
+			   不需要触发重渲染。
+
+			   落盘到 localStorage：账本一旦只活在内存里，刷新页面或重启 dsh web 就清零，
+			   上一次随机写进去的词会被当成"用户手写"永久保护起来 —— 按一次多攒一套姿势，
+			   攒到五六套时模型只能在冲突里折中，每张图看起来都一个样。 */
+			const rndBySlot = React.useRef(null);
+			if (rndBySlot.current === null) {
+				let saved = null;
+				try { saved = JSON.parse(window.localStorage.getItem("dsh.comfy.rndBySlot") || "null"); } catch (e) { saved = null; }
+				rndBySlot.current = (saved && typeof saved === "object") ? saved : {};
+			}
+			const rndSaveLedger = (obj) => {
+				try { window.localStorage.setItem("dsh.comfy.rndBySlot", JSON.stringify(obj || {})); } catch (e) { /* 隐私模式下写不了就算了 */ }
+			};
+			/* 每个槽位「历史上被随机按钮写过的所有词」的集合。
+			   三个随机按钮每次按下都会用它把残留一起剥掉：账本只记当前一轮，
+			   而老版本留下的堆积、换了浏览器、清了 localStorage 这些情况账本都是空的，
+			   只有这份历史能认出「哪些词当初是随机来的」，才不会越按越乱。 */
+			const rndSeen = React.useRef(null);
+			if (rndSeen.current === null) {
+				let savedSeen = null;
+				try { savedSeen = JSON.parse(window.localStorage.getItem("dsh.comfy.rndSeen") || "null"); } catch (e) { savedSeen = null; }
+				rndSeen.current = (savedSeen && typeof savedSeen === "object") ? savedSeen : {};
+			}
+			const rndSaveSeen = (obj) => {
+				try { window.localStorage.setItem("dsh.comfy.rndSeen", JSON.stringify(obj || {})); } catch (e) { /* 同上 */ }
+			};
+			/* 上一次抽到的姿势族。90 条姿势里「站」占 21%、「躺」14%、「坐」13%，纯均匀抽的话
+			   三张里至少两张同族的概率是 41.6%，肉眼看就是"一直一个姿势"。所以抽之前先排除上一族。
+			   记两族而不是一族：只排一族时，三张里「A B A」这种首尾撞车仍占 18.7%。 */
+			const rndLastPoseFam = React.useRef([]);
+			/* 分镜同理：距离（全身/中景/特写…）和角度（仰/俯/侧/背/过肩）各记最近两族。
+			   62 条分镜里「全身+正面」占大头，纯均匀抽三张出来很容易看起来是同一个机位。 */
+			const rndLastFrameDist = React.useRef([]);
+			const rndLastFrameAngle = React.useRef([]);
+			/* 光影同理：30 段分冷/暖/硬/柔/特效/对比六族，连着两张都用「霓虹溢光」等于没换。 */
+			const rndLastLightFam = React.useRef([]);
+			/* 场景同理：190 段分十族，不分族的话「森林→森林→山谷」看起来就是野外一路到头。 */
+			const rndLastSceneFam = React.useRef([]);
+			/* 道具同理：157 段分束缚/军事/血腥/兵器/音乐/食物/电子/工具/自然/织物/杂项，
+			   不分族的话手枪完了还是手枪、茶杯完了还是茶杯。 */
+			const rndLastPropFam = React.useRef([]);
+			/* 外观 / 表情 / 附加特征 / 服饰 / 画风：这五个槽位原来只有纯均匀抽取，
+			   池子再大也会连撞（100 段外观里「长发」占一半，三张全是长发很常见）。 */
+			const rndLastLookFam = React.useRef([]);
+			const rndLastMoodFam = React.useRef([]);
+			const rndLastExtraFam = React.useRef([]);
+			const rndLastOutfitFam = React.useRef([]);
+			const rndLastStyleFam = React.useRef([]);
 			/* 插入登记的订阅：卡片的蓝框靠它重渲染 */
 			const [insVer, setInsVer] = React.useState(0);
 			React.useEffect(() => INSERTED.sub(() => setInsVer((v) => v + 1)), []);
@@ -9232,6 +11242,8 @@ window.__ModuleLoader__.load({
 				const hadCond = !!(rec.cond && COND.cardName === rec.name);
 				if (hadCond) COND.clear();
 				INSERTED.del(rec.id);
+				// 开关开着但已经没有可挂条件图的卡了 → 一起关掉，别让下一次出图带着空的 plan 跑
+				try { if (llliteOn && !llliteCards().length) { setLllliteOn(false); COND.clear(); } } catch (e) { }
 				setMsg("已解除「" + rec.name + "」· 撤回 " + (_p.n + _n.n) + " 条词" + (loraN ? " · 摘下 " + loraN + " 支 LoRA" : "") + (hadCond ? " · 条件图已解绑" : ""));
 			}
 			/** 全部清空：确认一次，解除所有插入 + 清干净所有会污染下一次出图的东西 */
@@ -9316,7 +11328,33 @@ window.__ModuleLoader__.load({
 			const [cardSel, setCardSel] = React.useState("");
 			const [condVer, setCondVer] = React.useState(0);
 			const [llliteT, setLllliteT] = React.useState({ assets: {}, weights: {} });
+			/* 0.7.130：生成页的身份控制开关。卡里 conditioning.enabled 默认 false（场景出图不该被
+			   控制图锁住姿态和背景），需要锁脸/锁衣服时在面板上临时打开，只影响本次会话。 */
+			const [llliteOn, setLllliteOn] = React.useState(false);
+			const [lllitePick, setLlllitePick] = React.useState("");
 			React.useEffect(() => COND.subscribe(() => setCondVer((v) => v + 1)), []);
+			/** 当前插入的角色卡里，带 conditioning.presets 的那些（面板据此决定要不要显示开关） */
+			function llliteCards() {
+				const ids = INSERTED.chars().map((r) => String(r.id || ""));
+				return (USER.cards || []).filter((c) => c && c.conditioning && c.conditioning.presets
+					&& Object.keys(c.conditioning.presets).length
+					&& ids.indexOf(String(c.id || c.name || "")) >= 0);
+			}
+			/** 开关切换：开 → 临时 resolve（绕过卡里的 enabled）；关 → 清空 plan，节点整段不进图 */
+			async function toggleLllite(next, card, preset) {
+				const target = card || llliteCards()[0];
+				if (!next || !target) { setLllliteOn(false); COND.clear(); return; }
+				setLllliteOn(true);
+				const cond = target.conditioning || {};
+				const keys = Object.keys(cond.presets || {});
+				const key = String(target.id || target.name || "");
+				if (preset && keys.indexOf(preset) >= 0) COND.picks[key] = preset;
+				else if (lllitePick && keys.indexOf(lllitePick) >= 0) COND.picks[key] = lllitePick;
+				setLlllitePick(COND.pickOf(target, keys));
+				const r = await COND.resolve(target, [Number(w), Number(hh)], true);
+				if (r && r.status === "resolved") setMsg("身份控制已开启（" + (COND.pickOf(target, keys)) + " · 强度 " + r.strength + "）");
+				else setMsg("身份控制开启失败：" + ((r && (r.reason || r.status)) || "未知原因"));
+			}
 			/** 角色卡「插入」的二级菜单：存当前打开菜单的卡 id */
 			const [insMenu, setInsMenu] = React.useState("");
 			/** 风格卡：选中 / 编辑中的草稿 / 插入二级菜单 */
@@ -9335,6 +11373,14 @@ window.__ModuleLoader__.load({
 			const [dictQ, setDictQ] = React.useState("");
 			/** 词库插入目标：正向 or 负面 */
 			const [target, setTarget] = React.useState("pos");
+			/** 词库二级视图：分类词库 / 提示词段构建 */
+			const [segOn, setSegOn] = React.useState(false);
+			/** 段构建：槽位 → 该段完整键名 */
+			const [segSel, setSegSel] = React.useState({});
+			/** 段构建：正在挑选的槽位 */
+			const [segOpen, setSegOpen] = React.useState("style");
+			/** 段构建：评级 */
+			const [segRating, setSegRating] = React.useState("rating:questionable");
 			const [presetName, setPresetName] = React.useState("");
 			const [presetCat, setPresetCat] = React.useState("默认");
 			/** ComfyUI 工作流导入 */
@@ -9564,38 +11610,82 @@ window.__ModuleLoader__.load({
 		  /* 2026-10-20 去掉「从磁盘同步」：不再自动把磁盘卡并回浏览器存档 */
 
 
-			// 底模分两条链：Anima（编码器类型 qwen_image）走 UNETLoader 读 diffusion_models，
-			// 其余走 CheckpointLoaderSimple 读 checkpoints。两边的名字不能互相投递——
-			// 混投会被 ComfyUI 校验拦成 HTTP 400（2026-10-20 实测：animagine-xl-3.1 被塞进 UNETLoader）。
-			const isAnima = String(clipType || "") === "qwen_image";
-			const modelList = isAnima ? unets : ckpts;
-			const modelBad = !!ckpt && modelList.length > 0 && modelList.indexOf(ckpt) < 0;
-			/** 某分支上次用的底模（USER.last.byType 里按 qwen_image / ckpt 各存一份） */
+			// 底模分两条链：UNet 族（编码器类型在 UNET_CLIP_TYPES 里，如 qwen_image / moss_image）
+			// 走 UNETLoader 读 diffusion_models，其余走 CheckpointLoaderSimple 读 checkpoints。
+			// 两边的名字不能互相投递——混投会被 ComfyUI 校验拦成 HTTP 400
+			// （2026-10-20 实测：animagine-xl-3.1 被塞进 UNETLoader）。
+			//
+			// ⚠️ 2026-10-31：判定方向反过来了。原来是「先看 clipType 决定去哪个目录找底模」，
+			//    于是选 moss_image 要先滚 30 项类型下拉，模型库还会落错目录。
+			//    现在改成「看底模落在哪个目录决定走哪条链」——选了 diffusion_models 里的文件
+			//    就是 UNet 链，选了 checkpoints 里的就是 ckpt 链，clipType 随后自动跟上。
+			//    ckpt 为空（首次进入）时才退回按 clipType 猜。
+			const ckptIsUnet = !!ckpt && unets.indexOf(ckpt) >= 0;
+			const isAnima = ckpt ? ckptIsUnet : isUnetClipType(clipType);
+			const modelList = ckptIsUnet ? unets : ckpts;
+			/** 跨目录的合并列表：扁平选择界面用，也用作「这个名字本机认不认」的判据 */
+			const allModels = unets.concat(ckpts);
+			/** 只在这名字两个目录都没有时算错——跨目录选底模是本设计的正常行为，不是错误 */
+			const modelBad = !!ckpt && allModels.length > 0 && allModels.indexOf(ckpt) < 0;
+			/** 底模卡上那句提示的来源标签 */
+			const ckptSourceLabel = ckptIsUnet ? "diffusion" : "checkpoint";
+			/**
+			 * 某分支上次用的底模（USER.last.byType 里按 unet / ckpt 各存一份）。
+			 * 2026-10-31：原来 UNet 那格叫 "qwen_image"，于是 qwen_image 与 moss_image 抢同一个槽，
+			 * 切换一次就把对方的选择覆盖掉。改成中性 key "unet"，老存档回退读旧 key。
+			 */
 			const savedModelFor = (anima) => {
 				const bt = (USER.last && USER.last.byType) || {};
-				return bt[anima ? "qwen_image" : "ckpt"] || "";
+				if (!anima) return bt["ckpt"] || "";
+				return bt["unet"] || bt["qwen_image"] || "";
 			};
-			/** 切分支时挑底模：本分支上次用的 > 当前值（若在新列表里）> anima 默认 > 列表第一个 */
+			/**
+			 * UNet 族各自的文件名线索：切到某个族时，优先在这个族里挑长得像的底模。
+			 *
+			 * ⚠️ 2026-10-31：pickModelFor 原来无条件优先 anima-aesthetic-v1.1.safetensors，
+			 *    于是选 moss_image 时会把 Anima 的底模塞进 UNETLoader —— 名字对但权重错，
+			 *    ComfyUI 会拿 Anima 的权重去跑 MOSS 的文本编码器和 FLUX.2 VAE，出来是噪声。
+			 */
+			const UNET_MODEL_HINTS = {
+				qwen_image: [/anima/i, /qwen/i],
+				moss_image: [/moss/i],
+			};
+			/** 按 clipType 在该族的底模列表里挑一个像样的；挑不到返回 "" */
+			const pickUnetByHint = (type, list) => {
+				const hints = UNET_MODEL_HINTS[String(type || "")] || [];
+				for (const re of hints) {
+					const hit = list.find((x) => re.test(String(x || "")));
+					if (hit) return hit;
+				}
+				return "";
+			};
+			/** 切分支时挑底模：本分支上次用的 > 当前值（若在新列表里）> 该族线索命中 > 列表第一个 */
 			const pickModelFor = (type) => {
-				const anima = String(type) === "qwen_image";
+				const anima = isUnetClipType(type);
 				const list = anima ? unets : ckpts;
 				if (ckpt && list.indexOf(ckpt) >= 0) return ckpt;          // 眼下这个在新分支里有效 -> 优先保住
 				const saved = savedModelFor(anima);
 				if (saved && list.indexOf(saved) >= 0) return saved;       // 否则回到该分支上次用的
-				if (anima && list.indexOf("<底模>.safetensors") >= 0) return "<底模>.safetensors";
+				if (anima) {
+					// 先把本族线索命中的用上；moss_image 不会再被塞 Anima 的权重
+					const byHint = pickUnetByHint(type, list);
+					if (byHint) return byHint;
+					const animaDefault = pickUnetByHint("qwen_image", list);
+					if (animaDefault) return animaDefault;
+				}
 				return list[0] || "";
 			};
 			/**
 			 * ⚠️ 2026-10-21：本机 diffusion_models 是空的（UNETLoader.unet_name 0 条），
 			 *    但 0.6.0 的 MODEL_DEFAULTS.clipType 就是 qwen_image，于是面板一上来停在
 			 *    Anima 分支、底模下拉空空如也，看起来像"模型没法选"。
-			 *    这里在「qwen_image 分支没有底模、而 checkpoints 有」时自动切到别的编码器类型。
+			 *    这里在「UNet 分支没有底模、而 checkpoints 有」时自动切到别的编码器类型。
 			 *    将来真往 diffusion_models 放了模型（unets 不为空），这条就不再触发。
 			 */
 			React.useEffect(() => {
-				if (String(clipType || '') !== 'qwen_image') return;
+				if (!isUnetClipType(clipType)) return;
 				if (unets.length > 0 || ckpts.length === 0) return;
-				const alt = (clipTypes || []).filter((x) => x !== 'qwen_image')[0];
+				const alt = (clipTypes || []).filter((x) => !isUnetClipType(x))[0];
 				if (alt && alt !== clipType) {
 					setClipType(alt);
 					MSG('没有 diffusion_models 底模，编码器类型已自动切到 ' + alt + '（走 checkpoints）');
@@ -9607,15 +11697,16 @@ window.__ModuleLoader__.load({
 				if (ckpt && modelList.indexOf(ckpt) >= 0) return;      // 当前值在本分支有效 → 不动（= 上次用的）
 				const saved = savedModelFor(isAnima);
 				if (saved && modelList.indexOf(saved) >= 0) { setCkpt(saved); return; }   // 恢复该分支上次用的
-				const prefer = (isAnima && unets.indexOf("<底模>.safetensors") >= 0)
-					? "<底模>.safetensors" : modelList[0];
+				// 同一族里再按该族线索挑（moss_image 挑 moss*，qwen_image 挑 anima*）；
+				// 原来这里写死 anima-aesthetic，选 moss_image 时会塞给 UNETLoader 一个 Anima 权重。
+				const prefer = (isAnima ? pickUnetByHint(clipType, modelList) : "") || modelList[0];
 				setCkpt(prefer);
 			}, [clipType, unets.length, ckpts.length]);
 
 			// 参数变了就记住（下次进来还在）
 			React.useEffect(() => {
 				const byType = Object.assign({}, (USER.last && USER.last.byType) || {});
-				if (ckpt) byType[isAnima ? "qwen_image" : "ckpt"] = ckpt;
+				if (ckpt) byType[isAnima ? "unet" : "ckpt"] = ckpt;
 				USER.last = Object.assign({}, USER.last || {}, { ckpt, clip, clipType, vae, loras: selLoras, pos, neg, w, h: hh, steps, cfg, sampler, scheduler, prefix, upscale, upscaleModel, upscaleFactor, theme, seed, lockSeed, viewKey, byType, sizeMultiplier, seedMode });
 				saveUser();
 			}, [ckpt, vae, clip, clipType, selLoras, pos, neg, w, hh, steps, cfg, sampler, scheduler, prefix, upscale, upscaleModel, upscaleFactor, theme, sizeMultiplier, seedMode]);
@@ -9642,9 +11733,8 @@ window.__ModuleLoader__.load({
 			async function doGen() {
 				if (!ckpt) { setMsg("先选一个底模"); return; }
 				if (modelBad) {
-					setMsg(isAnima
-						? "底模「" + ckpt + "」是 checkpoint，qwen_image（Anima）分支要用 diffusion_models 里的模型（当前可用的：" + (unets.join(" / ") || "无") + "）"
-						: "底模「" + ckpt + "」不在 checkpoints 里，换一个或把编码器类型改成 qwen_image");
+					setMsg("底模「" + ckpt + "」在 diffusion_models 和 checkpoints 里都找不到。"
+						+ "当前可用的底模：" + (allModels.join(" / ") || "无（先把权重放进 models 目录）"));
 					return;
 				}
 				touch();
@@ -9654,6 +11744,12 @@ window.__ModuleLoader__.load({
 				if (_stab.moved) setMsg("特征锁：把 " + _stab.moved + " 个词从正向移到了负向（稳定角色特征）");
 				if (_mc.n >= 2) setMsg("多角色模式：已挂 " + _mc.n + " 张角色卡 · 人数标签 " + _mc.n + "girls · 人物类数量负向已放行");
 				// 身份控制：resolved 先把控制图/权重摆进 ComfyUI 目录，再接线；其余状态明说不静默
+				// 面板开关开着但 plan 还没落定（刚插入卡 / 改过画布尺寸 / 上个会话残留）时补解析一次
+				if (llliteOn && (!COND.plan || COND.plan.status === "off")) {
+					const _cs = llliteCards();
+					if (_cs.length) { try { await COND.resolve(_cs[0], [Number(w), Number(hh)], true); } catch (e) { } }
+					else { setLllliteOn(false); }
+				}
 				const _cp = COND.plan;
 				let _extra = null, _wire = null;
 				if (_cp && _cp.status === "resolved") {
@@ -9738,6 +11834,41 @@ window.__ModuleLoader__.load({
 					if (zh && en) map[zh] = map[zh] ? (map[zh] + ", " + en) : en;
 				}
 				for (const p of NL_EXTRA) if (p[0] && p[1]) map[p[0]] = map[p[0]] ? (map[p[0]] + ", " + p[1]) : p[1];
+				// 随机资料库也接进中文反查：把「RS-51 松林空地 → pine clearing, tall grass…」
+				// 「RQ-12 跪伏抬头 → kneeling, head raised…」这类条目剥掉编号转成中文键。
+				// 这样离线规则能认的就不只是 NL_EXTRA 里手写的那几百个词，而是整个资料库近千条。
+				const RL = (typeof RND_LIB === "object" && RND_LIB) ? RND_LIB : null;
+				if (RL) {
+					for (const slot of Object.keys(RL)) {
+						const pool = RL[slot];
+						if (!pool || typeof pool !== "object") continue;
+						for (const key of Object.keys(pool)) {
+							const en = String(pool[key] || "").trim();
+							if (!en) continue;
+							const zh = String(key).replace(/^[A-Z]{2,3}-\d+\s*/, "").trim();
+							if (!zh || zh === slot) continue;
+							// 全名走正常合并；再挂两三个尾部核心词当别名，
+							// 这样用户说「山林」也能命中「秋季山林」，不必把整条条目名背下来。
+							// 别名只在没被占用时占位，绝不覆盖 NL_EXTRA / 词库里已有的词，
+							// 否则「黄昏」会被一堆场景名的尾巴挤成几十段。
+							const alts = [zh];
+							if (zh.length >= 4) {
+								alts.push(zh.slice(-3), zh.slice(-2));   // 尾部：「秋季山林」→「山林」
+								alts.push(zh.slice(0, 2));               // 头部：「跪伏叩首」→「跪伏」
+							} else if (zh.length === 3) { alts.push(zh.slice(-2), zh.slice(0, 2)); }
+							for (let ai = 0; ai < alts.length; ai++) {
+								const a = alts[ai];
+								if (a.length < 2) continue;
+								const prev = map[a];
+								if (!prev) { map[a] = en; continue; }
+								if (ai === 0) {
+									// 同名条目（好几个「烛光」）合并成多行标签，封顶 10 段
+									if (prev.split(", ").length < 10 && prev.indexOf(en) < 0) map[a] = prev + ", " + en;
+								}
+							}
+						}
+					}
+				}
 				return map;
 			}
 
@@ -9812,6 +11943,16 @@ window.__ModuleLoader__.load({
 
 		/** 已插入的角色卡（生图时用它们的锁稳定特征） */
 		let lockCards = [];
+		// 供历史页调用：把「当前挂着的卡」全部解除。清 INSERTED 同时给卡片去蓝框，
+		// 再清 lockCards 让下一次出图不再套用任何禁词锁。
+		CLEAR_CARD_STATE_SINK = () => {
+			lockCards = [];
+			try {
+				Object.keys(INSERTED.map).forEach((k) => { delete INSERTED.map[String(k)]; });
+				INSERTED.save();
+				INSERTED.emit();
+			} catch (e) { }
+		};
 
 
 			/** 离线规则引擎：不联网，词库反查 + 英文原样保留 */
@@ -10881,39 +13022,46 @@ window.__ModuleLoader__.load({
 		h("div", { style: narrow
 				      ? { display: "flex", flexDirection: "column", gap: "8px", minWidth: 0 }
 				      : { alignSelf: "stretch", alignContent: "flex-start", position: "sticky", top: 0, zIndex: 2, display: "flex", flexDirection: "column", gap: "8px", minHeight: 0, minWidth: 0, background: "var(--c-card)" } },
-				    h("div", { style: Object.assign({}, box, { minWidth: 0, flex: "1 1 auto" }) },
+				    h("div", { style: Object.assign({}, box, { minWidth: 0, flex: "0 0 auto", gap: "4px" }) },
 				    		    h("span", { style: hd }, "底模 / 编码器 / LoRA"),
-				    		    h("div", { style: Object.assign({}, S.field, { gap: "6px" }) },
-				    		    	h("span", { style: S.label }, isAnima ? "底模（Diffusion · Anima）" : "底模（Checkpoint）"),
+				    		    h("div", { style: Object.assign({}, S.field, { gap: "3px" }) },
+				    		    	h("span", { style: S.label }, "底模（" + ckptSourceLabel + "）"),
 				    		    	h("button", { type: "button", "aria-label": "选择底模",
 				    		    		title: ckpt ? ("当前底模：" + ckpt + "；点击打开模型库更换") : "点击打开模型库选择底模",
 				    		    		style: { display: "flex", alignItems: "center", gap: "8px", width: "100%", minWidth: 0, boxSizing: "border-box",
-				    		    			padding: "5px 8px 5px 5px", textAlign: "left", cursor: "pointer", color: "inherit", font: "inherit",
+				    		    			padding: "2px 8px 2px 4px", textAlign: "left", cursor: "pointer", color: "inherit", font: "inherit",
 				    		    			border: "1px solid " + (modelBad ? "var(--c-bad)" : "rgba(127,127,127,.32)"),
 				    		    			borderRadius: "8px", background: "rgba(127,127,127,.06)" },
 				    		    		onClick: () => {
 				    		    			// 走 A 线模型库：弹窗经 portal 到 body，pvhost 收起时也看得见；
-				    		    			// 在里面点「使用」选中 checkpoint，名字再由 MODEL_PICKED_SINK 回到这里。
-				    		    			if (typeof OPEN_MODEL_PICKER_SINK === "function") OPEN_MODEL_PICKER_SINK("checkpoint", ckpt);
+				    		    			// 在里面点「使用」选中底模，名字再由 MODEL_PICKED_SINK 回到这里。
+				    		    			//
+				    		    			// ⚠️ 2026-10-31：kind 原来写死 "checkpoint"，于是不管编码器类型是
+				    		    			//    qwen_image 还是 moss_image，模型库永远落进 checkpoints 目录，
+				    		    			//    用户能看到 meinaMix / SDXL，却怎么也找不到 diffusion_models 里的
+				    		    			//    MOSS。改成按当前底模实际所在目录传；还没选底模时传 "all"，
+				    		    			//    模型库会给出跨目录的扁平底模列表。
+				    		    			if (typeof OPEN_MODEL_PICKER_SINK === "function") {
+				    		    				const k = !ckpt ? "all" : (unets.indexOf(ckpt) >= 0 ? "unet" : "checkpoint");
+				    		    				OPEN_MODEL_PICKER_SINK(k, ckpt);
+				    		    			}
 				    		    			else setTab("pv-online");
 				    		    		} },
-				    		    		h(LocalCkptThumb, { kind: "checkpoint", name: ckpt, width: 40, height: 52 }),
+				    		    		h(LocalCkptThumb, { kind: ckptIsUnet ? "unet" : "checkpoint", name: ckpt, width: 40, height: 52 }),
 				    		    		h("span", { style: { display: "flex", flexDirection: "column", gap: "1px", minWidth: 0, flex: "1 1 auto", overflow: "hidden" } },
 				    		    			h("strong", { title: ckpt, style: { fontSize: "12.5px", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, shortLora(ckpt) || "选择底模"),
 				    		    			h("small", { title: ckpt, style: { fontSize: "11px", opacity: .62, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, ckpt || "点击打开模型库")))),
 				    		    modelBad ? h("div", { style: { fontSize: "11.5px", lineHeight: 1.45, color: "var(--c-bad)" } },
-				    		    	isAnima
-				    		    		? "「" + ckpt + "」在 checkpoints 里，不是 Anima 底模。编码器类型 qwen_image 要 diffusion_models 的模型，否则 ComfyUI 会退 400。"
-				    		    		: "「" + ckpt + "」不在 checkpoints 里；编码器类型不是 qwen_image 时只能走 checkpoint 底模。") : null,
-				    		    h("label", { style: S.field }, h("span", { style: S.label }, "文本编码器"), h("select", { style: Object.assign({}, S.sel, { width: "100%" }), value: clip, onChange: (e) => setClip(e.target.value) },
+				    		    	"「" + ckpt + "」在 diffusion_models 和 checkpoints 里都找不到，请重新选一个底模。") : null,
+				    		    h("label", { style: Object.assign({}, S.field, { gap: "2px" }) }, h("span", { style: Object.assign({}, S.label, { fontSize: "11.5px" }) }, "文本编码器"), h("select", { style: Object.assign({}, S.sel, { width: "100%", padding: "3px 7px" }), value: clip, onChange: (e) => setClip(e.target.value) },
 				    		    	h("option", { value: "" }, "（跟随底模内置 CLIP）"), opt(clips, clip))),
-				    		    h("label", { style: S.field }, h("span", { style: S.label }, "编码器类型"), h("select", { style: Object.assign({}, S.sel, { width: "100%" }), value: clipType, onChange: (e) => {
+				    		    h("label", { style: Object.assign({}, S.field, { gap: "2px" }) }, h("span", { style: Object.assign({}, S.label, { fontSize: "11.5px" }) }, "编码器类型"), h("select", { style: Object.assign({}, S.sel, { width: "100%", padding: "3px 7px" }), value: clipType, onChange: (e) => {
 				    		    	const v = e.target.value;
 				    		    	setClipType(v);
 				    		    	const next = pickModelFor(v);
 				    		    	if (next) setCkpt(next);
 				    		    } }, opt(clipTypes, clipType))),
-				    		    h("label", { style: S.field }, h("span", { style: S.label }, "VAE"), h("select", { style: Object.assign({}, S.sel, { width: "100%" }), value: vae, onChange: (e) => setVae(e.target.value) },
+				    		    h("label", { style: Object.assign({}, S.field, { gap: "2px" }) }, h("span", { style: Object.assign({}, S.label, { fontSize: "11.5px" }) }, "VAE"), h("select", { style: Object.assign({}, S.sel, { width: "100%", padding: "3px 7px" }), value: vae, onChange: (e) => setVae(e.target.value) },
 				    		    	h("option", { value: "" }, "（跟随底模内置 VAE）"), opt(vaes, vae))),
 				    		    h("div", { style: { display: "flex", alignItems: "center", gap: "6px", marginTop: "auto", flexWrap: "wrap" } },
 				    		    	h("span", { style: Object.assign({}, S.label, { fontSize: "12.5px" }), title: "点右边按钮弹出二级菜单" }, "LoRA"),
@@ -10923,6 +13071,28 @@ window.__ModuleLoader__.load({
 				    		    				h("b", { style: { fontWeight: 600, color: "var(--c-accent)" } }, Number(x.model).toFixed(2))))
 				    		    		: h("span", { style: { fontSize: "12.5px", color: "var(--c-warn)" } }, "未选"),
 				    		    	h("button", { style: Object.assign({}, S.btn2, { padding: "4px 10px", fontSize: "12.5px" }), onClick: () => setLoraOpen(true), title: "打开 LoRA 二级菜单" }, "选择（" + selLoras.length + "/" + loras.length + "）"))),
+				    		    /* 0.7.130：身份控制（LLLite）开关。只在插入的卡带 conditioning.presets 时出现。
+				    		       平时关着——控制图是「纯角色线稿」，开着会把背景削掉、姿态锁成正立；
+				    		       需要锁脸锁衣服（定妆照、角色一致性对照）时勾开，只影响本次会话。 */
+				    		    (() => {
+				    		      const cs = llliteCards();
+				    		      if (!cs.length) return null;
+				    		      const card = cs[0];
+				    		      const keys = Object.keys(card.conditioning.presets || {});
+				    		      const act = llliteOn ? { borderColor: "var(--c-accent)", color: "var(--c-accent-fg)", background: "rgba(90,160,235,.18)" } : {};
+				    		      return h("div", { style: { display: "flex", alignItems: "center", gap: "6px", marginTop: "2px", flexWrap: "wrap" } },
+				    		        h("span", { style: Object.assign({}, S.label, { fontSize: "12.5px" }), title: "用控制图锁定这张角色卡的脸和服饰；代价是背景会被削掉、姿态锁成正立，场景出图请保持关闭" }, "身份控制"),
+				    		        h("button", { type: "button", style: Object.assign({}, S.btn2, { padding: "4px 10px", fontSize: "12.5px" }, act), "aria-pressed": !!llliteOn, onClick: () => toggleLllite(!llliteOn, card) }, llliteOn ? "开" : "关"),
+				    		        llliteOn ? h("select", { style: Object.assign({}, S.sel, { width: "auto", padding: "3px 7px", fontSize: "12.5px" }), value: lllitePick, title: "控制图档位（按画布比例选）", onChange: (e) => toggleLllite(true, card, e.target.value) },
+				    		          ...keys.map((k) => h("option", { key: k, value: k }, k))) : null,
+				    		        h("span", { style: { fontSize: "11.5px", color: "var(--c-fg4)" } }, cs.length > 1 ? ("共 " + cs.length + " 张卡可选 · 用最近插入的「" + (card.name || card.id) + "」") : ""));
+				    		    })(),
+				    		    // 三个随机按钮（0.7.124）：塞在整块压缩后腾出的空间里，横排一行，不改外层布局
+				    		    // 用 auto-fit + 74px 下限：右栏窄到放不下三个时自动折成两行，不会把「随机全部」切掉
+				    		    h("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(74px, 1fr))", gap: "5px", marginTop: "2px" } },
+				    		      h("button", { type: "button", style: Object.assign({}, S.btn2, { padding: "4px 6px", fontSize: "12px", fontWeight: 600, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }), title: "从词库抽一套角色：外观（发色/发型/瞳色/体型）+ 情绪 + 附加特征 + 服饰 + 道具。画风/动作/场景/取景保持不变", onClick: rndRoleOnly }, "随机角色"),
+				    		      h("button", { type: "button", style: Object.assign({}, S.btn2, { padding: "4px 6px", fontSize: "12px", fontWeight: 600, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }), title: "只换画面侧：表情 + 道具 + 动作 + 场景 + 取景/分镜。发色瞳色服饰与画风全部保持不变", onClick: rndSegOnly }, "随机画面"),
+				    		      h("button", { type: "button", style: Object.assign({}, S.btn2, { padding: "4px 6px", fontSize: "12px", fontWeight: 600, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", borderColor: "var(--c-accent)", color: "var(--c-accent-fg)" }), title: "十路全抽：画风 + 外观 + 情绪 + 附加特征 + 服饰 + 道具 + 动作 + 场景 + 取景 + 光影", onClick: rndAllBoth }, "随机全部")),
 				    h("div", { style: Object.assign({}, box, { minWidth: 0, flex: "0 0 auto" }) },
 				    		    h("span", { style: Object.assign({}, hd, { flexShrink: 0 }) }, "图片的高宽 / 参数"),
 				    		    h("div", { ref: pRef, style: { display: "grid", gridTemplateColumns: pCols2 === 1 ? "minmax(0,1fr)" : "repeat(2, minmax(0,1fr))", gap: "8px", alignItems: "start", flexShrink: 0, minHeight: 0 } },
@@ -11253,6 +13423,737 @@ window.__ModuleLoader__.load({
 		}
 
 		/** 词库（新版）：方形小卡片点选 → 底部提示词胶囊 */
+		// ==================== 词库 · 提示词段构建（二级视图）====================
+		function segTextNow() {
+			const sel = segSel || {};
+			if (sel.preset && SEG.blocks.preset && SEG.blocks.preset[sel.preset]) {
+				return SEG.quality + ", " + segRating + ", " + SEG.blocks.preset[sel.preset];
+			}
+			const segText = SEG.order.map((k) => (k !== "preset" && sel[k] ? SEG.blocks[k][sel[k]] : "")).filter(Boolean).join(", ");
+			return SEG.quality + ", " + segRating + (segText ? ", " + segText : "");
+		}
+		function copySeg() {
+			const text = segTextNow();
+			try {
+				if (navigator.clipboard && navigator.clipboard.writeText) {
+					navigator.clipboard.writeText(text).then(
+						() => setMsg("已复制到剪贴板"),
+						() => setMsg("剪贴板被拦，请手动选中预览框复制"));
+				} else { setMsg("剪贴板不可用，请手动选中预览框复制"); }
+			} catch (e) { setMsg("剪贴板被拦，请手动选中预览框复制"); }
+		}
+		function randomSeg() {
+			const next = {};
+			SEG.order.forEach((k) => {
+				const ks = Object.keys(SEG.blocks[k] || {});
+				if (ks.length) next[k] = ks[Math.floor(Math.random() * ks.length)];
+			});
+			setSegSel(next);
+			setMsg("随机了一套，不满意再按一次");
+		}
+
+		// ===== 生成页三个随机按钮（0.7.124）：随机角色 / 随机画面 / 随机全部 =====
+		// 数据来源分两处：
+		//   RND_LIB（lib/randomlib.js，独立资料库）—— look 外观 + mood 情绪
+		//   SEG（lib/dict.js 词库）—— style / outfit / prop / pose / scene / frame
+		// 「人物」槽位（character）是固定白发红瞳的 20 种表情，和 look 抢同一批发色瞳色 tag，
+		// 抽 look 时一律删掉 character，避免两套头发眼睛叠在一起。
+		function rndPick(arr) {
+			return (arr && arr.length) ? arr[Math.floor(Math.random() * arr.length)] : null;
+		}
+		function rndHas(obj, k) {
+			return !!(obj && k && Object.prototype.hasOwnProperty.call(obj, k));
+		}
+		// 合并池：同一槽位把 SEG 词库与 RND_LIB 资料库并起来抽，两边各管各的，互不覆盖。
+		// SEG 缺这一路时（比如 look / mood / extra 只有 RND_LIB 有）也能正常返回。
+		function rndPool(k) {
+			return Object.assign({}, (SEG.blocks || {})[k] || {}, (RND_LIB || {})[k] || {});
+		}
+		// 前缀：质量词 + 分级。只加一次（逐词去重保证重复按不会再塞一遍）
+		function rndPrefix() {
+			return [SEG.quality, segRating].map((v) => String(v || "").trim()).filter(Boolean).join(", ");
+		}
+		// 只取指定槽位的文本，没抽到的槽位跳过
+		function rndSlotText(sel, slots) {
+			const parts = [];
+			(slots || []).forEach((k) => {
+				const pool = rndPool(k);
+				if (rndHas(pool, sel[k])) parts.push(pool[sel[k]]);
+			});
+			return parts.join(", ");
+		}
+		// 拼提示词：quality, rating, style, look, mood, extra, outfit, prop, pose, scene, frame
+		function rndText(sel) {
+			const parts = [];
+			const push = (v) => { const s = String(v || "").trim(); if (s) parts.push(s); };
+			push(SEG.quality);
+			push(segRating);
+			["style", "look", "mood", "extra", "outfit", "prop", "pose", "scene", "frame"].forEach((k) => {
+				const pool = rndPool(k);
+				if (rndHas(pool, sel[k])) push(pool[sel[k]]);
+			});
+			return parts.join(", ");
+		}
+		// 从某个池里抽一个 key；pool 是 {key: value} 或直接给 keys 数组
+		function rndKey(pool) {
+			const ks = Object.keys(pool || {});
+			return ks.length ? rndPick(ks) : "";
+		}
+		// 附加特征（兽耳/角/眼镜/纹身…）：不是每张图都要带，留 1/3 概率抽到「无」。
+		// 带兽耳和带恶魔角是两种完全不同的角色，强行每次都加会让随机池失去一半多样性。
+		function rndExtra() {
+			const ks = Object.keys((RND_LIB || {}).extra || {});
+			if (!ks.length) return "";
+			if (Math.random() < 0.34) return "";
+			return rndFamPick("extra", rndExtraFamily, rndLastExtraFam);
+		}
+		// 姿势族：把 90 条姿势按「基础身体姿态」归类，用于换族抽取。
+		// 顺序有意义——先匹配更具体的（跑/跳/蹲/跪/躺/趴），最后才是「站」这种兜底大类，
+		// 否则 "sitting on the ground" 会被 stand 之类的宽规则先吃掉。
+		// 外观族：按「头发怎么处理」分。发型是这三个槽位里视觉差最大的维度，
+		// 同色系换个发型出来的完全是另一个角色。顺序先特殊后兜底。
+		const RND_LOOK_FAM = [
+			{ k: "双", re: /\btwin tails|twin braids|twintails|side ponytail|double\b/i },
+			{ k: "编", re: /\bbraid|braided\b/i },
+			{ k: "卷", re: /\bcurly|wavy|drill hair\b/i },
+			{ k: "束", re: /\bponytail|hair bun|updo|messy bun|half updo\b/i },
+			{ k: "短", re: /\bshort (hair|bob|platinum|blue|red|white|silver|black|orange|pink|teal|dark|green|ash|messy|spiky)|bob cut|bob hair|pixie cut|undercut|bowl cut|short hair\b/i },
+			{ k: "长", re: /\blong|medium\b/i },
+		];
+		function rndLookFamily(v) {
+			const s = String(v || "");
+			for (let i = 0; i < RND_LOOK_FAM.length; i++) if (RND_LOOK_FAM[i].re.test(s)) return RND_LOOK_FAM[i].k;
+			return "长";
+		}
+		// 表情族：正 / 负 / 怒 / 冷 / 强。表情连着两张同族，出来的就是同一张脸的情绪。
+		const RND_MOOD_FAM = [
+			{ k: "正", re: /\bsmile|happy|joy|grin|amused|content|grateful|relieved|hopeful|peaceful|gentle|warm|tender|affection|giddy|satisfied|proud|innocent|triumphant|confident|smug\b/i },
+			{ k: "负", re: /\bsad|cry|tear|sorrow|grief|despair|lonely|regret|ashamed|pained|hurt|broken|horrified|fear|scared|vulnerable|grieving|wistful|melancholic|embarrass|tired|exhausted|shy|blush\b/i },
+			{ k: "怒", re: /\banger|angry|rage|furious|irritated|annoyed|hostile|predatory|threat|intimidat|defiant|challenging|scorn|disgust|mocking\b/i },
+			{ k: "冷", re: /\bexpressionless|blank|deadpan|stoic|cold|unimpressed|distant|neutral|absent-minded|dazed|silent|calm|serene|sleepy|lazy|half-closed\b/i },
+			{ k: "强", re: /\bsurprised|shock|amazed|excited|panic|desperate|manic|wild|intense|focused|determined|mesmerized|flustered|nervous|anticipation|confused|thinking|curious|surprised\b/i },
+			{ k: "其它", re: /./ },
+		];
+		function rndMoodFamily(v) {
+			const s = String(v || "");
+			for (let i = 0; i < RND_MOOD_FAM.length; i++) if (RND_MOOD_FAM[i].re.test(s)) return RND_MOOD_FAM[i].k;
+			return "其它";
+		}
+		// 附加特征族：兽 / 超自然 / 饰品 / 伤痕 / 穿孔刺青 / 面具服饰 / 其它
+		// 兽耳连出两次和「兽耳→角→伤痕」是完全不同的观感。
+		const RND_EXTRA_FAM = [
+			{ k: "兽", re: /\bear|tail|fang|paw\b/i },
+			{ k: "超自然", re: /\bhorn|wing|halo|antlers|spectral|glowing|runic|rune|crystal|scales|gills|split tongue\b/i },
+			{ k: "伤痕", re: /\bscar|bandage|bandaid|stitch|burn|bruise|wound|claw marks|eyebags\b/i },
+			{ k: "穿孔", re: /\bpiercing|tattoo|serial number\b/i },
+			{ k: "服饰", re: /\bglasses|sunglasses|mask|veil|hood|hat|beret|cap|headscarf|eyepatch|monocle|harness|armband|thigh strap|anklet|body chain|collar\b/i },
+			{ k: "饰品", re: /\bearring|necklace|pendant|choker|crown|tiara|hairband|hair clip|hairpin|flower crown|jewelry\b/i },
+			{ k: "其它", re: /\bblush marks|freckles|mole|pale skin|nail polish\b/i },
+		];
+		function rndExtraFamily(v) {
+			const s = String(v || "");
+			for (let i = 0; i < RND_EXTRA_FAM.length; i++) if (RND_EXTRA_FAM[i].re.test(s)) return RND_EXTRA_FAM[i].k;
+			return "其它";
+		}
+		// 服饰族：制服 / 民族 / 战斗 / 泳装内衣 / 日常 / 礼服 / 功能 / 其它
+		const RND_OUTFIT_FAM = [
+			{ k: "制服", re: /\bserafuku|school uniform|blazer|office lady|police|flight attendant|nurse|maid|miko|gakuran|teacher|cheerleader|gym uniform|apron|lab coat|medical coat|scrubs|cassock|nun habit|military dress\b/i },
+			{ k: "民族", re: /\byukata|kimono|qipao|hanfu|sari|hanbok|abaya|chinese clothes|japanese\b/i },
+			{ k: "战斗", re: /\bcamouflage|multicam|plate carrier|combat shirt|ghillie|body armor|plate armor|power armor|riot|bomb suit|tactical|exoskeleton|hazmat|wetsuit|spacesuit|plug suit|racing suit|fencing|riding habit|firefighter\b/i },
+			{ k: "泳装内衣", re: /\bswimsuit|bikini|underwear|bra|panties|babydoll|negligee|lingerie|garter|thighhighs|bodysuit|leotard|towel|bandages only|latex\b/i },
+			{ k: "礼服", re: /\bgown|tuxedo|tailcoat|evening|backless|wedding dress|prom dress|fur stole|lolita|gothic\b/i },
+			{ k: "功能", re: /\braincoat|rain poncho|down jacket|hoodie|track suit|jersey|overalls|mechanic|cargo pants|techwear|bomber jacket|trench coat|cloak|sweater|cardigan|knit|leather jacket|ragged clothes|military coat\b/i },
+			{ k: "日常", re: /\bcamisole|t-shirt|shirt|skirt|jeans|shorts|dress|pajamas|robe|suit|vest|chiffon\b/i },
+		];
+		function rndOutfitFamily(v) {
+			const s = String(v || "");
+			for (let i = 0; i < RND_OUTFIT_FAM.length; i++) if (RND_OUTFIT_FAM[i].re.test(s)) return RND_OUTFIT_FAM[i].k;
+			return "其它";
+		}
+		// 画风族：绘画 / 摄影 / 动漫画 / 3D / 图形 / 复古。
+		// 画风是所有槽位里改观感最狠的一个 —— 连出两次同族比什么都明显。
+		const RND_STYLE_FAM = [
+			{ k: "绘画", re: /\bpainterly|watercolor|oil painting|impressionist|baroque|charcoal|engraving|ink wash|sumi-e|pastel|gouache|thick paint|pencil sketch|graphite\b/i },
+			{ k: "摄影", re: /\bphotograph|film|kodak|infrared|long exposure|double exposure|bokeh|grain|soft focus|harsh lighting|neon lights\b/i },
+			{ k: "动漫画", re: /\banime|manga|cel shading|screencap|shoujo|shounen|lineart|moé|chibi\b/i },
+			{ k: "3D", re: /\b3d|render|cg|low poly|voxel\b/i },
+			{ k: "图形", re: /\bpop art|minimalist|poster|collage|paper cutout|pixel|vector|graphic|halftone|muted colors|vivid colors|monochrome|duotone|morandi\b/i },
+			{ k: "复古", re: /\bretro|vintage|ukiyo-e|art deco|art nouveau|90s|steampunk|vaporwave|cyberpunk|dark gothic\b/i },
+		];
+		function rndStyleFamily(v) {
+			const s = String(v || "");
+			for (let i = 0; i < RND_STYLE_FAM.length; i++) if (RND_STYLE_FAM[i].re.test(s)) return RND_STYLE_FAM[i].k;
+			return "其它";
+		}
+		// 通用换族抽取：避开最近两族。poolName 对应 rndPool 的键，famFn 是该池的分族函数。
+		function rndFamPick(poolName, famFn, histRef) {
+			const pool = rndPool(poolName);
+			const ks = Object.keys(pool);
+			if (!ks.length) return "";
+			const hist = Array.isArray(histRef.current) ? histRef.current : [];
+			let cand = ks;
+			if (hist.length) {
+				const strict = ks.filter((k) => hist.indexOf(famFn(pool[k])) < 0);
+				if (strict.length) cand = strict;
+				else {
+					const last = hist[hist.length - 1];
+					const one = ks.filter((k) => famFn(pool[k]) !== last);
+					if (one.length) cand = one;
+				}
+			}
+			const pick = rndPick(cand);
+			if (pick) histRef.current = [famFn(pool[pick])].concat(hist.slice(0, 1));
+			return pick;
+		}
+		const RND_POSE_FAM = [
+			{ k: "悬吊", re: /\bsuspend|hanging|inverted|levitating|floating|weightless|underwater\b/i },
+			{ k: "跑",   re: /\brun(ning)?\b|sprint|charging|run toward|crouched start|striding|fleeing|pursuing|vaulting over|being dragged|breaking free|walking fast\b/i },
+			{ k: "跳",   re: /\bjump(ing)?\b|leaping|midair|mid-air|airborne|leap|falling|free fall|dropping|landing\b/i },
+			{ k: "爬",   re: /\bcrawl|on all fours|climbing|on elbows|hands and knees\b/i },
+			{ k: "跪",   re: /\bkneel(ing)?\b|\bseiza\b|prostrating|wariza|straddling|riding\b/i },
+			{ k: "躺",   re: /\blying\b|\bon (back|stomach|side)\b|\bsupine\b|reclining\b/i },
+			{ k: "蹲",   re: /\bsquat(ting)?\b|\bcrouch(ing)?\b|deep squat|low stance|curled up in corner\b/i },
+			{ k: "趴",   re: /\bprone\b|\blying on stomach\b|bent over|bending over|draped over|hands on ground|flat on ground|body flat|diving low\b/i },
+			{ k: "坐",   re: /\bsit(ting)?\b|crossed legs|cross-legged|on chair|on floor|dangling|hand on own cheek\b/i },
+			{ k: "靠",   re: /\bleaning\b|\bagainst wall\b|against tree|on railing\b/i },
+			// 站是兜底大类：上半身的手势、情绪、扭身全归这里，所以它排在最后、判据最宽
+			{ k: "站",   re: /\bstand(ing)?\b|\bsalute\b|upright|facing viewer|facing off|selfie|stretching|head back|looking down|finger to mouth|hand in hair|looking back|turning|tiptoes|reaching up|hands together|holding hands|finger heart|outstretched arms|from behind|hands on (own )?head|hand on own forehead|twisting torso|raising hand|fighting stance|hugging|embrace|carrying over shoulder|bridal carry|pushing away|wading|covering face|arms spread wide|arms crossed over chest|stepping back|hugging self|arms limp|hands in pockets|crossed arms|arms behind back\b/i },
+		];
+		function rndPoseFamily(v) {
+			const s = String(v || "");
+			for (let i = 0; i < RND_POSE_FAM.length; i++) {
+				if (RND_POSE_FAM[i].re.test(s)) return RND_POSE_FAM[i].k;
+			}
+			return "其它";
+		}
+		// 换族抽姿势：排掉最近两族的候选，让连按三张必然是三种基础姿态。
+		// 池子 90 条、11 个族，排掉两族后还剩至少 7 族可选，实际不会走到兜底；
+		// 万一某个族的条目被删到极少，兜底也只退一步（只排最近一族），保证总能抽到东西。
+		function rndPoseKey() {
+			const pool = rndPool("pose");
+			const ks = Object.keys(pool);
+			if (!ks.length) return "";
+			const hist = Array.isArray(rndLastPoseFam.current) ? rndLastPoseFam.current : [];
+			let cand = ks;
+			if (hist.length) {
+				const excl2 = ks.filter((k) => hist.indexOf(rndPoseFamily(pool[k])) < 0);
+				if (excl2.length) {
+					cand = excl2;
+				} else {
+					const last = hist[hist.length - 1];
+					const excl1 = ks.filter((k) => rndPoseFamily(pool[k]) !== last);
+					if (excl1.length) cand = excl1;
+				}
+			}
+			const pick = rndPick(cand);
+			if (pick) {
+				const f = rndPoseFamily(pool[pick]);
+				rndLastPoseFam.current = [f].concat(hist.slice(0, 1));
+			}
+			return pick;
+		}
+		// 分镜族：距离 + 角度两个维度。
+		// 距离决定"画面里装多少"，角度决定"从哪看"——两者都换，机位才真的变。
+		// 规则顺序是先具体后宽泛（极特写 → 近景 → 胸上 → 中景 → 全身 → 远景 → 大远景），
+		// 否则 "full length shot, wide framing" 会被 wide shot 先吃掉。
+		const RND_FRAME_DIST = [
+			{ k: "极特写", re: /\bextreme close-up\b|\bmacro shot\b|\beyes focus\b|\beye focus\b|\blips focus\b|\bfeet focus\b|\biris detail\b/i },
+			{ k: "近景",   re: /\bclose-up\b|\bface focus\b|\bportrait\b|\bnape\b/i },
+			{ k: "胸上",   re: /\bupper body\b|\bchest up\b|\bcollarbone\b/i },
+			{ k: "中景",   re: /\bmedium shot\b|\bcowboy shot\b|\bwaist up\b|\bknee-up\b|\bmid-thigh\b|\bthree-quarter body\b/i },
+			{ k: "全身",   re: /\bfull length shot\b|\bfull body\b|\bpanorama\b/i },
+			{ k: "远景",   re: /\bwide shot\b|\bdistant figure\b/i },
+			{ k: "大远景", re: /\bextreme wide\b|\bscenery focus\b|\bsmall figure\b/i },
+		];
+		// 「正面」「构图类」不算特殊角度，返回空串 —— 它们不参与角度换族，
+		// 否则 62 条里一半以上都是 front view，一排除就没得抽了。
+		const RND_FRAME_ANGLE = [
+			{ k: "仰视", re: /\blow angle\b|\bfrom below\b|\bworm'?s eye\b/i },
+			{ k: "俯视", re: /\bhigh angle\b|\bfrom above\b|\btop-down\b|\boverhead\b|\bcctv\b/i },
+			{ k: "过肩", re: /\bover the shoulder\b/i },
+			{ k: "背面", re: /\bfrom behind\b|\bback view\b|\bback of head\b/i },
+			{ k: "侧视", re: /\bside view\b|\bprofile\b|\bthree-quarter view\b|\bfrom side\b/i },
+		];
+		function rndFrameDist(v) {
+			const s = String(v || "");
+			for (let i = 0; i < RND_FRAME_DIST.length; i++) {
+				if (RND_FRAME_DIST[i].re.test(s)) return RND_FRAME_DIST[i].k;
+			}
+			// 没写距离的（三分法 / 框中框 / 荷兰角 / 鱼眼…）归「构图」：
+			// 它们确实是一个独立的分镜取向，不该被当成"未知"而不参与换族。
+			return "构图";
+		}
+		function rndFrameAngle(v) {
+			const s = String(v || "");
+			for (let i = 0; i < RND_FRAME_ANGLE.length; i++) {
+				if (RND_FRAME_ANGLE[i].re.test(s)) return RND_FRAME_ANGLE[i].k;
+			}
+			return "";
+		}
+		// 换族抽分镜：距离和角度都避开最近两族，连按三张必然是三种机位。
+		// 兜底两级：先退到只避距离一族，再退到全池（62 条、8 个距离族，实际不会走到）。
+		function rndFrameKey() {
+			const pool = rndPool("frame");
+			const ks = Object.keys(pool);
+			if (!ks.length) return "";
+			const hd = Array.isArray(rndLastFrameDist.current) ? rndLastFrameDist.current : [];
+			const ha = Array.isArray(rndLastFrameAngle.current) ? rndLastFrameAngle.current : [];
+			let cand = ks;
+			if (hd.length || ha.length) {
+				const strict = ks.filter((k) => {
+					const d = rndFrameDist(pool[k]);
+					const a = rndFrameAngle(pool[k]);
+					const dOk = hd.indexOf(d) < 0;
+					const aOk = !a || ha.indexOf(a) < 0;   // 候选没特殊角度 → 不算冲突
+					return dOk && aOk;
+				});
+				const distOnly = ks.filter((k) => hd.indexOf(rndFrameDist(pool[k])) < 0);
+				if (strict.length) cand = strict;
+				else if (distOnly.length) cand = distOnly;
+			}
+			const pick = rndPick(cand);
+			if (pick) {
+				const d = rndFrameDist(pool[pick]);
+				const a = rndFrameAngle(pool[pick]);
+				rndLastFrameDist.current = [d].concat(hd.slice(0, 1));
+				if (a) rndLastFrameAngle.current = [a].concat(ha.slice(0, 1));
+			}
+			return pick;
+		}
+		// 光影族：光从哪来、多硬、怎么落。顺序先具体（特效光有强特征词）后泛（冷暖是底色）。
+		const RND_LIGHT_FAM = [
+			{ k: "特效", re: /\bvolumetric|god rays|light shafts|tyndall|lens flare|anamorphic|bokeh|prism|chromatic|sparks|embers|shadow pattern|gobo|neon|halation|reflections|shimmer|caustics|mirror reflection|reflective floor|slanted beam|dust motes|striped light|blinds shadow|lightning flash|searchlight|headlight sweep|moving beam\b/i },
+			{ k: "对比", re: /\bcinematic lighting|dramatic light|cross lighting|key light|motivated light|split lighting|half warm half cool|mixed color temperature|warm and cool\b/i },
+			{ k: "硬光", re: /\bhard shadow|harsh|low key|single light source|spotlight|top lighting|underlighting|overexposed|blown highlights|side lighting|form defining|hard edge|hard beam|stark white\b/i },
+			{ k: "剪影", re: /\bsilhouette|contre-jour|backlit|backlighting|rim light\b/i },
+			{ k: "柔光", re: /\bsoft light|high key|diffused|haze|fog|misty|vignette|falloff|bounce light|ambient glow|reflected light|softbox|even light|beauty light|snow bounce|cool fill\b/i },
+			{ k: "暖光", re: /\bgolden hour|warm sunlight|sunset|candlelight|warm flicker|amber|firelight|lantern glow|fire glow|orange flicker|campfire|warm orange|dusk backlight|orange gradient\b/i },
+			{ k: "冷光", re: /\bcool blue|moonlight|fluorescent|cold white|clinical|silver cast|teal|monitor glow|blue face light|polar night blue\b/i },
+		];
+		function rndLightFamily(v) {
+			const s = String(v || "");
+			for (let i = 0; i < RND_LIGHT_FAM.length; i++) {
+				if (RND_LIGHT_FAM[i].re.test(s)) return RND_LIGHT_FAM[i].k;
+			}
+			return "其它";
+		}
+		// 换族抽光影：避开最近两族，30 段分 7 族，排完还剩至少 5 族可选。
+		function rndLightKey() {
+			const pool = rndPool("light");
+			const ks = Object.keys(pool);
+			if (!ks.length) return "";
+			const hist = Array.isArray(rndLastLightFam.current) ? rndLastLightFam.current : [];
+			let cand = ks;
+			if (hist.length) {
+				const strict = ks.filter((k) => hist.indexOf(rndLightFamily(pool[k])) < 0);
+				if (strict.length) cand = strict;
+				else {
+					const last = hist[hist.length - 1];
+					const one = ks.filter((k) => rndLightFamily(pool[k]) !== last);
+					if (one.length) cand = one;
+				}
+			}
+			const pick = rndPick(cand);
+			if (pick) {
+				const f = rndLightFamily(pool[pick]);
+				rndLastLightFam.current = [f].concat(hist.slice(0, 1));
+			}
+			return pick;
+		}
+		// 道具族：按「这东西是干什么用的」分。顺序先特殊后常规——
+		// 枪和束缚器具的判定词一旦被「杂项」吃掉，就会出现「步枪被归成日用小物」这种误判。
+		const RND_PROP_FAM = [
+			{ k: "束缚", re: /\bbondage|shibari|spreader bar|straitjacket|suspension bar|corset|pet play|wax|ice cubes|feather|flogger|whip|clothespins|ring gag|harness|chastity|electro|latex sheet|stocks|vibrator|dildo|anal |butt plug|handcuffs|blindfold|ball gag|leash|nipple clamps|chain, shackle\b/i },
+			{ k: "军事", re: /\brifle|pistol|handgun|shotgun|machine gun|submachine gun|ballistic shield|gas grenade|night vision|nvg|medical bag|dog tags|spotting scope|ammo|grenade|sledgehammer\b/i },
+			{ k: "血腥", re: /\bamputee|severed|wound|cross-section|blood|stump|bandage|skeleton mask|welding mask|gas mask|red cloth\b/i },
+			{ k: "兵器", re: /\blongsword|katana|drawn string|spear|battle axe|kunai|daggers|scythe|blade\b/i },
+			{ k: "音乐", re: /\bpiano|flute|cello|accordion|taiko|harmonica|guitar|violin\b/i },
+			{ k: "食物", re: /\bapple|bread|coffee|wine bottle|ice cream|bento|cake slice|lollipop|teacup|cup, tea\b/i },
+			{ k: "电子", re: /\blaptop|headphone|console|tablet|monitor|smartphone|camera|flashlight|radio|photograph\b/i },
+			{ k: "工具", re: /\bwrench|hammer|saw,|screwdriver|rope coil\b/i },
+			{ k: "自然", re: /\brose|sunflower|potted plant|fallen leaf|vine|\bcat,|white dove|butterfly|snake|crow|bouquet|dried flowers\b/i },
+			{ k: "织物", re: /\bcape|veil|blanket|flag on pole|ribbon|scarf|gloves|thighhighs|high heels|boots|pendant|earrings|ring,|hair stick|flower crown|jewelry|lace parasol\b/i },
+			{ k: "杂项", re: /\bchair|mirror|sofa|ladder|bathtub|bicycle|motorcycle|skateboard|oar|kite|book|lantern|pocket watch|umbrella|candle|folding fan|round fan|half mask|smoking pipe|cigarette|backpack|luggage|suitcase|plush toy\b/i },
+		];
+		function rndPropFamily(v) {
+			const s = String(v || "");
+			for (let i = 0; i < RND_PROP_FAM.length; i++) {
+				if (RND_PROP_FAM[i].re.test(s)) return RND_PROP_FAM[i].k;
+			}
+			return "其它";
+		}
+		// 换族抽道具：避开最近两族，157 段分 11~12 族，排完还剩至少 9 族可选。
+		function rndPropKey() {
+			const pool = rndPool("prop");
+			const ks = Object.keys(pool);
+			if (!ks.length) return "";
+			const hist = Array.isArray(rndLastPropFam.current) ? rndLastPropFam.current : [];
+			let cand = ks;
+			if (hist.length) {
+				const strict = ks.filter((k) => hist.indexOf(rndPropFamily(pool[k])) < 0);
+				if (strict.length) cand = strict;
+				else {
+					const last = hist[hist.length - 1];
+					const one = ks.filter((k) => rndPropFamily(pool[k]) !== last);
+					if (one.length) cand = one;
+				}
+			}
+			const pick = rndPick(cand);
+			if (pick) {
+				const f = rndPropFamily(pool[pick]);
+				rndLastPropFam.current = [f].concat(hist.slice(0, 1));
+			}
+			return pick;
+		}
+		// 场景族：按「这是哪一类地方」分。顺序先特殊后常规——太空/高空/水下/极端天气的判定词
+		// 一旦被「城市」「自然」先吃掉，就会出现「海滩被当成高空」（beach 带 sky）这种误判。
+		// 所以高空族里刻意不含单独的 sky 一词。
+		const RND_SCENE_FAM = [
+			{ k: "棚拍", re: /\bsimple background|plain background|studio backdrop\b/i },
+			{ k: "太空", re: /\bspace station|nebula|cosmic|alien terrain|meteor|stargate|deep space|earth below\b/i },
+			{ k: "高空", re: /\bcloud layer|above the clouds|cable car|balloon|cliff edge|floating island|airplane|aircraft cabin|airfield|runway|on top of train\b/i },
+			{ k: "水下", re: /\bunderwater|submerged|reef|kelp|coral|sunken|caustics|shallow water\b/i },
+			{ k: "极端", re: /\btornado|sandstorm|blizzard|thunderstorm|flood|volcanic ash|aurora|hoarfrost|whiteout|storm|downpour\b/i },
+			{ k: "幻想", re: /\bmagic|rune|temple|castle|dragon|crystal cavern|abyss|otherworld|surreal|dreamscape|inverted world|abstract space|digital space|paper world|mirror space|void\b/i },
+			{ k: "废墟", re: /\bruin|abandoned|collapsed|war-torn|destroyed street|burning city|wreck|trench|broken pews|empty swimming pool\b/i },
+			{ k: "室内", re: /\broom|interior|indoor|corridor|classroom|kitchen|bathroom|bedroom|library|cafe|bar|cell |laboratory|server|theater|museum|office|warehouse|basement|cabin|hospital|mall|store|shrine|church|factory|bakery|greenhouse|poolside|swimming pool|laundromat|entryway\b/i },
+			{ k: "城市", re: /\bstreet|city|alley|rooftop|subway|station|pier|bridge|parking|intersection|building|shop|platform|crosswalk|railway|harbor|checkpoint|gas station|deck|overpass|promenade|plaza|square|highway|port|scaffolding|vending machine|bus stop|school gate|night market|mall|district|passage\b/i },
+			{ k: "自然", re: /\bforest|mountain|field|meadow|canyon|glacier|swamp|cave|waterfall|lake|desert|cliff|grassland|tundra|shore|beach|bamboo|flower|garden|river|valley|hill|grove|spring|volcano|crater|graveyard|gravestone|moss\b/i },
+		];
+		function rndSceneFamily(v) {
+			const s = String(v || "");
+			for (let i = 0; i < RND_SCENE_FAM.length; i++) {
+				if (RND_SCENE_FAM[i].re.test(s)) return RND_SCENE_FAM[i].k;
+			}
+			return "其它";
+		}
+		// 换族抽场景：避开最近两族，让连按三张必然落在三种不同性质的地方。
+		// 170 段分 9~10 族，排掉两族后还剩至少 7 族可选，不会抽空。
+		function rndSceneKey() {
+			const pool = rndPool("scene");
+			const ks = Object.keys(pool);
+			if (!ks.length) return "";
+			const hist = Array.isArray(rndLastSceneFam.current) ? rndLastSceneFam.current : [];
+			let cand = ks;
+			if (hist.length) {
+				const strict = ks.filter((k) => hist.indexOf(rndSceneFamily(pool[k])) < 0);
+				if (strict.length) cand = strict;
+				else {
+					const last = hist[hist.length - 1];
+					const one = ks.filter((k) => rndSceneFamily(pool[k]) !== last);
+					if (one.length) cand = one;
+				}
+			}
+			const pick = rndPick(cand);
+			if (pick) {
+				const f = rndSceneFamily(pool[pick]);
+				rndLastSceneFam.current = [f].concat(hist.slice(0, 1));
+			}
+			return pick;
+		}
+		// 通用填充：keep 里的槽位有值就不动；其余按来源重抽
+		function rndFill(keep, opts) {
+			const o = opts || {};
+			const next = Object.assign({}, segSel || {});
+			delete next.preset;
+			delete next.character;                       // 永远不用 character，交给 look
+			if (o.look) next.look = rndFamPick("look", rndLookFamily, rndLastLookFam);
+			if (o.mood) next.mood = rndFamPick("mood", rndMoodFamily, rndLastMoodFam);
+			// 光影是独立槽位，不在 SEG.order 里，所以不能靠下面的循环，得单独抽
+			if (o.light) next.light = rndLightKey();
+			if (o.extra) {
+				const ex = rndExtra();
+				if (ex) next.extra = ex; else delete next.extra;
+			}
+			SEG.order.forEach((k) => {
+				if (k === "preset" || k === "character") return;
+				if (keep.indexOf(k) >= 0 && next[k]) return;
+				if (!o.slots || o.slots.indexOf(k) >= 0) {
+					// 十个槽位全部走换族抽取：站着换站着的变体、全身换全身、森林换森林、
+					// 手枪换手枪、长发换长发，肉眼看都看不出区别
+					let v;
+					if (k === "pose") v = rndFamPick("pose", rndPoseFamily, rndLastPoseFam);
+					else if (k === "scene") v = rndFamPick("scene", rndSceneFamily, rndLastSceneFam);
+					else if (k === "frame") v = rndFrameKey();
+					else if (k === "prop") v = rndFamPick("prop", rndPropFamily, rndLastPropFam);
+					else if (k === "look") v = rndFamPick("look", rndLookFamily, rndLastLookFam);
+					else if (k === "mood") v = rndFamPick("mood", rndMoodFamily, rndLastMoodFam);
+					else if (k === "extra") v = rndFamPick("extra", rndExtraFamily, rndLastExtraFam);
+					else if (k === "outfit") v = rndFamPick("outfit", rndOutfitFamily, rndLastOutfitFam);
+					else if (k === "style") v = rndFamPick("style", rndStyleFamily, rndLastStyleFam);
+					else v = rndKey(rndPool(k));
+					if (v) next[k] = v;
+				}
+			});
+			setSegSel(next);
+			return { sel: next, text: rndText(next) };
+		}
+		const RND_NON_ROLE = ["style", "pose", "scene", "frame"];   // 随机角色时保留：画风与构图
+		// 随机画面时保留：人物本体（外观/服饰）+ 画风。重抽的是表情 + 道具 + 动作 + 场景 + 取景。
+		// 表情不算「角色特征」（特征 = 发色/发型/瞳色/体型），它是状态，跟姿势场景一起归画面侧。
+		const RND_NON_SCENE = ["look", "outfit", "style"];
+		const RND_SCENE_SLOTS = ["prop", "pose", "scene", "frame"];
+		// 随机全部：除 preset（整套，会吞掉其它槽位）与 character（固定白发红瞳，和 look 抢 tag）之外的全路
+		const RND_ALL_SLOTS = SEG.order.filter((k) => k !== "preset" && k !== "character");
+		// 把选中的槽位压成短 ID 串，给消息栏用：ST-02 LK-12 MD-04 OF-02 PR-03 PO-29 SC-27 FR-12
+		function rndIdOf(v) {
+			const s = String(v || "").trim();
+			return s ? s.split(/\s+/)[0] : "";
+		}
+		// 追加到正向提示词末尾，逐词去重，不清空原有内容。返回实际新增的词数。
+		// 去重口径和 applyStyleInsert 一致：全部小写比较，保留原有的大小写写法。
+		function setPosAppend(text) {
+			const add = String(text || "").trim();
+			if (!add) return 0;
+			const items = add.split(",").map((x) => x.trim()).filter(Boolean);
+			const cur = String(pos || "").trim();
+			const have = new Set(cur.toLowerCase().split(",").map((x) => x.trim()).filter(Boolean));
+			const added = cur ? items.filter((t) => !have.has(t.toLowerCase())).length : items.length;
+			setPos((prev) => {
+				const c = String(prev || "").trim();
+				if (!c) return add;
+				const h = new Set(c.toLowerCase().split(",").map((x) => x.trim()).filter(Boolean));
+				const fresh = add.split(",").map((x) => x.trim()).filter(Boolean).filter((t) => !h.has(t.toLowerCase()));
+				if (!fresh.length) return c;
+				return c.replace(/[,\s]+$/, "") + ", " + fresh.join(", ");
+			});
+			return added;
+		}
+		// 从提示词里逐词删掉 texts 中出现过的词（大小写不敏感），其余顺序原样保留。
+		function posDropWords(cur, texts) {
+			const drop = new Set();
+			(texts || []).forEach((t) => {
+				String(t || "").split(",").forEach((w) => {
+					const s = w.trim().toLowerCase();
+					if (s) drop.add(s);
+				});
+			});
+			if (!drop.size) return String(cur || "").trim();
+			return String(cur || "").split(",").map((x) => x.trim()).filter((x) => x && !drop.has(x.toLowerCase())).join(", ");
+		}
+		// 三个按钮各自负责的槽位（账本按槽位记账，所以跨按钮重叠时后按的那个说了算）
+		// light（光影）归画面侧：它是状态不是本体，换光等于换一张照片，但人还是同一个。
+		const RND_APPLY_ROLE = ["look", "mood", "extra", "outfit", "prop"];
+		const RND_APPLY_SCENE = ["mood", "prop", "pose", "scene", "frame", "light"];
+		const RND_APPLY_ALL = ["style", "look", "mood", "extra", "outfit", "prop", "pose", "scene", "frame", "light"];
+		// 随机按钮统一入口：先把 slots 这些槽位「随机按钮写过的东西」剥干净，再补上本次抽到的新词。
+		//
+		// 剥除范围有两层：
+		//   1) 当前账本 store[k]        —— 上一轮写进去的那一段
+		//   2) 该槽位历史全集 seen[k]   —— 这个槽位历次被随机写过的所有词
+		// 第 2 层是必要的：账本可能被判丢（换浏览器、清了 localStorage、老版本留下的堆积），
+		// 只靠第 1 层的话那些词会被当成「用户手写」永久保留，越按越乱，最后提示词里躺着五六套
+		// 互相冲突的姿势，模型只能在冲突里折中，每张图都长一个样。
+		// 用户自己敲的词只要没被随机按钮用过，就不在任何一层里，永远不会被删。
+		// 按槽位自愈：把提示词里属于这些槽位的词，每个槽位只留「最后一段连续块」。
+		//
+		// 为什么需要它：账本 rndBySlot 与历史集 rndSeen 都是后加的，老版本只追加不剥离，
+		// 用户提示词里可能已经躺着五六套互斥的姿势/场景/分镜。这些词在账本里没有记录，
+		// 于是会被当成「用户手写」永久保护，重启多少次都不会掉。这一层不看账本，
+		// 直接拿池子里的词做字典反查，同一槽位堆了几段就只留最后一段。
+		// 副作用：用户手写的词若恰好与池中词同形（如 standing）也会被折叠，但只保留最后那套，
+		// 视觉上仍是「一套完整描述」，比一次堆五套强得多。
+		function rndStripBySlot(cur, slots) {
+			const toks = String(cur || "").split(",").map((x) => x.trim()).filter(Boolean);
+			if (!toks.length) return String(cur || "").trim();
+			const maps = {};
+			for (let si = 0; si < (slots || []).length; si++) {
+				const k = slots[si];
+				const pool = rndPool(k);
+				const bag = new Set();
+				for (const key of Object.keys(pool)) {
+					for (const w of String(pool[key] || "").split(",")) {
+						const s = w.trim().toLowerCase();
+						if (s) bag.add(s);
+					}
+				}
+				maps[k] = bag;
+			}
+			const bySlot = {};
+			for (let i = 0; i < toks.length; i++) {
+				const lw = toks[i].toLowerCase();
+				for (let si = 0; si < (slots || []).length; si++) {
+					const k = slots[si];
+					if (maps[k] && maps[k].has(lw)) { (bySlot[k] = bySlot[k] || []).push(i); break; }
+				}
+			}
+			const drop = new Set();
+			for (const k of (slots || [])) {
+				const idx = bySlot[k] || [];
+				if (idx.length <= 1) continue;
+				// 从尾部往前找连续的最后一个块，它之前的同槽位词全部丢掉
+				let start = idx.length - 1;
+				while (start > 0 && idx[start] - idx[start - 1] === 1) start--;
+				for (let j = 0; j < start; j++) drop.add(idx[j]);
+			}
+			if (!drop.size) return toks.join(", ");
+			return toks.filter((_, i) => !drop.has(i)).join(", ");
+		}
+		function rndApply(slots, sel) {
+			const store = rndBySlot.current || {};
+			const seen = rndSeen.current || {};
+			const oldTexts = [];
+			(slots || []).forEach((k) => {
+				if (store[k]) oldTexts.push(store[k]);
+				const bag = seen[k];
+				if (bag) oldTexts.push(Object.keys(bag).join(", "));
+			});
+			const base0 = posDropWords(pos, oldTexts);
+			// 再按槽位折叠一次：账本没记录的老堆积、手贴的多套描述，同一槽位只留最后一段。
+			const base = rndStripBySlot(base0, slots);
+			const add = [rndPrefix(), rndSlotText(sel, slots)].filter(Boolean).join(", ");
+			const items = add.split(",").map((x) => x.trim()).filter(Boolean);
+			const have = new Set(base.toLowerCase().split(",").map((x) => x.trim()).filter(Boolean));
+			/* 0.7.130：原来只跟 base 比，本次新词自己的重复没人管。
+			   多个槽位带同一个词时（动作槽和取景槽都能出 from above / high angle / full body），
+			   它会连着写 2–3 遍。同一个词重复三次等于把权重抬高，模型于是被死死钉在那个视角上，
+			   背景又没跟着换透视——构图就裂了。这里对新词也去重，只保留第一次出现。 */
+			const _freshSeen = new Set();
+			const _fresh0 = items.filter((t) => {
+				const k = t.toLowerCase();
+				if (have.has(k) || _freshSeen.has(k)) return false;
+				_freshSeen.add(k);
+				return true;
+			});
+			/* 0.7.130：角度互斥。动作槽和取景槽都会带机位词，from above（正上方垂直俯拍）
+			   和 high angle（高角度斜俯拍）虽然同属「俯视」，落在同一张图里却是两套透视；
+			   背景若没跟着换视角，就会出现角色俯视、场景平视的割裂。
+			   按 rndFrameAngle 的族归类，同一族只留先出现的那个。 */
+			const _angleSeen = [];
+			const fresh = _fresh0.filter((t) => {
+				const fam = rndFrameAngle(t);
+				if (!fam) return true;
+				if (_angleSeen.indexOf(fam) >= 0) return false;
+				_angleSeen.push(fam);
+				return true;
+			});
+			const next = base ? (fresh.length ? base + ", " + fresh.join(", ") : base) : fresh.join(", ");
+			setPos(next);
+			const store2 = Object.assign({}, store);
+			(slots || []).forEach((k) => {
+				const v = sel[k];
+				const pool = rndPool(k);
+				if (v && rndHas(pool, v)) store2[k] = pool[v]; else delete store2[k];
+			});
+			rndBySlot.current = store2;
+			rndSaveLedger(store2);
+			// 历史全集持续累积：下回按同一个按钮时，这一轮写进去的词也在剥除范围内。
+			const seen2 = Object.assign({}, seen);
+			(slots || []).forEach((k) => {
+				const v = sel[k];
+				const pool = rndPool(k);
+				if (!v || !rndHas(pool, v)) return;
+				const bag = Object.assign({}, seen2[k] || {});
+				const t = String(pool[v] || "");
+				t.split(",").forEach((w) => { const s = w.trim(); if (s) bag[s.toLowerCase()] = s; });
+				seen2[k] = bag;
+			});
+			rndSeen.current = seen2;
+			rndSaveSeen(seen2);
+			return fresh.length;
+		}
+		// 清掉提示词里所有「曾经被随机按钮写过」的词，只留用户自己敲的。
+		function rndRoleOnly() {
+			// 换人：look + mood + extra + outfit + prop；画风与构图保持。再按时先把上一次这套角色剥掉再写新的。
+			const r = rndFill(RND_NON_ROLE, { look: true, mood: true, extra: true, slots: ["outfit", "prop"] });
+			const added = rndApply(RND_APPLY_ROLE, r.sel);
+			const ids = [r.sel.look, r.sel.mood, r.sel.extra, r.sel.outfit, r.sel.prop].map(rndIdOf).filter(Boolean).join(" ");
+			setMsg("随机角色 换掉旧的，写入 +" + added + " 词：" + ids);
+		}
+		function rndSegOnly() {
+			// 换画面：表情（mood）+ 道具（prop）+ 动作（pose）+ 场景（scene）+ 取景/分镜（frame）+ 光影（light）。
+			// 只保留人物本体（look / outfit / extra）与画风（style），空的也不补。
+			const r = rndFill(RND_NON_SCENE, { mood: true, light: true, slots: RND_SCENE_SLOTS });
+			const added = rndApply(RND_APPLY_SCENE, r.sel);
+			// 消息栏打出这次抽到的机位 ID 和姿势首词：一眼能看出到底换没换。
+			// 如果这里每次都不同、出图却还是同一个姿态，说明提示词里还挂着别的姿势词在压它，
+			// 不是随机功能没生效。
+			const poseTag = String(rndPool("pose")[r.sel.pose] || "").split(",")[0].trim();
+			const lightTag = String(rndPool("light")[r.sel.light] || "").split(",")[0].trim();
+			setMsg("随机画面 +" + added + " 词 · " + rndIdOf(r.sel.pose) + "/" + rndIdOf(r.sel.frame) + "/" + rndIdOf(r.sel.light) + " · 姿势=" + (poseTag || "—") + " · 光=" + (lightTag || "—") + " · " + String(pos || "").length + " 字符");
+		}
+		function rndAllBoth() {
+			// 十路全抽：style + look + mood + extra + outfit + prop + pose + scene + frame + light
+			const r = rndFill([], { look: true, mood: true, extra: true, light: true, slots: RND_ALL_SLOTS });
+			const added = rndApply(RND_APPLY_ALL, r.sel);
+			const ids = [r.sel.style, r.sel.look, r.sel.mood, r.sel.extra, r.sel.outfit, r.sel.prop, r.sel.pose, r.sel.scene, r.sel.frame, r.sel.light].map(rndIdOf).filter(Boolean).join(" ");
+			setMsg("随机全部 换掉旧的，写入 +" + added + " 词：" + ids);
+		}
+		function segBuilder() {
+			const order = SEG.order;
+			const label = SEG.labels || {};
+			const blocks = SEG.blocks || {};
+			const sel = segSel || {};
+			const picked = order.filter((k) => sel[k]).length;
+			const full = segTextNow();
+			const cur = blocks[segOpen] ? segOpen : order[0];
+			const curList = Object.keys(blocks[cur] || {});
+
+			const rowOf = (k) => h("div", {
+				key: k,
+				onClick: () => setSegOpen(k),
+				title: sel.preset && k !== "preset" ? "已选「整套」，这一槽不参与拼接" : "",
+				style: {
+					opacity: sel.preset && k !== "preset" ? 0.45 : 1,
+					display: "flex", alignItems: "center", gap: "10px", padding: "7px 10px", cursor: "pointer", borderRadius: "8px",
+					border: "1px solid " + (segOpen === k ? "var(--c-accent)" : (sel[k] ? "rgba(74,192,122,.55)" : "var(--c-line)")),
+					background: segOpen === k ? "var(--c-bg2)" : "transparent",
+				},
+			},
+				h("span", { style: { minWidth: "42px", fontSize: "12px", color: "var(--c-fg4)" } }, label[k] || k),
+				h("span", { style: { flex: 1, fontSize: "12.5px", wordBreak: "break-all" } }, sel[k] || h("span", { style: { color: "var(--c-fg5)" } }, "未选")),
+				sel[k] ? h("span", {
+					title: "清空这一段",
+					onClick: (e) => { e.stopPropagation(); setSegSel(Object.assign({}, sel, { [k]: "" })); },
+					style: Object.assign({}, S.chip, { padding: "0 8px", lineHeight: "18px" }),
+				}, "×") : null);
+
+			return h("div", { style: { display: "flex", flexDirection: "column", gap: "10px" } },
+				h("div", { style: { display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" } },
+					h("button", { style: S.btn, onClick: () => setSegOn(false) }, "← 返回词库"),
+					h("span", { style: { fontWeight: 700, fontSize: "15px" } }, "提示词段构建"),
+					h("span", { style: { fontSize: "12px", color: "var(--c-fg4)" } }, "已选 " + picked + "/" + order.length),
+					h("span", { style: { fontSize: "11.5px", color: "var(--c-fg5)" } }, sel.preset ? "已选「整套」：只输出 质量词+评级+整套串，其余槽位不参与" : "拼装顺序固定：风格 → 人物 → 衣服 → 道具 → 动作 → 场景 → 取景（顺序即权重）")),
+
+				h("div", { style: { display: "flex", gap: "6px", alignItems: "center", flexWrap: "wrap" } },
+					h("span", { style: { fontSize: "12px", color: "var(--c-fg4)" } }, "评级："),
+					(SEG.ratings || []).map((r) => h("span", {
+						key: r,
+						onClick: () => setSegRating(r),
+						style: Object.assign({}, S.chip, { cursor: "pointer", padding: "3px 10px" },
+							r === segRating ? { background: "var(--c-accent)", color: "var(--c-accent-on)", borderColor: "var(--c-accent)" } : {}),
+					}, r.replace("rating:", "")))),
+
+				h("div", { style: { display: "flex", flexDirection: "column", gap: "5px" } }, order.map(rowOf)),
+
+				h("div", { style: { border: "1px solid var(--c-line)", borderRadius: "8px", padding: "8px 10px", display: "flex", flexDirection: "column", gap: "6px" } },
+					h("div", { style: { fontSize: "12px", color: "var(--c-fg4)" } }, (label[cur] || cur) + " · " + curList.length + " 个可选（" + (SEG.hints[cur] || "") + "）"),
+					h("div", { style: { display: "flex", flexDirection: "column", gap: "4px", maxHeight: "300px", overflowY: "auto" } },
+						curList.map((k) => h("div", {
+							key: k,
+							title: blocks[cur][k],
+							onClick: () => setSegSel(Object.assign({}, sel, { [cur]: sel[cur] === k ? "" : k })),
+							style: { display: "flex", gap: "8px", alignItems: "baseline", padding: "4px 6px", borderRadius: "5px", cursor: "pointer",
+								background: sel[cur] === k ? "rgba(74,192,122,.16)" : "transparent" },
+						},
+							h("span", { style: { minWidth: "50px", fontSize: "11.5px", color: "var(--c-fg5)" } }, k.split(" ")[0]),
+							h("span", { style: { minWidth: "150px", fontSize: "12.5px" } }, k.slice(k.indexOf(" ") + 1)),
+							h("span", { style: { fontSize: "11px", color: "var(--c-fg5)", wordBreak: "break-all" } }, blocks[cur][k]))))),
+
+				h("div", { style: { border: "1px solid var(--c-line)", borderRadius: "8px", padding: "8px 10px", display: "flex", flexDirection: "column", gap: "8px" } },
+					h("div", { style: { fontSize: "12px", color: "var(--c-fg4)" } }, "拼好的提示词（" + full.length + " 字符）"),
+					h("textarea", { style: Object.assign({}, S.ta, { minHeight: "96px" }), readOnly: true, value: full }),
+					h("div", { style: { display: "flex", gap: "6px", flexWrap: "wrap" } },
+						h("button", { style: S.btn, onClick: () => { setPos(full); setMsg("已写入正向提示词"); } }, "写入正向"),
+						h("button", { style: S.btn2, onClick: () => { insert(full, "pos"); setMsg("已追加到正向"); } }, "追加到正向"),
+						h("button", { style: S.btn2, onClick: () => { insert(full, "neg"); setMsg("已追加到负面"); } }, "追加到负面"),
+						h("button", { style: S.btn2, onClick: copySeg }, "复制"),
+						h("button", { style: S.btn2, onClick: randomSeg }, "随机一套"),
+						h("button", { style: S.btn2, onClick: () => setSegSel({}) }, "清空全部"),
+						h("button", { style: S.btn2, onClick: () => setTab("gen") }, "去生成页")),
+					h("div", { style: { fontSize: "11.5px", color: "var(--c-fg5)" } }, "写入 = 替换正向框；追加 = 接在原有内容后面。")));
+		}
+
 		function libTab() {
 			// 0.7.79：词库「粘贴 JSON」兜底（文件对话框在某些环境不弹，导入就等于没有）
 			const [dictPasteOpen2, setDictPasteOpen2] = React.useState(false);
@@ -11670,7 +14571,14 @@ window.__ModuleLoader__.load({
 			};
 
 
+			// 二级视图：提示词段构建（顶部按钮切回分类词库）
+			if (segOn) return segBuilder();
+
 			return h("div", { style: { display: "flex", flexDirection: "column", gap: "10px" } },
+				h("div", { style: { display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap", padding: "6px 10px", borderRadius: "8px", border: "1px solid var(--c-line)", background: "var(--c-bg2)" } },
+					h("span", { style: { fontSize: "12px", color: "var(--c-fg4)" } }, "词库模式："),
+					h("button", { style: S.btn, onClick: () => setSegOn(true), title: "六个槽位各选一段，自动拼成完整提示词" }, "提示词段构建 →"),
+					h("span", { style: { fontSize: "11.5px", color: "var(--c-fg5)" } }, "风格 · 人物 · 衣服 · 动作 · 场景 · 取景，选完即完整提示词")),
 				h("div", { style: { display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" } },
 					h("input", { value: cardQ, placeholder: "搜词条 / 英文标签", onChange: (e) => setCardQ(e.target.value), style: Object.assign({}, S.input || S.inp, { width: "220px" }) }),
 					["all", "pos", "neg"].map((k) => h("span", {
@@ -11759,7 +14667,7 @@ window.__ModuleLoader__.load({
 					["outfit", "服饰", ["shirt", "skirt", "dress", "coat", "jacket", "uniform", "necktie", "tie", "stocking", "sock", "shoe", "boot", "glove", "scarf", "sweater", "hoodie", "vest", "pants", "trouser", "belt", "hat", "cap", "apron", "kimono", "cape", "cloak"]],
 					["base", "基础", ["1girl", "1boy", "solo", "group"]],
 				];
-				const CARD_ORDER = ["trigger", "base", "hair", "eyes", "glasses", "outfit", "extra"];
+				const CARD_ORDER = ["trigger", "base", "hair", "eyes", "glasses", "outfit", "proportion", "extra"];   /* 0.7.130：角色卡也吃 proportion（此前只有风格卡有，角色卡里填了会被 joinCardParts 丢掉） */
 
 				/** 风格卡的模块划分：画风 / 线条 / 上色 / 光影 */
 				const STYLE_GROUPS = [
@@ -11865,6 +14773,7 @@ window.__ModuleLoader__.load({
 					if (trg) out.push(trg);
 					for (const k of CARD_ORDER) {
 						if (k === "trigger") continue;
+						if (k === "proportion") { const sp = proportionTags((p || {})[k]); if (sp) out.push(sp); continue; }
 						const arr = normPart((p || {})[k]);
 						const s = arr.map((x) => String(x.t || "").trim()).filter(Boolean).join(", ");
 						if (s) out.push(s);
@@ -12165,7 +15074,7 @@ window.__ModuleLoader__.load({
 
 				function newCard() {
 				loadLlllite();
-				setCardEdit({ id: "", name: "", note: "", cover: "", neg: [], isNew: true, locks: normLocks([]), file: "", cond: normCond(null), parts: { trigger: "", base: "", hair: "", eyes: "", glasses: "", outfit: "", extra: "" } });
+				setCardEdit({ id: "", name: "", note: "", cover: "", neg: [], isNew: true, locks: normLocks([]), file: "", cond: normCond(null), baseModels: [], baseModelsText: ckpt ? String(ckpt).split(/[\\/]/).pop().replace(/\.(safetensors|ckpt)$/i, "") : "", parts: { trigger: "", base: "", hair: "", eyes: "", glasses: "", outfit: "", extra: "" } });   /* 新卡默认预填当前底模 */
 			}
 
 				/** 拉一次 LLLite 资产/权重表（侧车 /lllite），编辑器与卡片角标都吃这张表 */
@@ -12181,7 +15090,7 @@ window.__ModuleLoader__.load({
 				function editCard(c) {
 				const u = (USER.cards || []).filter((x) => x && x.id === c.id)[0];
 				const parts = (u && u.parts) || splitCardTags(c.tags);
-				setCardEdit({ id: c.id, name: c.name || "", note: c.note || "", cover: cardCoverOf(c), parts: parts, lora: String(c.lora || ""), loraW: Number(c.loraW) > 0 ? Number(c.loraW) : 0.7, loraAlt: String(c.loraAlt || ""), cond: normCond(c.conditioning), neg: normPart((u && u.neg) || c.neg || []), isNew: false, locks: normLocks(c.locks), file: String(c.file || ""), builtin: !!c.builtin });
+				setCardEdit({ id: c.id, name: c.name || "", note: c.note || "", cover: cardCoverOf(c), parts: parts, lora: String(c.lora || ""), loraW: Number(c.loraW) > 0 ? Number(c.loraW) : 0.7, loraAlt: String(c.loraAlt || ""), cond: normCond(c.conditioning), neg: normPart((u && u.neg) || c.neg || []), isNew: false, locks: normLocks(c.locks), file: String(c.file || ""), builtin: !!c.builtin, baseModels: Array.isArray(c.baseModels) ? c.baseModels.slice() : [], baseModelsText: c.baseModelsText != null ? String(c.baseModelsText) : (Array.isArray(c.baseModels) ? c.baseModels.join(", ") : ""), training: c.training, trainingText: c.trainingText, regression: c.regression, regressionText: c.regressionText });   /* 0.7.130：这几项以前没带进草稿 → 编辑器输入框永远空 → 一保存 baseModels 就被写成 []，训练脚本标的底模存不住 */
 				loadLlllite();
 				setTimeout(() => COND.check({ name: c.name || "", id: c.id || "", conditioning: normCond(c.conditioning) }, [Number(w), Number(hh)]), 0);
 			}
@@ -12680,7 +15589,7 @@ window.__ModuleLoader__.load({
 												h("div", { style: { display: "flex", gap: "8px", marginTop: "12px", alignItems: "center" } },
 													h("div", { style: { fontWeight: 600, fontSize: "12px", color: "var(--c-fg2)", margin: "12px 0 4px" } }, "资产与迁移（可选 · 让这张卡能跨机器、跨底模活下去）")),
 												h("div", { style: row }, h("span", { style: lab }, "底模"),
-													h("input", { style: inp, value: _bmText, placeholder: "逗号分隔，例如 <底模>.safetensors", onChange: (e) => { set("baseModelsText", e.target.value); setCardChk(null); } })),
+													h("input", { style: inp, value: _bmText, placeholder: "逗号分隔，例如 anima-aesthetic-v1.1.safetensors", onChange: (e) => { set("baseModelsText", e.target.value); setCardChk(null); } })),
 												h("div", { style: { fontSize: "11.5px", color: "var(--c-fg4)", margin: "-4px 0 8px" } }, "写清这张卡是在哪个底模上调出来的。换机或换底模之后，点「自检」就能知道还能不能用。"),
 												h("div", { style: row }, h("span", { style: lab }, "训练记录"),
 													h("textarea", { style: Object.assign({}, inp, { minHeight: "46px", fontFamily: "Consolas, monospace", lineHeight: "1.45" }), value: _trText, placeholder: '{"steps":3000,"rank":64,"datasetHash":"..."}', onChange: (e) => { set("trainingText", e.target.value); setCardChk(null); } })),
@@ -12723,7 +15632,8 @@ window.__ModuleLoader__.load({
 				/** 插入风格卡：core=false 全量；core=true 去掉「光影 / 其它」，方便试不同氛围 */
 				function applyStyleInsert(c, core, mode) {
 				  const parts0 = (c.parts && typeof c.parts === "object") ? c.parts : null;
-				  const full = String(c.tags || "").trim() || (parts0 ? joinStyleParts(parts0) : "");
+				  const _fromParts = parts0 ? joinStyleParts(parts0) : "";
+				  const full = _fromParts.trim() || String(c.tags || "").trim();
 				  let tags = full;
 				  if (core) {
 				    const pp = parts0 || splitStyleTags(full);
@@ -12734,8 +15644,9 @@ window.__ModuleLoader__.load({
 				    const have = new Set(String(cur || "").toLowerCase().split(",").map((x) => x.trim()).filter(Boolean));
 				    const list = String(extra || "").split(",").map((x) => x.trim()).filter(Boolean).filter((t) => !have.has(t.toLowerCase()));
 				    const base = String(cur || "").replace(/[\s,]+$/, "");
-				    if (!list.length) return { t: base, n: 0 };
-				    return { t: base ? base + ", " + list.join(", ") : list.join(", "), n: list.length };
+				    // 返回字段名与角色卡的 appendTags() 保持一致的形状，便于两处共用调用习惯
+				    if (!list.length) return { t: base, n: 0, text: base, added: 0 };
+				    return { t: base ? base + ", " + list.join(", ") : list.join(", "), n: list.length, text: base ? base + ", " + list.join(", ") : list.join(", "), added: list.length };
 				  };
 				  const _rp = add(String(pos || ""), tags);
 				  const _rn = add(String(neg || ""), ng);
@@ -12782,7 +15693,7 @@ window.__ModuleLoader__.load({
 					const _sid = String(c.id || c.name || "");
 					INSERTED.set(_sid, {
 					  id: _sid, kind: "style", name: String(c.name || ""), core: !!core, direct: !!direct,
-					  posTokens: diffTokens(pos, _rp.text), negTokens: diffTokens(neg, _rn.text),
+					  posTokens: diffTokens(pos, _rp.t), negTokens: diffTokens(neg, _rn.t),   /* 0.7.130：add() 返回的是 {t,n}，原来读 .text 恒为 undefined → tokList 得空数组 → 差集永远 []，取消插入撤不掉任何词 */
 					  loras: (chain || []).map((l) => ({ name: String(l.name), w: Number(l.w) })),
 					  locks: [], cond: null,
 					});
@@ -13230,7 +16141,7 @@ window.__ModuleLoader__.load({
 		    if (!nm) continue;
 		    const tags = String(c.tags || joinStyleParts(c.parts || {})).trim();
 		    if (!tags) continue;
-		    const rec = { id: "s" + String(Date.now()) + "_" + ok.length, name: nm, tags: tags, note: String(c.note || ""), cover: String(c.cover || ""), parts: (c.parts && typeof c.parts === "object") ? c.parts : splitStyleTags(tags), neg: normPart(c.neg), loras: normStyleLoras(c), ckpt: String(c.ckpt || ""), gen: Object.assign({}, c.gen || {}), baseModels: (typeof _styleBm === "function" ? _styleBm(c) : (Array.isArray(c.baseModels) ? c.baseModels : [])), training: c.training || null, regression: c.regression || null };
+		    const rec = { id: "s" + String(Date.now()) + "_" + ok.length, name: nm, tags: tags, note: String(c.note || ""), cover: String(c.cover || ""), parts: (c.parts && typeof c.parts === "object") ? c.parts : splitStyleTags(tags), neg: normPart(c.neg), loras: normStyleLoras(c), ckpt: String(c.ckpt || ""), gen: Object.assign({}, c.gen || {}), baseModels: (typeof _styleBm === "function" ? _styleBm(c) : (Array.isArray(c.baseModels) ? c.baseModels : [])), baseModelsText: (function () { const ok = (v) => { const s = String(v == null ? "" : v).trim(); return s && s.indexOf("<") < 0 && s.indexOf(">") < 0 ? s : ""; }; return ok(c.baseModelsText) || ok(c.ckpt) || ((Array.isArray(c.baseModels) && c.baseModels.length) ? ok(c.baseModels[0]) : "") || ""; })(), modelFamily: String(c.modelFamily || ""), training: c.training || null, regression: c.regression || null };
 		    const hit = USER.styleCards.findIndex((x) => x && String(x.name || "").trim() === nm);
 		    if (hit >= 0) { rec.id = USER.styleCards[hit].id; if (!rec.cover && USER.styleCards[hit].cover) rec.cover = USER.styleCards[hit].cover; USER.styleCards[hit] = rec; updated++; }
 		    else { USER.styleCards.push(rec); added++; }
@@ -13291,7 +16202,7 @@ window.__ModuleLoader__.load({
 				          style: { position: "absolute", top: "calc(100% + 4px)", left: 0, zIndex: 60, minWidth: "206px", background: "var(--c-card)", border: "1px solid rgba(var(--c-ink-rgb),.18)", borderRadius: "8px", boxShadow: "0 10px 26px rgba(var(--c-ink-rgb),.18)", padding: "4px", display: "flex", flexDirection: "column", gap: "3px" },
 				          onMouseLeave: () => setStyleSub(""),
 				        },
-				          h("div", { style: { position: "relative" }, onMouseEnter: () => setStyleSub("direct") },
+				          h("div", { style: { position: "relative" }, onClick: (e) => { if (e && e.stopPropagation) e.stopPropagation(); setStyleSub(styleSub === "direct" ? "" : "direct"); } },
 				            h("button", {
 				              style: Object.assign({}, CARD_BTN_ACCENT, { width: "100%", textAlign: "left", padding: "6px 10px", display: "flex", alignItems: "center", gap: "8px" }),
 				              title: "直插：先把 LoRA 列整个清空，再只挂这张风格卡的链（角色 LoRA 也会被清掉）",
@@ -13300,11 +16211,11 @@ window.__ModuleLoader__.load({
 				              h("span", { style: { flex: 1 } }, "直插"),
 				              h("span", { style: { fontSize: "11px", opacity: 0.85, whiteSpace: "nowrap" } }, "清空 LoRA ▸")),
 				            styleSub === "direct" ? h("div", {
-				              style: { position: "absolute", top: 0, left: "calc(100% + 4px)", zIndex: 70, minWidth: "196px", background: "var(--c-card)", border: "1px solid rgba(var(--c-ink-rgb),.18)", borderRadius: "8px", boxShadow: "0 10px 26px rgba(var(--c-ink-rgb),.18)", padding: "4px", display: "flex", flexDirection: "column", gap: "3px" },
+				              style: { marginTop: "3px", marginLeft: "10px", background: "rgba(var(--c-ink-rgb),.05)", border: "1px solid rgba(var(--c-ink-rgb),.10)", borderRadius: "6px", padding: "3px", display: "flex", flexDirection: "column", gap: "2px" },
 				            },
 				              h("button", { style: Object.assign({}, CARD_BTN_ACCENT, { textAlign: "left", padding: "6px 10px" }), title: "清空 LoRA + 插入全部画风条目", onClick: () => applyStyleInsert(c, false, "direct") }, "完整插入（全部画风）"),
 				              h("button", { style: Object.assign({}, CARD_BTN, { textAlign: "left", padding: "6px 10px" }), title: "清空 LoRA + 只留画风/线条/上色（去掉光影与其它）", onClick: () => applyStyleInsert(c, true, "direct") }, "只插核心（去掉光影/其它）")) : null),
-				          h("div", { style: { position: "relative" }, onMouseEnter: () => setStyleSub("stack") },
+				          h("div", { style: { position: "relative" }, onClick: (e) => { if (e && e.stopPropagation) e.stopPropagation(); setStyleSub(styleSub === "stack" ? "" : "stack"); } },
 				            h("button", {
 				              style: Object.assign({}, CARD_BTN, { width: "100%", textAlign: "left", padding: "6px 10px", display: "flex", alignItems: "center", gap: "8px" }),
 				              title: "叠插：一个 LoRA 都不清空，把这张卡的链叠加上去（同名只更新强度）—— 用来融合多张风格卡",
@@ -13313,7 +16224,7 @@ window.__ModuleLoader__.load({
 				              h("span", { style: { flex: 1 } }, "叠插"),
 				              h("span", { style: { fontSize: "11px", color: "var(--c-fg4)", whiteSpace: "nowrap" } }, "叠加融合 ▸")),
 				            styleSub === "stack" ? h("div", {
-				              style: { position: "absolute", top: 0, left: "calc(100% + 4px)", zIndex: 70, minWidth: "196px", background: "var(--c-card)", border: "1px solid rgba(var(--c-ink-rgb),.18)", borderRadius: "8px", boxShadow: "0 10px 26px rgba(var(--c-ink-rgb),.18)", padding: "4px", display: "flex", flexDirection: "column", gap: "3px" },
+				              style: { marginTop: "3px", marginLeft: "10px", background: "rgba(var(--c-ink-rgb),.05)", border: "1px solid rgba(var(--c-ink-rgb),.10)", borderRadius: "6px", padding: "3px", display: "flex", flexDirection: "column", gap: "2px" },
 				            },
 				              h("button", { style: Object.assign({}, CARD_BTN_ACCENT, { textAlign: "left", padding: "6px 10px" }), title: "叠加融合：一个 LoRA 都不删，把这张卡的链加进去，再插全部画风条目", onClick: () => applyStyleInsert(c, false, "stack") }, "完整插入（全部画风）"),
 				              h("button", { style: Object.assign({}, CARD_BTN, { textAlign: "left", padding: "6px 10px" }), title: "叠加融合 + 只留画风/线条/上色", onClick: () => applyStyleInsert(c, true, "stack") }, "只插核心（去掉光影/其它）")) : null)
@@ -13533,7 +16444,11 @@ window.__ModuleLoader__.load({
 				 *  withOutfit=false 时把「服饰」模块剥掉，只插角色本体，方便同一个角色换不同衣服试 */
 				function applyCardInsert(c, withOutfit) {
 				  const parts0 = (c.parts && typeof c.parts === "object") ? c.parts : null;
-				  const full = String(c.tags || "").trim() || (parts0 ? joinCardParts(parts0) : "");
+				  /* 0.7.130：原来 tags 优先。tags 是落盘缓存、parts 才是编辑真相，两者不同步时
+				     （比如老卡 parts 里有 proportion 但 tags 没重算）插入会静默丢掉整段词，
+				     表现就是「同样提示词换张角色卡，头身比和透视全变了」。改为 parts 优先、tags 兜底。 */
+				  const _fromParts = parts0 ? joinCardParts(parts0) : "";
+				  const full = _fromParts.trim() || String(c.tags || "").trim();
 				  let tags = full;
 				  if (!withOutfit) {
 				    const parts = parts0 || splitCardTags(full);
@@ -13636,7 +16551,22 @@ window.__ModuleLoader__.load({
 						onClick: () => { const _r = INSERTED.get(c.id || c.name); if (_r) { removeInserted(_r); return; } setCardSel(on ? "" : c.id); },
 					},
 					cardCoverBox(c),
-					ins ? h("span", { style: { position: "absolute", top: "6px", right: "6px", zIndex: 6, fontSize: "11px", lineHeight: "16px", padding: "0 7px", borderRadius: "999px", color: "#fff", background: ins.partial ? "rgba(200,140,30,.95)" : "rgba(45,105,225,.95)", boxShadow: "0 1px 4px rgba(0,0,0,.25)" } }, ins.partial ? "部分移除" : "已插入") : null,
+					/* 右上角一列：插入状态（条件）在上、适配底模（always）在下，和风格卡同款 */
+					h("div", {
+						style: { position: "absolute", top: "6px", right: "6px", zIndex: 6, display: "flex",
+							flexDirection: "column", alignItems: "flex-end", gap: "4px",
+							maxWidth: "calc(100% - 12px)", pointerEvents: "none" },
+					},
+						ins ? h("span", { style: { fontSize: "11px", lineHeight: "16px", padding: "0 7px", borderRadius: "999px", color: "#fff", background: ins.partial ? "rgba(200,140,30,.95)" : "rgba(45,105,225,.95)", boxShadow: "0 1px 4px rgba(0,0,0,.25)" } }, ins.partial ? "部分移除" : "已插入") : null,
+						(() => { const b = bmBadge(c); return h("span", {
+							style: Object.assign({ maxWidth: "100%", fontSize: "10.5px", lineHeight: "15px", padding: "0 6px", borderRadius: "5px",
+								background: "rgba(10,10,12,.66)", color: "rgba(255,255,255,.92)",
+								border: "1px solid rgba(255,255,255,.16)", whiteSpace: "nowrap",
+								overflow: "hidden", textOverflow: "ellipsis", letterSpacing: ".2px" },
+								b.muted ? { background: "rgba(10,10,12,.42)", color: "rgba(255,255,255,.62)", borderStyle: "dashed" } : null),
+							title: b.full,
+						}, b.text); })(),
+					),
 						h("div", { style: { padding: "8px 10px 10px" } },
 							h("div", { style: { display: "flex", alignItems: "baseline", gap: "6px" } },
 								h("span", { style: { fontWeight: 700, fontSize: "13px", color: "var(--c-fg)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", flex: "1 1 auto", minWidth: 0 } }, c.name), c.packMode ? h("span", { style: { flex: "none", fontSize: "10px", padding: "0 4px", borderRadius: "999px", background: "rgba(29,78,216,.10)", color: "var(--c-accent)" }, title: "这张卡是从「" + (PACK_MODE_CN[c.packMode] || c.packMode) + "」卡包导入的" }, (PACK_MODE_CN[c.packMode] || c.packMode)) : null, 
@@ -13811,20 +16741,24 @@ window.__ModuleLoader__.load({
 						status,
 						h("span", { style: S.dim }, ckpts.length + " 底模 · " + loras.length + " LoRA · " + (USER.presets || []).length + " 预设")),
 					h("div", { style: { display: "flex", gap: "6px", marginLeft: "auto", justifyContent: "flex-end", flexWrap: "wrap", minWidth: 0 } },
-						!online ? h("button", { style: S.btn2, title: "手动拉起 ComfyUI（约 20~60 秒）", onClick: async () => {
-						  setOnline(null); setMsg("正在启动 ComfyUI，等 20~60 秒…");
-						  try {
-						    const r = await jpost(EXPANDER + "/comfy/start", {}, 120000);
-						    if (!r || !r.ok) throw new Error((r && r.message) || "start 失败");
-						  } catch (e) { setOnline(false); setMsg("启动失败：" + errText(e) + "。也可双击 <ComfyUI父目录>\\start-comfy.ps1"); return; }
-						  for (let i = 0; i < 60; i++) {
-						    try { await jget(COMFY + "/system_stats", 4000); break; }
-						    catch (e3) { await new Promise((r) => setTimeout(r, 2000)); }
-						  }
-						  setMsg("ComfyUI 已启动");
-						  setOnline(null); setConn((c) => c + 1);
-						} }, "启动 ComfyUI") : null,
-						!online ? h("button", { style: S.btn2, onClick: () => { setOnline(null); setMsg(""); setConn((c) => c + 1); } }, "重试连接") : null,
+						(launchAtt || !online) ? h("button", {
+							style: Object.assign({}, S.btn2, launchAtt
+								? { background: "#c62828", borderColor: "#c62828", color: "#fff", fontWeight: 800, display: "inline-flex", alignItems: "center", gap: 7, minWidth: 128 }
+								: { fontWeight: 700, minWidth: 128 }),
+							title: launchAtt ? "点击停止本次启动并回收进程" : "手动拉起 ComfyUI（约 20~60 秒）",
+							"data-cc-guide": "connection-action",
+							onClick: launchAtt ? stopLaunch : beginLaunch,
+						},
+							launchAtt
+								? h(React.Fragment, null,
+									h("span", {
+										style: { display: "inline-block", width: 11, height: 11, borderRadius: "50%",
+											border: "2px solid rgba(255,255,255,.45)", borderTopColor: "#fff",
+											animation: "cc-spin .7s linear infinite" },
+									}),
+									"停止启动")
+								: "启动 ComfyUI") : null,
+						!online && !launchAtt ? h("button", { style: S.btn2, onClick: () => { setOnline(null); setMsg(""); setConn((c) => c + 1); } }, "重试连接") : null,
 						online ? h("button", {
 							style: S.btn2, title: "重新读一遍 ComfyUI 状态与模型清单（不重启进程）",
 							onClick: () => { setOnline(null); setMsg("重新连接中…"); setConn((c) => c + 1); },
@@ -13902,9 +16836,9 @@ window.__ModuleLoader__.load({
 				h("div", { key: "pvhost", style: { display: (tab === "pv-output" || tab === "pv-online") ? "flex" : "none", flexDirection: "column", flex: 1, minHeight: 0, minWidth: 0, overflow: "hidden" } },
 					h(PreviewConsole, { page: tab === "pv-output" ? "output" : tab === "pv-online" ? "online" : "" })),
 				h(TabBoundary, { key: tab },
-					tab === "gen" ? h(genTab, { key: "gen" }) : null,
-					tab === "style" ? h(styleCardTab, { key: "style" }) : null,
-					tab === "card" ? h(cardTab, { key: "card" }) : null,
+					tab === "gen" ? genTab() : null,   /* 内联调用：genTab 是 Console 内的嵌套函数，h(genTab) 每次渲染都是新类型 → 整棵子树卸载重建 → 输入框每敲一个字就失焦 */
+					tab === "style" ? styleCardTab() : null,
+					tab === "card" ? cardTab() : null,
 					tab === "lib" ? h(libTab, { key: "lib" }) : null,
 					tab === "preset" ? h(presetTab, { key: "preset" }) : null),
 				impRep ? importReportPanel() : null,

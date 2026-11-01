@@ -316,7 +316,7 @@ def _stage_control_image(root, asset):
 
 
 def _stage_lllite_weights(root, key, rec):
-    """LLLite 权重 → ComfyUI models/model_patches/julin-lllite-<key>.safetensors。"""
+    """LLLite 权重 → ComfyUI models/model_patches/dsh-lllite-<key>.safetensors。"""
     src = rec.get('file') or ''
     if not os.path.isabs(src):
         src = os.path.join(root, src)
@@ -324,7 +324,7 @@ def _stage_lllite_weights(root, key, rec):
         raise RuntimeError('权重不存在: %s' % src)
     os.makedirs(COMFY_PATCHES, exist_ok=True)
     safe = re.sub(r'[^A-Za-z0-9._-]', '_', key)
-    name = 'julin-lllite-%s.safetensors' % safe
+    name = 'dsh-lllite-%s.safetensors' % safe
     dst = os.path.join(COMFY_PATCHES, name)
     if not os.path.exists(dst) or os.path.getsize(dst) != os.path.getsize(src):
         shutil.copyfile(src, dst)

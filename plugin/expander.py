@@ -124,7 +124,89 @@ from sidecar_state import (
 from sidecar_comfy import (
     _comfy_exe,
     Comfy,
+    StartupCancelled,
 )
+
+# 启动进度 / 取消 / 后台日志（2026-10-31）
+from startup_progress import TRACKER
+
+
+def _comfy_log_paths():
+    """ComfyUI 的 stdout / stderr 落到哪。_launch() 里固定写这两个文件名。"""
+    return {
+        'stdout': os.path.join(WORK_DIR, 'comfy-stdout.log'),
+        'stderr': os.path.join(WORK_DIR, 'comfy-stderr.log'),
+    }
+
+
+class _StartupProgress:
+    """把 TRACKER 包成 Comfy.start(progress=...) 要的形状。
+
+    每次 phase() 顺带灌一次日志增量 —— 启动期间前端每秒轮询，靠这个拿到输出。
+    """
+
+    def __init__(self, attempt_id):
+        self.aid = str(attempt_id)
+
+    def phase(self, text, pid=None):
+        TRACKER.phase(self.aid, text, pid)
+        TRACKER.pump_logs(self.aid, _comfy_log_paths())
+
+    def cancelled(self):
+        return TRACKER.cancelled(self.aid)
+
+    def spawn(self, factory):
+        """Comfy.start() 用它拉起进程：取消检查与 Popen 原子完成。"""
+        return TRACKER.spawn(self.aid, factory)
+
+
+def _reap_own_process(attempt_id):
+    """取消后回收「本次启动自己拉起的」进程。
+
+    `Comfy.start()` 抛 StartupCancelled 时，进程可能已经 Popen 出来了 ——
+    只是还没等到端口就绪。不管它就会留成孤儿，用户以为停了其实还在跑，
+    占着显存还抢 8188。这里按 TRACKER 记下的 PID 精确回收。
+
+    不碰外部服务：已经在跑的 ComfyUI 会走 serving() 提前返回，
+    根本不会走到可取消的路径，也就不会有 PID 落在这里。
+    """
+    snap = TRACKER.snapshot(attempt_id) or {}
+    pid = snap.get('pid')
+    if not pid:
+        return ''
+    try:
+        COMFY._kill_pid(int(pid))
+        COMFY._kill_strays()
+        COMFY._wait_port_free(15)
+        print('[comfy] 取消启动：已回收本次拉起的进程 PID %s' % pid, flush=True)
+        return str(pid)
+    except Exception as ex:
+        print('[comfy] 取消启动：回收 PID %s 失败 %s' % (pid, ex), flush=True)
+        return ''
+
+
+def _run_startup(attempt_id, mode):
+    """后台线程里跑一次完整启动，把结果写回 TRACKER。"""
+    prog = _StartupProgress(attempt_id)
+    try:
+        ok, message = COMFY.start(prog)
+        TRACKER.pump_logs(attempt_id, _comfy_log_paths())
+        if TRACKER.cancelled(attempt_id) and not ok:
+            _reap_own_process(attempt_id)
+            TRACKER.mark_cancelled(attempt_id)
+            TRACKER.finish(attempt_id, False, '已停止启动')
+            return
+        TRACKER.finish(attempt_id, ok, message)
+    except StartupCancelled:
+        killed = _reap_own_process(attempt_id)
+        TRACKER.mark_cancelled(attempt_id)
+        TRACKER.pump_logs(attempt_id, _comfy_log_paths())
+        TRACKER.finish(attempt_id, False,
+                      ('已停止启动，已回收进程 PID %s' % killed) if killed else '已停止启动')
+    except Exception as ex:
+        TRACKER.pump_logs(attempt_id, _comfy_log_paths())
+        TRACKER.finish(attempt_id, False, '启动过程出错：%s' % ex)
+
 
 # 卡的读写与 LLLite 资产在 sidecar_cards.py（0.5.4 起）
 from sidecar_dirs import (
@@ -471,7 +553,7 @@ class H(BaseHTTPRequestHandler):
                 self.send_response(200)
                 self.send_header('Content-Type', 'application/octet-stream')
                 self.send_header('Content-Length', str(_sz))
-                # 中文文件名（<LoRA>.safetensors / <画风卡>-…）必须用 RFC 5987 的 filename*
+                # 中文文件名（软萌.safetensors / <画风LoRA中文名>-…）必须用 RFC 5987 的 filename*
                 self.send_header('Content-Disposition',
                                  "attachment; filename*=UTF-8''%s" % urllib.parse.quote(_bn))
                 self._cors()
@@ -618,6 +700,18 @@ class H(BaseHTTPRequestHandler):
         elif p == '/comfy/online':
             # UI 轮询专用：只检测 ComfyUI API，避免队列接口阻塞导致状态误判。
             self._json(200, {'running': COMFY.running()})
+        elif p == '/comfy/startup':
+            # 启动进度轮询（GET，每秒一次）：阶段文字 + PID + 耗时 + 后台日志增量。
+            # 注意：前端用 jget 打这个端点，所以必须挂在 do_GET 分支里。
+            import urllib.parse as _up2   # do_GET 里没有全局 urllib.parse，局部导入最稳
+            q = _up2.parse_qs(_up2.urlsplit(self.path).query)
+            _att = str((q.get('attempt') or [''])[0]).strip() or (TRACKER.active() or '')
+            if not _att:
+                self._json(200, {'ok': False, 'message': '没有进行中的启动', 'snapshot': None})
+            else:
+                TRACKER.pump_logs(_att, _comfy_log_paths())
+                snap = TRACKER.snapshot(_att)
+                self._json(200 if snap else 404, {'ok': bool(snap), 'attempt': _att, 'snapshot': snap})
         # ---- 诊断 / ComfyUI 更新（0.8.0 从 A 线移植）----
         elif p == '/diagnostics/compatibility':
             try: self._json(200, ALINE.COMPATIBILITY.snapshot(CFG, ALINE._path_settings(), ALINE.CROSS_PATHS, ALINE.RUNTIME_BRIDGE.probe, ALINE.BOUND_SIDECAR_PORT))
@@ -825,8 +919,40 @@ class H(BaseHTTPRequestHandler):
             except Exception as e:
                 self._json(502, {'error': str(e)})
         elif p == '/comfy/start':
-            ok, m = COMFY.start()
-            self._json(200 if ok else 500, {'ok': ok, 'message': m, 'status': COMFY.status()})
+            # 2026-10-31：带 attempt 时走「异步启动 + 轮询进度」，可以中途取消。
+            # 不带 attempt 的老调用（生成页自动重连、其它内部调用）行为完全不变：
+            # 同步阻塞到结束，直接拿 ok/message。这样不会把现有调用点改坏。
+            _att = str(body.get('attempt') or '').strip()
+            if _att:
+                if not TRACKER.valid_id(_att):
+                    self._json(400, {'ok': False, 'started': False, 'attempt': _att,
+                                     'message': '无效的启动标识'})
+                elif TRACKER.active() and TRACKER.active() != _att:
+                    self._json(409, {'ok': False, 'message': '已有一次启动在跑，先停止它再试',
+                                     'attempt': TRACKER.active()})
+                elif not TRACKER.begin(_att):
+                    # 这个 id 之前被取消过（停止请求先于启动到达），别再拉起来
+                    self._json(200, {'ok': False, 'started': False, 'attempt': _att,
+                                     'message': '已停止启动', 'status': COMFY.status()})
+                else:
+                    TRACKER.phase(_att, '正在准备启动…')
+                    th = threading.Thread(target=_run_startup, args=(_att, body.get('mode')), daemon=True)
+                    th.start()
+                    self._json(200, {'ok': True, 'started': True, 'attempt': _att,
+                                     'message': '已开始启动', 'status': COMFY.status()})
+            else:
+                ok, m = COMFY.start()
+                self._json(200 if ok else 500, {'ok': ok, 'message': m, 'status': COMFY.status()})
+        elif p == '/comfy/startup/cancel':
+            _att = str(body.get('attempt') or '').strip() or (TRACKER.active() or '')
+            if not _att:
+                self._json(400, {'ok': False, 'message': '没有进行中的启动'})
+            elif not TRACKER.valid_id(_att):
+                self._json(400, {'ok': False, 'message': '无效的启动标识', 'attempt': _att})
+            else:
+                accepted, m = TRACKER.cancel(_att)
+                self._json(200 if accepted else 409, {'ok': accepted, 'message': m,
+                                                      'attempt': _att, 'status': COMFY.status()})
         elif p == '/comfy/touch':
             COMFY.touch()
             self._json(200, {'ok': True, 'status': COMFY.status()})

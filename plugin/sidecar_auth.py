@@ -21,9 +21,18 @@ from sidecar_state import (
 # ⚠️ 2026-10-21：DSH **桌面版**的渲染进程 origin 是 `dsh-app://app`，不是 localhost。
 #    只认 localhost 会让桌面版面板的每个请求都 403 + ACAO null（表现是"连不上侧车"）。
 #    dsh-app:// 只由本应用注册，等价于"自己的 UI"，不比 localhost 宽。
+#
+# ⚠️ 2026-10-31：桌面版在不同打包方式下会换 origin —— Electron 以 `app://` 注册自定义
+#    协议时报 app://<name>，以本地文件加载页面时报 file://… 甚至字面量 null（沙箱 iframe、
+#    无 scheme 的 about:blank 派生页）。这三种都要认，否则表现就是面板全灰、Failed to fetch。
+#    注意 file:// 与 null 不与应用绑定，任何本机页面都能伪造 —— 真正的第二道闸是
+#    _auth_ok() 里的 X-Console-Client 头 + token，不要把这里当唯一防线。
 _LOCAL_ORIGIN_RE = re.compile(
     r'^(?:https?://(?:127\.0\.0\.1|localhost|\[::1\])(?::\d+)?'
-    r'|dsh-app://[A-Za-z0-9._-]+)$')
+    r'|dsh-app://[A-Za-z0-9._-]+'
+    r'|app://[A-Za-z0-9._-]+'
+    r'|file://.*'
+    r'|null)$')
 _LAN_ORIGIN_RE = re.compile(
     r'^https?://(10\.\d+\.\d+\.\d+|192\.168\.\d+\.\d+|172\.(?:1[6-9]|2\d|3[01])\.\d+\.\d+)(:\d+)?$')
 

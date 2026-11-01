@@ -1,3 +1,49 @@
+## 0.7.164 · 2026-11-01 · 身份控制开关、历史页刷新与缓存版本号
+
+### 角色卡与风格卡
+
+**PROPORTION 只剩一个分段。** 比例分段此前存了六个词（`eight heads tall` / `long legs` / `long limbs` / `small head` / `elongated silhouette`），叠在一个本来比例正常的 LoRA 上会把它拉长。现在只保留 `correct proportions`，具体身高交给 LoRA 自己的训练结果。
+
+**插入改用分段优先。** `applyCardInsert` 原先取 `tags` 而不是 `parts`，导致只改了 `parts` 没同步 `tags` 的卡会整段丢失比例描述。改成 `parts` 优先、`tags` 兜底。
+
+**风格卡撤回终于生效。** `applyStyleInsert` 从 `{ t, n }` 里读 `.text`，取到 `undefined`，`tokList(undefined)` 返回空数组，于是 `posTokens` 永远是空的——撤回按钮按下去切不掉任何词，却照样报「撤回 0 条词」。改为读 `.t` / `.n`，并补上 `text` / `added` 别名字段。
+
+**换卡时清掉上一张卡的锁。** `lockCards` 在 `Console` 里，`applyOutputParams` 在 `PreviewConsole` 里，跨组件拿不到。加了一个模块级 sink。不清的后果是套用历史参数时 `stabilizePrompt` 拿着旧卡的禁词把新提示词里的词当禁词剔掉。
+
+### 身份控制（LLLite）
+
+生成页新增「身份控制」开关，位置在 LoRA 行下面，只有插入的卡带 `conditioning.presets` 时出现。
+
+默认关闭。控制图是纯角色线稿，开着会把背景削掉、姿态锁成正立，场景出图不该挂它。需要锁脸、锁衣服（定妆照、角色一致性对照）时临时勾开，右侧出现档位下拉，换档即时重新解析。
+
+开关走 `COND.resolve(card, canvas, force)` 新加的 `force` 参数，绕过卡里的 `conditioning.enabled`，只影响本次会话，卡文件保持 `enabled: false`。关掉时 `COND.plan` 清空，工作流里 `LoadImage` / `ModelPatchLoader` / `AnimaLLLiteApply` 三个节点整段不进图——不是把强度调成 0。
+
+另加两处兜底：开关开着但 plan 还是 `off`（刚插卡、改过画布尺寸、上个会话残留）时出图前补解析一次；解除插入后若已无可挂条件图的卡，自动关开关并清 plan。
+
+### 随机词库
+
+**新词内部去重。** `rndApply` 只拿新词和原提示词比，不管新词自己重不重。`from above` 同时挂在动作槽和取景槽，两段都进 `items`，`have` 里又没有它，于是写了两遍。同一个词重复三次等于抬高权重，模型被死死钉在那个视角上。现在对新词也去重，只保留第一次出现。
+
+**角度互斥。** `rndFrameAngle` 本来就能把 `from above` / `high angle` 归为同一族「俯视」，但它只用于抽取时避重，从不清理已经写进提示词的词。`from above` 是正上方垂直俯拍，`high angle` 是高角度斜俯拍，两套透视落在同一张图里，而背景词没跟着换视角，画面就裂成角色俯视、场景平视。现在按族归类，同族只留先出现的那个。
+
+### 历史页
+
+**带文字的刷新按钮。** 工具栏最左边原来有一个 31px 的纯图标刷新，但工具栏是 `flex-wrap:nowrap` + `overflow-x:auto`，窗口一窄就被推到可视区外。现在「N 张」计数器左边多一个带文字的按钮，点击强制重扫输出目录。
+
+**缓存版本号。** `/outputs/thumb` 带 `Cache-Control: private, max-age=300`，而前端拼的 URL 只有 `path` 和 `quality`。同名文件被重新生成或覆盖时 URL 一字不变，浏览器 5 分钟内继续用旧缩略图，卡片上的图就和文件对不上。现在把 `mtime` 拼进 URL 当版本号，文件一改 URL 就变。原图 URL 同样处理。
+
+**回退标记不再残留。** 图片加载失败时回退到原图，原来靠 `dataset.fallback` 防重入，但 React 复用节点时标记会留到下一张图上，导致那张加载失败后不再回退。改成直接比对当前 `src`。
+
+### 界面
+
+**输入框不再每敲一个字就失焦。** 嵌套定义的函数组件每次渲染都是新身份，React 卸载重建导致输入框丢焦点。把 `genTab` / `styleCardTab` / `cardTab` 三处改成内联调用。
+
+**历史卡片右上角按钮组。** 鼠标悬停出现「在资源管理器中打开图片位置」和「删除」，不用先点进详情。删除复用详情页的 `manageOutput`，自带确认。
+
+**底模 badge 不再空白。** 卡片只存了 `baseModels` 数组、没存 `baseModelsText` 时，编辑器里显示为空。改为文本优先、数组兜底。
+
+---
+
 ## 0.7.153 · 2026-10-29 · 安装后插件不加载（bundles 缺注册）
 
 ### 现象与机制
@@ -1398,8 +1444,8 @@ A 线的「工作台」整页移除，`PreviewConsole` 只保留「历史」和�
 
 ### 测试
 
-- 新增 `D:/dsh/日志/smoke-dictcard.js`：假 loader + 假 React 真渲染三条路径——编辑已有卡 / 新建卡 / 带词性的输入行（外加 `PolKeys` 单测），全部 `渲染 OK`。
-- `日志/probe-client-scope.js` 仍全绿（`capNoteOf`/`PolKeys`/`DictCardEditor`/`CapPairInput` 皆 `function`）。
+- 新增 `<工作区>/日志/<工作区>\日志\<冒烟脚本>.js`：假 loader + 假 React 真渲染三条路径——编辑已有卡 / 新建卡 / 带词性的输入行（外加 `PolKeys` 单测），全部 `渲染 OK`。
+- `日志/<工作区>\日志\<探针脚本>.js` 仍全绿（`capNoteOf`/`PolKeys`/`DictCardEditor`/`CapPairInput` 皆 `function`）。
 
 ## 0.7.45 · 2026-10-22
 
@@ -1409,7 +1455,7 @@ A 线的「工作台」整页移除，`PreviewConsole` 只保留「历史」和�
 
 **修法**：把这五个助手整段搬到 `allLib()` 之后（真正的模块级，行首深度 0）。现在模块级与 `genTab` 内部都能看到同一份实现，无重定义。
 - 顺带确认 `dictcard.js` 依赖的 `h` / `S` / `capNoteOf` / `setCapNote` / `capPolOf` / `setCapPol` 全在模块级可见。
-- 新增回归探针 `D:/dsh/日志/probe-client-scope.js`：用假 loader 跑一遍 `client.js`，在模块级打印这些标识符的 `typeof`，全为 `function`/`object` 才算过（这次就是靠它定位的）。
+- 新增回归探针 `<工作区>/日志/<工作区>\日志\<探针脚本>.js`：用假 loader 跑一遍 `client.js`，在模块级打印这些标识符的 `typeof`，全为 `function`/`object` 才算过（这次就是靠它定位的）。
 
 ### 说明
 

@@ -157,7 +157,7 @@ $PYTHONW   = 'D:\paint\runtime\python312\pythonw.exe'
 ```jsonc
 {
   "id": "<角色件>", "name": "<角色卡>", "schemaVersion": 3,
-  "tags": "julin, 1girl, solo, long black hair, …, small breasts, slim",
+  "tags": "<角色LoRA>, 1girl, solo, long black hair, …, small breasts, slim",
   "parts": { "trigger":[], "base":[], "hair":[], "eyes":[], "glasses":[], "outfit":[], "extra":[] },
   "neg": [ { "t": "adult, tall, dark skin" } ],       // 对象数组，n 是手写中文备注
   "lora": "<角色LoRA>.safetensors", "loraW": 0.9, "loraAlt": "",
@@ -262,7 +262,7 @@ CLIPLoader(qwen_3_06b_base, type=qwen_image) + VAELoader(qwen_image_vae)
 | 裙子越出越长 | 正向写了长度修饰词，或长度闸被挪出服饰锁 | 正向只写 `black skirt`，闸词留在服饰锁 |
 | 改了 `app.js` 界面没变 | 浏览器只加载 `lib\client.js` | `python plugin\tools\build_client.py` 重建，刷新；仍不变就重启 `dsh web`（模块按进程缓存） |
 | 侧车改动不生效 | `expander.py` 由 8199 那个 pythonw 进程加载 | 停 8199 的 PID 后重新拉起（见第 10 节） |
-| 词库卡片一渲染就 `capNoteOf is not defined` | 助手写在 `app.js` 顶格，但实际落在 `genTab` 的嵌套作用域（该文件从 `condForSave` 起有一层历史错层），模块级的 `dictcard.js` 看不见 | 把用到的符号提到模块级（`allLib()` 之后）；跑 `日志\probe-client-scope.js` 验证 |
+| 词库卡片一渲染就 `capNoteOf is not defined` | 助手写在 `app.js` 顶格，但实际落在 `genTab` 的嵌套作用域（该文件从 `condForSave` 起有一层历史错层），模块级的 `dictcard.js` 看不见 | 把用到的符号提到模块级（`allLib()` 之后）；跑 `日志\<工作区>\日志\<探针脚本>.js` 验证 |
 | 新建卡报 `dictCardTargetCat is not defined` | 同上，`PR_HOME_CAT` + `dictCardTargetCat` 一起在嵌套作用域 | 两个一起提到模块级 |
 | 拖拽调好的顺序换机器就没了 | 顺序只在 `USER.order[分类]`（localStorage），导出 JSON 不含它 | 关键顺序靠分类拆分；要带走就重排一次 |
 | 导入别人的词库包后词性没了 | 老包只有 `cards[].polarity`；`tagPol` 是 0.7.44+ 才有的字段 | 用新版导出的包（导入仍兼容老包） |
@@ -306,7 +306,7 @@ Start-Process D:\paint\runtime\python312\pythonw.exe -ArgumentList 'expander.py'
 | 1 | 图集与打标 | 30–60 张同角色图 + caption（trigger + 只写变化项） | — | 去重、1024 桶、身份词不进 caption | §12 |
 | 2 | 角色 LoRA | `xxx_comfyui.safetensors`（ANIMA→ComfyUI 转换后） | `lora` / `loraAlt` / `loraW`(0.7–0.9) | 同 seed 换词脸不漂；`loraAlt` 留旧件可回滚 | §12 |
 | 3 | 控制图（cond assets） | 正脸近景 / 全身正面 canny 线条稿，登记 `_cond/assets.json` | `conditioning.presets.*.asset` | 面板「导入控制图库」后能选中 | §5 |
-| 4 | LLLite 身份控制 | `xxx-lllite-v2-400` / `v3-400.safetensors`（各 29.6 MB）+ `lllite-index.json` 登记 | `conditioning.presets.*.weights` / `strength` / `preprocess` | 目标动作能被条件图拽住，乘数守 1.0 | §14 |
+| 4 | LLLite 身份控制 | `xxx-<身份LLLite-v2>` / `v3-400.safetensors`（各 29.6 MB）+ `lllite-index.json` 登记 | `conditioning.presets.*.weights` / `strength` / `preprocess` | 目标动作能被条件图拽住，乘数守 1.0 | §14 |
 | 5 | 特征锁（禁词锁） | 3 把：特征锁(both) / 服饰锁(full) / 体型锁(both) | `locks` | **对着已训件的实际漂移项写**，不照抄别人的锁 | §3 |
 | 0 | 卡本体 | `parts`(≥6 段) / `neg`(≥40) / `tags` / `cover` / `id` | 同左 | 导入面板能插、能出图 | §2 |
 
@@ -450,7 +450,7 @@ max_bucket_reso = 1024
 resolution = 1024
 batch_size = 1
   [[datasets.subsets]]
-  image_dir = "D:/dsh/素材区/角色-<角色卡>-比例版-2026-10-19"
+  image_dir = "<工作区>/素材区/角色外观-<角色卡>-比例版-2026-10-19"
   num_repeats = 4
   caption_dropout_rate = 0.05
 ```
@@ -539,7 +539,7 @@ Test-Path "$COMFY_ROOT\models\loras\<卡里的 lora 值>"
 
 ```
 # 身份 + 服装（逐字固定）
-julin, 1girl, solo, long black hair, blue eyes, glasses, maple leaf hair ornament,
+<角色LoRA>, 1girl, solo, long black hair, blue eyes, glasses, maple leaf hair ornament,
 beige trench coat, white shirt, blue necktie, black pleated skirt, above knee, white socks, black mary janes,
 # 取景（逐图不同）
 full body, feet visible
@@ -734,7 +734,7 @@ num_repeats = 14          # 特写是崩得最厉害的一档，重复给足
 ## 15. 评测与取件（三件套共用）
 
 - **口径固定**：同 seed（20261014 / 20261018）、同提示词、同分辨率、同步数 CFG，**带与不带触发词各一组**，
-  **必须有一组"零 LoRA 底图"对照**——没有零对照的结论一律不成立（曾因此误判"julinst 自带角色身份"，后作废）。
+  **必须有一组"零 LoRA 底图"对照**——没有零对照的结论一律不成立（曾因此误判"<画风LoRA> 自带角色身份"，后作废）。
 - **强度扫描**：0.3 / 0.5 / 0.7 + 目标档；epoch 取 2–3 个候选（e2/e5/e10）同场比。
 - **拼图看完整画幅**（`$DSH_HOME\skills\comfyui-cards\scripts\make-lora-sheet-full.py`；裁切版是同一个目录下的 `make-lora-sheet.py`），不要裁切后再比——裁切会掩盖取景漂移。
   用法：`python make-lora-sheet-full.py out.png "e2=a.png" "e10=b.png"`
@@ -904,7 +904,7 @@ LoRA 的 840 张量按模块可分三段，用途不同：
 
 ```powershell
 # 模块级可见性（假 loader 跑真 bundle，打印 typeof；全 function/object 才算过）
-node D:\dsh\日志\probe-client-scope.js D:\dshl\.dsh\plugins\dsh-comfyui-console\plugin\lib\client.js
+node D:\dsh\日志\<工作区>\日志\<探针脚本>.js D:\dshl\.dsh\plugins\dsh-comfyui-console\plugin\lib\client.js
 
 # 目录绑定：三个 kind 都要 200，并返回各自目录
 Invoke-RestMethod 'http://127.0.0.1:8199/dir/list?kind=dict' -Headers @{ 'X-Console-Client' = '1' } | Select-Object ok, count, dir
@@ -913,7 +913,7 @@ Invoke-RestMethod 'http://127.0.0.1:8199/dir/list?kind=dict' -Headers @{ 'X-Cons
 (Get-ChildItem 'D:\dsh\本地绘画\词库' -Filter *.json | ForEach-Object { (Get-Content $_.FullName -Raw -Encoding UTF8 | ConvertFrom-Json).dictCards.Count }) -join ','
 
 # 组件渲染冒烟（编辑已有卡 / 新建卡 / 带词性输入行 / 三键）
-node D:\dsh\日志\smoke-dictcard.js  D:\dshl\.dsh\plugins\dsh-comfyui-console\plugin\lib\client.js
+node D:\dsh\日志\<工作区>\日志\<冒烟脚本>.js  D:\dshl\.dsh\plugins\dsh-comfyui-console\plugin\lib\client.js
 ```
 
 两条都过 + `check_contract.py` 15 项 PASS，再往生产目录同步。
