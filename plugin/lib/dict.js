@@ -1,5 +1,5 @@
 /**
- * DSH × ComfyUI 绘图台 —— 中英对照词库（分类）
+ * DSH × Comfy Cards Next —— 中英对照词库（分类）
  *
  * 设计：
  *   - LIB 按「用途分类」组织，每类下一串 [中文名, 英文标签]
@@ -83,7 +83,6 @@ export const LIB = {
     ['手插口袋', 'standing, both hands in coat pockets, shoulders relaxed, contrapposto'],
     ['靠墙站', 'leaning against a wall, back against the wall, one leg bent with foot on the wall'],
     ['叉腰', 'hands on hips, akimbo'],
-    ['抱臂', 'crossed arms'],
     ['背手', 'arms behind back, hands behind her back'],
   ],
   '姿态-坐': [
@@ -141,6 +140,149 @@ export const LIB = {
     ['挑衅', 'smug, teasing smile'],
     ['张嘴笑', 'open mouth, laughing, happy'],
   ],
+  '姿势': [
+    ['站立', 'standing'],
+    ['双手抱胸', 'crossed arms'],
+    ['双手背后', 'arms behind back'],
+    ['单手叉腰', 'hand on hip'],
+    ['双手叉腰', 'hands on hips'],
+    ['双手插兜', 'hands in pockets'],
+    ['蹲下', 'squatting'],
+    ['坐在地上', 'sitting on floor'],
+    ['侧坐', 'sitting, from side'],
+    ['躺卧', 'lying'],
+    ['侧躺', 'lying on side'],
+    ['回眸', 'looking back'],
+    ['撩头发', 'hand in own hair'],
+    ['托腮', 'hand on own cheek'],
+    ['伸懒腰', 'stretching, arms up'],
+    ['走路', 'walking'],
+    ['奔跑', 'running'],
+    ['转身', 'turning around'],
+    ['靠墙', 'leaning against wall'],
+    ['前倾', 'leaning forward'],
+    ['手指抵唇', 'finger to mouth'],
+    ['双手合十', 'own hands together'],
+    ['双臂张开', 'outstretched arms'],
+    ['指向镜头', 'pointing at viewer'],
+    ['抬头仰望', 'looking up'],
+    ['低头', 'looking down'],
+    ['抱玩偶', 'holding stuffed toy'],
+    ['鸭子坐', 'wariza'],
+    ['手扶额头', 'hand on own forehead'],
+    ['趴桌', 'head rest, on desk'],
+  ],
+  '服饰': [
+    ['黑衬衫', 'black shirt'],
+    ['T恤', 't-shirt'],
+    ['卫衣', 'hoodie'],
+    ['针织衫', 'sweater'],
+    ['JK制服', 'school uniform, serafuku'],
+    ['百褶裙', 'pleated skirt'],
+    ['短裙', 'miniskirt'],
+    ['短裤', 'shorts'],
+    ['白色连衣裙', 'white dress'],
+    ['吊带裙', 'camisole dress'],
+    ['旗袍', 'china dress'],
+    ['和服', 'kimono'],
+    ['浴衣', 'yukata'],
+    ['西装', 'suit, necktie'],
+    ['风衣', 'trench coat'],
+    ['大衣', 'coat'],
+    ['皮夹克', 'leather jacket'],
+    ['运动外套', 'track jacket'],
+    ['泳装', 'swimsuit'],
+    ['比基尼', 'bikini'],
+    ['女仆装', 'maid outfit'],
+    ['护士服', 'nurse uniform'],
+    ['过膝袜', 'thighhighs'],
+    ['白丝', 'white thighhighs'],
+    ['黑丝', 'black thighhighs'],
+    ['短袜', 'socks'],
+    ['领带', 'necktie'],
+    ['领结', 'bowtie'],
+    ['围巾', 'scarf'],
+    ['贝雷帽', 'beret'],
+    ['单肩包', 'shoulder bag'],
+  ],
+  '构图': [
+    ['三分法', 'rule of thirds'],
+    ['中心构图', 'centered composition'],
+    ['对角线构图', 'diagonal composition'],
+    ['引导线', 'leading lines'],
+    ['框架构图', 'framing, frame within a frame'],
+    ['前景遮挡', 'foreground object, depth of field'],
+    ['仰拍', 'from below'],
+    ['俯拍', 'from above'],
+    ['过肩镜头', 'over the shoulder'],
+    ['广角构图', 'wide shot'],
+    ['浅景深', 'shallow depth of field'],
+    ['逆光剪影', 'backlighting, silhouette'],
+    ['镜像对称', 'mirror symmetry'],
+    ['留白', 'negative space'],
+    ['黄金分割', 'golden ratio composition'],
+    ['鸟瞰', "bird's-eye view"],
+    ['第一人称', 'pov'],
+    ['倾斜构图', 'dutch angle'],
+    ['长焦压缩', 'telephoto, compressed perspective'],
+    ['鱼眼', 'fisheye'],
+    ['低机位', 'low angle shot'],
+    ['高机位', 'high angle shot'],
+    ['背影构图', 'from behind'],
+    ['侧面构图', 'profile, from side'],
+    ['画中画', 'picture in picture'],
+  ],
+  '场景': [
+    ['城市街道', 'city street, urban'],
+    ['十字路口', 'intersection'],
+    ['便利店', 'convenience store'],
+    ['咖啡馆', 'cafe, indoors'],
+    ['教室室内', 'classroom'],
+    ['图书馆', 'library, bookshelf'],
+    ['天台', 'rooftop'],
+    ['走廊', 'hallway'],
+    ['卧室', 'bedroom'],
+    ['浴室', 'bathroom'],
+    ['沙滩', 'sandy beach'],
+    ['码头', 'pier, harbor'],
+    ['花田', 'flower field'],
+    ['樱花树下', 'under cherry blossoms'],
+    ['神社', 'shinto shrine, torii'],
+    ['城堡', 'castle'],
+    ['废墟', 'ruins, abandoned'],
+    ['雪山', 'snowy mountain'],
+    ['雨天街道', 'rain, wet street'],
+    ['城市夜景', 'night city, neon lights'],
+    ['沙漠', 'desert'],
+    ['湖面', 'lake, water reflection'],
+    ['铁轨', 'railway, train tracks'],
+    ['地铁车厢', 'train interior'],
+    ['雨伞下', 'under umbrella, rain'],
+    ['水面倒影', 'water reflection'],
+    ['公园', 'park, trees'],
+    ['校园', 'school, outdoors'],
+  ],
+  '光线': [
+    ['顺光', 'front lighting'],
+    ['逆光', 'backlighting'],
+    ['侧光', 'side lighting'],
+    ['顶光', 'top lighting'],
+    ['底光', 'bottom lighting'],
+    ['柔光', 'soft lighting, diffuse light'],
+    ['硬光', 'hard lighting'],
+    ['暖光', 'warm lighting'],
+    ['冷光', 'cool lighting'],
+    ['黄昏光', 'golden hour, sunset lighting'],
+    ['晨光', 'sunrise, morning light'],
+    ['月光', 'moonlight, night'],
+    ['霓虹光', 'neon lights'],
+    ['窗户光', 'window light'],
+    ['舞台光', 'stage lighting, spotlight'],
+    ['伦勃朗光', 'rembrandt lighting'],
+    ['轮廓光', 'rim light'],
+    ['体积光', 'volumetric lighting, god rays'],
+    ['烛光', 'candlelight'],
+  ],
   '背景': [
     ['纯色背景', 'simple background, pure color background'],
     ['深灰背景', '((dark grey background))'],
@@ -175,7 +317,6 @@ export const LIB = {
     ['荷兰角', 'Dutch angle, tilted angle shot'],
     ['广角', 'wide shot, subtle wide-angle perspective'],
     ['对称构图', 'centered composition, symmetrical framing'],
-    ['居中', 'centered composition'],
     ['海报构图', 'dynamic poster composition, clear silhouette'],
   ],
   '负面': [
@@ -208,9 +349,7 @@ export const EXTRA = [
   ['少女', '1girl'], ['一个人', 'solo'], ['女性', 'female'],
   ['头发', 'hair'], ['眼睛', 'eyes'], ['脸', 'face'], ['手', 'hands'],
   ['衣服', 'clothes'], ['帽子', 'hat'], ['裙子', 'skirt'], ['裤子', 'pants'],
-  ['鞋', 'shoes'], ['靴子', 'boots'], ['手套', 'gloves'], ['披风', 'cape'],
-  ['微笑', 'smile'], ['笑', 'smile'], ['哭', 'crying'], ['生气', 'angry'],
-  ['看镜头', 'looking at viewer'], ['看向旁边', 'looking away'],
+  ['鞋', 'shoes'], ['靴子', 'boots'], ['手套', 'gloves'], ['微笑', 'smile'], ['笑', 'smile'], ['哭', 'crying'], ['看镜头', 'looking at viewer'], ['看向旁边', 'looking away'],
   ['闭眼', 'closed eyes'], ['睁眼', 'open eyes'],
   ['花', 'flower'], ['玫瑰', 'rose'], ['蓝玫瑰', 'blue roses'],
   ['星星', 'stars'], ['月亮', 'moon'], ['太阳', 'sun'],
@@ -226,69 +365,16 @@ export const EXTRA = [
   ['尾巴', 'tail'], ['翅膀', 'wings'], ['角', 'horns'],
   ['猫耳', 'cat ears, nekomimi'], ['兽耳', 'animal ears'],
   // —— 姿势大类词（第一版漏了，测试时"站姿"没被识别）——
-  ['站姿', 'standing'], ['坐姿', 'sitting'], ['蹲姿', 'crouching'],
-  ['跪姿', 'kneeling'], ['躺姿', 'lying down'], ['卧姿', 'lying down'],
+  ['站姿', 'standing'], ['坐姿', 'sitting'], ['躺姿', 'lying down'], ['卧姿', 'lying down'],
   ['姿势', 'pose'], ['动作姿势', 'pose'],
   // —— 服装大类词 ——
-  ['军礼服', '(military dress uniform:1.3)'], ['礼服', 'dress uniform'],
-  ['驾驶员服', '(pilot suit:1.3)'], ['宇宙服', '(normal suit:1.3)'],
-  ['军服', 'military uniform'], ['军装', 'military uniform'],
-  ['私服', 'casual clothes'], ['便服', 'casual clothes'],
+  ['军礼服', '(military dress uniform:1.3)'], ['驾驶员服', '(pilot suit:1.3)'], ['军服', 'military uniform'], ['私服', 'casual clothes'], ['便服', 'casual clothes'],
   ['发饰', 'hair ornament'], ['头饰', 'hair ornament'],
   ['耳坠', 'drop earrings'], ['耳环', 'earrings'],
   // —— 画质 / 风格 ——
   ['赛璐璐', 'cel shading'], ['平涂', 'flat color, cel shading, flat shading'],
-  ['线稿', 'lineart'], ['高画质', 'best quality, very aesthetic, absurdres'],
-  ['正面', 'front view'], ['侧面', 'from side'], ['背面', 'from behind'],
-  ['全身', 'full body'], ['半身', 'upper body'], ['特写', 'close-up'],
+  ['线稿', 'lineart'], ['高画质', 'best quality, very aesthetic, absurdres']
 ]
-
-/** 把 LIB + EXTRA 展平成「中文 → 英文」查找表；长词优先匹配。 */
-export function buildCn2En() {
-  const dict = new Map()
-  const put = (cn, en) => {
-    if (!cn || !en) return
-    if (!dict.has(cn)) dict.set(cn, en)
-  }
-  for (const cat of Object.keys(LIB)) {
-    for (const pair of LIB[cat]) put(pair[0], pair[1])
-  }
-  for (const pair of EXTRA) put(pair[0], pair[1])
-  // 按长度降序，保证"蓝玫瑰"先于"玫瑰"、"白过膝袜"先于"袜子"
-  return Array.from(dict.entries()).sort((a, b) => b[0].length - a[0].length)
-}
-
-/**
- * 中文 → 英文标签串。
- * 扫描输入，把认得的中文词替换成英文标签，其余原样保留。
- *
- * ⚠️ 替换时必须**前后补逗号**。第一版用空格替换，结果插进来的标签
- *    自己带逗号、彼此之间没逗号，整串糊成一句（踩过）。
- *    这里用哨兵字符占位，最后统一收敛逗号，避免和英文标签内部的逗号打架。
- *
- * @returns {{out: string, hits: Array<[string,string]>, misses: string[]}}
- */
-export function translateCn(text, pairs) {
-	const SENT = '\u0001'
-	let s = String(text || '')
-	const hits = []
-	for (const [cn, en] of pairs) {
-		if (s.indexOf(cn) >= 0) {
-			s = s.split(cn).join(SENT + en + SENT)
-			hits.push([cn, en])
-		}
-	}
-	const out = s
-		.split(SENT).join(', ')
-		.replace(/[，、；：]/g, ',')
-		.replace(/\s*,\s*/g, ', ')          // 逗号两侧统一一个空格
-		.replace(/(?:,\s*)+/g, ', ')        // 连续逗号收敛
-		.replace(/\s{2,}/g, ' ')
-		.replace(/^[,\s]+|[,\s]+$/g, '')
-	// 没被转换掉的连续中文算未匹配
-	const misses = Array.from(new Set((out.match(/[\u4e00-\u9fa5]+/g) || [])))
-	return { out: out, hits: hits, misses: misses }
-}
 
 // ==================== 提示词段构建（SEG）====================
 /**

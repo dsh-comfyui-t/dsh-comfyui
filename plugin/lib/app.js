@@ -1,13 +1,13 @@
 /**
- * DSH × ComfyUI 绘图台 —— 界面主体
+ * DSH × Comfy Cards Next —— 界面主体
  *
  * 本文件**不能直接运行**，由 tools/build_client.py 与 dict.js 一起
  * 拼成 lib/client.js（客户端 bundle 必须单文件）。
  * 编辑本文件后要跑一次构建：
- *     python E:\aqca\work\comfyui\tools\build_client.py
+ *     python tools\build_client.py      （在包根 plugin\ 下执行）
  *
  * 依赖（构建后同在作用域内，来自 dict.js）：
- *     LIB / EXTRA / buildCn2En / translateCn
+ *     LIB / EXTRA / SEG
  */
 
 const React = require("react");
@@ -16,7 +16,6 @@ const h = React.createElement;
 let LAST_TAB_INFO = "";
 let LAST_ERR = "";
 let LAST_CRASH = "";
-let RENDER_N = 0;
 try { LAST_CRASH = localStorage.getItem("comfyui.lastCrash") || ""; } catch (e0) {}
 
 function tabTextLen(n) {
@@ -60,7 +59,7 @@ class RootBoundary extends __BoundaryBase {
 		if (this.state && this.state.err) {
 			var m = String((this.state.err && this.state.err.message) || this.state.err);
 			return h("div", { style: { position: "fixed", inset: 0, zIndex: 2147483001, background: "var(--c-card)", color: "var(--c-bad)", font: "13px/1.6 system-ui", padding: "16px", overflow: "auto" } },
-				"绘图台整体崩了：" + m + " —— 这行字请发给我（上次崩溃：" + LAST_CRASH + "）");
+				"Comfy Cards Next 整体崩了：" + m + " —— 这行字请发给我（上次崩溃：" + LAST_CRASH + "）");
 		}
 		return this.props.children;
 	}
@@ -425,9 +424,8 @@ function ensureSeeds() {
 	if (added) saveUser();
 	return added;
 }
-const SEEDS_ADDED = ensureSeeds();
+ensureSeeds();   // 补预置预设，返回值无人用
 
-/** 官方那条负面提示词（预置里第一条的 neg），供"填充官方负面"用 */
 
 /** 全部图库 = 内置分类 + 用户自定义分类 */
 function allLib() {
@@ -507,25 +505,9 @@ function capNoteOf(tag) {
 /** 写/删一颗胶囊的中文备注（空串＝清掉，回到词库中文名） */
 
 /** ===== 词库分类：路径工具（'A/B' 层级，像文件夹） ===== */
-function dictSplit(p) { return String(p || "").split("/").map((x) => x.trim()).filter(Boolean); }
-function dictJoin(a) { return a.join("/"); }
-function dictParent(p) { const a = dictSplit(p); a.pop(); return dictJoin(a); }
-/** 全部分类路径：内置 + 自定义 + 显式空分类，并补齐所有上级 */
-function dictAllPaths() {
-	const set = new Set();
-	for (const k of Object.keys(allLib())) set.add(k);
-	for (const k of Object.keys(USER.frags || {})) set.add(k);
-	for (const k of (USER.cats || [])) set.add(k);
-	for (const k of Array.from(set)) {
-		const a = dictSplit(k);
-		for (let i = 1; i < a.length; i++) set.add(dictJoin(a.slice(0, i)));
-	}
-	return Array.from(set);
-}
 /** 建树：根节点 {name,path,children,count} */
 
 /** 拖拽中的分类（模块级：重渲染不丢） */
-const DRAG = { from: null };
 
 /** 返回 dict.js 里的原键（含已被移走的内置分类）；不是内置就返回空串 */
 function builtinKey(p) {
@@ -1054,20 +1036,59 @@ function allStyleCards() {
   return out;
 }
 
-let CN_PAIRS = buildCn2En();
-function rebuildDict() {
-	// 把用户自定义词条也并进转换表
-	const hset = new Set(); for (const c of Object.keys(USER.hidden || {})) for (const x of USER.hidden[c] || []) hset.add(String(x).trim()); const pairs = CN_PAIRS.filter((p) => !hset.has(String(p[0]).trim()));
-	for (const cat of Object.keys(USER.frags || {})) {
-		for (const p of USER.frags[cat] || []) {
-			if (p[0] && p[1]) pairs.push(p);
-		}
-	}
-	pairs.sort((a, b) => b[0].length - a[0].length);
-	return pairs;
-}
 
 // ==================== 生成任务（模块级，跨面板存活）====================
+/** 底模能吃多长的提示词 —— 只用来**提示**，不拦提交。
+ *
+ *  这是「一张卡换到底模上为什么变糊」最常见的原因：SD1.5 / SDXL 的文本编码器
+ *  只吃 77 个 CLIP token，超出的部分被静默截掉；ComfyUI 不报错，任务照样 success，
+ *  出来是一张跟提示词没什么关系的图。而 Anima（Qwen3 0.6B）/ MOSS（Qwen3.5 9B）
+ *  用大语言模型当编码器，几千字符都吃得下。
+ *
+ *  所以同一张卡（本仓主卡正词 1886 字符）在 Anima 上正常、在 SDXL 上只剩开头
+ *  一小段生效。用户看到的不是报错，是"图变差了"，无从判断原因。
+ *
+ *  阈值取自本机实测：SDXL 正词 508 字符正常、1886 字符出彩色噪点场；
+ *  Anima 正词 1886 + 负词 4236 正常。给 600 / 6000 两个保守档。
+ *  判据用工作流里的编码器节点，而不是 latent 节点：Anima 与 SDXL 都用
+ *  EmptyLatentImage（见 LATENT_BY_CLIP_TYPE），光看 latent 分不出来。
+ *  CLIPLoader 的 type 才写着真相 —— qwen_image / moss_image 是 LLM 编码器，
+ *  flux / sd3 是 T5，都吃得下几千字符；stable_diffusion / sdxl 是 77 token 的 CLIP。
+ *  走 checkpoint 内置 CLIP 时没有 CLIPLoader 节点，这时退回 latent 判：SD3/Flux
+ *  的 latent 本身就是大编码器家族的标志。 */
+function promptBudgetOf(graph) {
+	try {
+		for (const id in graph) {
+			const n = graph[id];
+			if (!n) continue;
+			if (n.class_type === "CLIPLoader" || n.class_type === "CLIPLoaderGGUF") {
+				const ty = String((n.inputs && n.inputs.type) || "").toLowerCase();
+				if (/qwen|moss|lumina|t5|flux|sd3/.test(ty)) return 6000;
+				return 600;
+			}
+		}
+	} catch (e) { /* ignore */ }
+	try {
+		for (const id in graph) {
+			const ct = graph[id] && graph[id].class_type;
+			if (ct === "EmptySD3LatentImage" || ct === "EmptyFlux2LatentImage") return 6000;
+		}
+	} catch (e) { /* ignore */ }
+	return 600;
+}
+function longestPromptOf(graph) {
+	let worst = { len: 0, text: "" };
+	try {
+		for (const id in graph) {
+			const n = graph[id];
+			if (!n || n.class_type !== "CLIPTextEncode") continue;
+			const t = (n.inputs && n.inputs.text) || "";
+			if (t.length > worst.len) worst = { len: t.length, text: t };
+		}
+	} catch (e) { /* ignore */ }
+	return worst;
+}
+
 /**
  * 关键点：任务状态与轮询都放在**模块级**，不放在 React 里。
  * DSH 的 main slot 一次只渲染一个面板，切到对话框时本页面会被卸载；
@@ -1107,6 +1128,15 @@ const BG = {
 		});
 		let res;
 		try {
+			// 提交前先量一次提示词长度：超预算不会报错，只会被编码器静默截断。
+			// 这里只提示、不拦 —— 截断后仍可能出可用的图，用户自己决定要不要改。
+			const _lp = longestPromptOf(graph);
+			const _bud = promptBudgetOf(graph);
+			if (_lp.len > _bud) {
+				MSG("提示词 " + _lp.len + " 字符，超过这个底模的文本编码器上限（约 " + _bud
+					+ " 字符），超出部分会被静默截掉 —— 出图可能和后半段描述无关。"
+					+ "换大编码器底模，或把后半段挪到前面。");
+			}
 			const body = { prompt: graph, client_id: "dsh-comfyui-console" };
 			if (extra) body.extra_data = Object.assign({}, extra);
 			res = await jpost(COMFY + "/prompt", body, 30000);
@@ -2023,8 +2053,6 @@ function orderModelFolders(folders,pins){
 
 // ==================== 持久化 ====================
 
-function persistPresetList(list){const previous=USER.presets;USER.presets=list;if(saveUser())return true;if(previous===undefined)delete USER.presets;else USER.presets=previous;return false;}
-
 function ensureModelSettingsBackup(){try{const raw=window.localStorage.getItem(LS_KEY)||"{}";for(const version of ["v0653","v0652","v0651","v0650","v0649","v0648","v0647","v0646","v0645","v0644","v0643","v0640","v0639","v0638","v0637"]){const key="dsh-comfyui-console/model-settings-backup/"+version;if(window.localStorage.getItem(key)!==null)continue;window.localStorage.setItem(key,raw);if(window.localStorage.getItem(key)!==raw)return false;}return true;}catch{return false;}}
 
 /** 记录用户首次真正尝试启动（服务离线、已成功读取启动配置），只消耗一次。 */
@@ -2039,14 +2067,6 @@ function consumeFirstStartAttempt() {
 }
 /** 记录某个功能区第一次真实交互；手动从「教程」重播不会调用这里。 */
 
-function consumeFirstTutorialUse(key) {
-    const seen = USER.tutorialsSeen && typeof USER.tutorialsSeen === "object" && !Array.isArray(USER.tutorialsSeen)
-        ? USER.tutorialsSeen : {};
-    if (seen[key]) return false;
-    USER.tutorialsSeen = Object.assign({}, seen, {[key]: true});
-    saveUser();
-    return true;
-}
 // Active queue snapshots are local to this DSH installation, never sent to a third party.
 // Keep the old single-job key readable for upgrades from v0.6.4.
 
@@ -2086,7 +2106,6 @@ function readCachedJobs() {
  * （即平视/仰视），再补上压制俯视的那半句。
  */
 
-const NO_HIGH_NEG = " from above, high angle shot, looking down, bird's-eye view,";
 
 
 const CHAT_SESSION = { log: [] };
@@ -2238,6 +2257,10 @@ function PromptIcon({name, size = 16}) {
         refresh: [h("path",{key:1,d:"M20 11a8 8 0 1 0-2.3 6 M20 4v7h-7 M4 13a8 8 0 1 0 2.3-6 M4 20v-7h7"})],
         sort: [h("path",{key:1,d:"M4 7h16 M7 12h10 M10 17h4"})],
         swapSize: [h("path", {key:1,d:"M8 3 4 7l4 4 M4 7h15 M16 21l4-4-4-4 M20 17H5"})],
+        // 0.7.165：历史页批量删除模式的勾选标记
+        check: [h("path", {key:1,d:"M4 12.5l5 5L20 6.5"})],
+        square: [h("rect", {key:1,x:4,y:4,width:16,height:16,rx:3})],
+        checkSquare: [h("rect", {key:1,x:4,y:4,width:16,height:16,rx:3}),h("path", {key:2,d:"M8.5 12.2l2.6 2.6 4.6-5"})],
     };
     return h("svg", {width:size,height:size,viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",
         strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round", "aria-hidden":"true",focusable:"false"},
@@ -2419,16 +2442,29 @@ function profileKeyFromModelBase(baseType){
  if(!t)return "";
  if(/moss/.test(t))return "moss-image";
  if(/krea/.test(t))return "flux-krea";
+ if(/chroma/.test(t))return "flux-dev";          // Chroma 是 Flux Schnell 的蒸馏分支，走 flux 链
  if(/flux/.test(t))return /schnell|flux1s$|fluxs$/.test(t)?"flux-schnell":"flux-dev";
  if(/sd3\.?5|sd35/.test(t))return /turbo/.test(t)?"sd35-turbo":/medium/.test(t)?"sd35-medium":"sd35-large";
  if(/sd3/.test(t))return "sd3-medium";
  // anima-* 在这里故意不推断：A 线的 Anima profile 用 stable_diffusion 编码器，
  // 而本地面板的 Anima 走 qwen_image（底模取自 diffusion_models），两者不是一回事。
  // 自动套过去会把 Anima 底模当 checkpoint 送进构建流程，ComfyUI 直接退 400。
- if(/anima/.test(t))return "";
- if(/pony|illustrious|noobai|sdxl/.test(t))return "sdxl";
- if(/sd2/.test(t))return "sd2";
- if(/sd1\.?5|sd15/.test(t))return "sd15";
+ // ⚠️ 2026-11：原来是 /anima/ —— 「animagine」的前缀就是 anima，
+ //    于是 Animagine XL（正经的 SDXL 底模）被判成 Anima 直接放弃适配。
+ //    排除 animagine 才是本意。
+ if(/anima(?!gine)/.test(t))return "";
+ // —— SDXL 家族：先认子族，再落 sdxl ——
+ // 这三家架构同 SDXL，但提示词体系各自独立（Pony 的 score_9 前缀、NoobAI 的质量词），
+ // 混进 sdxl 会让 quality 前缀对不上。子族认出来，采样参数仍是 SDXL 那一套。
+ if(/noob/.test(t))return "noobai";
+ if(/illustrious|ilxl/.test(t))return "illustrious";
+ if(/pony/.test(t))return "pony";
+ // diffusionxl：base_type 写成 "Stable Diffusion XL" 时，去掉空格是 stablediffusionxl，
+ // 里面并不含 "sdxl" 这三个字母连写。
+ if(/animagine|juggernaut|dreamshaper/.test(t))return "sdxl";
+ if(/sdxl|diffusionxl/.test(t))return "sdxl";
+ if(/sd2|v2\.?1/.test(t))return "sd2";
+ if(/sd1\.?5|sd15|v1-?5/.test(t))return "sd15";
  return "";
 }
 /** base_type 缺失时的第二道：按文件名猜。
@@ -2437,10 +2473,17 @@ function profileKeyFromModelBase(baseType){
  *  后者名字不含任何家族信息，就不猜（猜成 SDXL 也可能对，但猜错就是 400，不值）。 */
 function profileKeyFromModelName(name){
  const t=String(name||"").toLowerCase().replace(/\.(safetensors|ckpt|pt|pth|bin|gguf|sft)$/,"");
- if(!t||/anima/.test(t))return "";
+ if(!t||/anima(?!gine)/.test(t))return "";
  if(/moss/.test(t))return "moss-image";
+ if(/krea/.test(t))return "flux-krea";
+ if(/chroma/.test(t))return "flux-dev";
  if(/flux/.test(t))return /schnell/.test(t)?"flux-schnell":"flux-dev";
+ if(/sd_?3[._]?5|sd35/.test(t))return /turbo/.test(t)?"sd35-turbo":/medium/.test(t)?"sd35-medium":"sd35-large";
  if(/sd3|sd_?3/.test(t))return "sd3-medium";
+ // SDXL 子族先行：文件名里同时含 xl 和子族名时，子族优先，否则会被 /xl/ 吞掉。
+ if(/noob|noobai/.test(t))return "noobai";
+ if(/illustrious|ilxl/.test(t))return "illustrious";
+ if(/pony/.test(t))return "pony";
  if(/xl/.test(t))return "sdxl";
  if(/v1-?5|sd_?1[._]?5|sd15|(^|[^0-9])1[._]5([^0-9]|$)/.test(t))return "sd15";
  if(/v2-?1|sd_?2/.test(t))return "sd2";
@@ -2553,6 +2596,33 @@ Object.assign(MODEL_PROFILES,{
   "recommended": {
    "steps": 24,
    "cfg": 6,
+   "sampler": "euler",
+   "scheduler": "normal",
+   "w": 1024,
+   "h": 1024
+  }
+ },
+ "noobai": {
+  "label": "NoobAI XL",
+  "family": "sdxl",
+  "clipType": "sdxl",
+  "encoderRoles": [
+   "CLIP-L",
+   "CLIP-G"
+  ],
+  "encoders": 2,
+  "latent": "EmptyLatentImage",
+  "negative": true,
+  "style": "mixed",
+  "modes": [
+   "checkpoint",
+   "diffusion"
+  ],
+  "modelOnlyLora": false,
+  "sizeStep": 16,
+  "recommended": {
+   "steps": 28,
+   "cfg": 5,
    "sampler": "euler",
    "scheduler": "normal",
    "w": 1024,
@@ -3416,8 +3486,6 @@ function normalizeComponentOrder(order){return [...new Set((Array.isArray(order)
 
 function modelNeedsExternal(config){const c=normalizeModelConfig(config),p=MODEL_PROFILES[c.profile];return c.mode==='diffusion'||c.contentMode==='diffusion'||p.modes.length===1&&p.modes[0]==='diffusion';}
 
-function modelNeedsVae(config){const c=normalizeModelConfig(config);return modelNeedsExternal(c)||c.embeddedVae===false||c.vaeOverride;}
-
 function withModelFileInfo(value,info){const c=normalizeModelConfig({...value,contentMode:info.contentMode,embeddedClip:info.embeddedClip,embeddedVae:info.embeddedVae});if(MODEL_PROFILES[c.profile].family==='sd3'&&c.encoderMode==='embedded'&&(modelNeedsExternal(c)||c.embeddedClip===false))c.encoderMode='triple';return c;}
 
 function modelProfile(config){return MODEL_PROFILES[normalizeModelConfig(config).profile];}
@@ -3478,13 +3546,6 @@ function remapSavedModelPaths(user,kind,change,rootId){
 
 function activeModelLoras(loras){return (Array.isArray(loras)?loras:[]).filter(x=>x.enabled!==false&&!(x.id&&!String(x.name||'').trim()));}
 
-function modelEncoderCount(o){
- const c=normalizeModelConfig(o.modelConfig),p=modelProfile(c);
- if(p.family==='sd3')return ({embedded:0,t5:1,dual:2,triple:3})[c.encoderMode]??0;
- if(!modelNeedsExternal(c)&&c.embeddedClip!==false&&!c.encoderOverride&&![o.clip,c.clip2,c.clip3,c.clip4].some(Boolean))return 0;
- return p.encoders||1;
-}
-
 function modelEncoderRoles(c){const p=modelProfile(c);return p.family==='sd3'?(c.encoderMode==='t5'?['T5XXL']:c.encoderMode==='dual'?['CLIP-L','CLIP-G']:c.encoderMode==='embedded'?[]:['CLIP-L','CLIP-G','T5XXL']):p.encoderRoles||(p.encoders===2?['CLIP-L','T5XXL']:['Text Encoder']);}
 
 function controlEncoderRoles(config){const c=normalizeModelConfig(config);return modelEncoderRoles(modelProfile(c).family==='sd3'&&c.encoderMode==='embedded'?{...c,encoderMode:'triple'}:c);}
@@ -3506,17 +3567,6 @@ function generationControlSummary(entries){if(!entries.length)return '0 个控�
 
 /** 拼 ComfyUI API 格式的工作流 */
 
-const IMAGE_SIZE_PRESETS = [
-    // 只保留每种比例的一个方向；宽高对调按钮负责横竖切换。
-    {value:'1024x1024',label:'1:1 · 1024×1024',w:1024,h:1024},
-    {value:'1024x768',label:'4:3 · 老电视 · 1024×768',w:1024,h:768},
-    {value:'832x1216',label:'2:3 · 人像 / 插画 · 832×1216',w:832,h:1216},
-    {value:'864x1224',label:'1:√2 · A4 · 864×1224',w:864,h:1224},
-    {value:'1344x768',label:'16:9 · 1344×768',w:1344,h:768},
-    {value:'1536x640',label:'21:9 · 1536×640',w:1536,h:640},
-    {value:'1536x512',label:'3:1 · Banner · 1536×512',w:1536,h:512},
-    {value:'1792x448',label:'4:1 · Ultra Banner · 1792×448',w:1792,h:448},
-];
 
 function imageSizeScaled(w,h,multiplier,alignment=8){
     const m=Math.max(.25,Math.min(4,Number(multiplier)||1));
@@ -4082,6 +4132,16 @@ const UI_CSS = `
 .dsh-comfy-ui .cc-output-refresh-text:is(:hover,:focus-visible){border-color:var(--cc-accent);background:var(--cc-accent-bg);color:var(--cc-accent-text)}
 .dsh-comfy-ui .cc-output-refresh-text:disabled{opacity:.6;cursor:progress}
 .dsh-comfy-ui .cc-output-refresh-text+.cc-output-counter{margin-left:0}
+/* 0.7.165：历史页批量删除的工具栏按钮与勾选圈。样式比照「刷新」文字按钮，
+   danger 变体单独一档，别让「确认删除」看起来和「刷新」同权重。 */
+.dsh-comfy-ui .cc-output-mode-btn{flex:0 0 auto;display:inline-flex;align-items:center;gap:5px;height:29px;padding:0 10px;border:1px solid var(--cc-border);border-radius:7px;background:var(--cc-control);color:var(--cc-text);font:inherit;font-size:11.5px;font-weight:600;cursor:pointer;white-space:nowrap;transition:background .12s ease,border-color .12s ease,color .12s ease}
+.dsh-comfy-ui .cc-output-mode-btn:is(:hover,:focus-visible){border-color:var(--cc-accent);background:var(--cc-accent-bg);color:var(--cc-accent-text)}
+.dsh-comfy-ui .cc-output-mode-btn:disabled{opacity:.6;cursor:progress}
+.dsh-comfy-ui .cc-output-mode-btn.is-danger{border-color:rgba(220,86,86,.55);background:rgba(220,86,86,.12);color:#ff9494}
+.dsh-comfy-ui .cc-output-mode-btn.is-danger:is(:hover,:focus-visible){border-color:#e05757;background:rgba(220,86,86,.22);color:#ffb6b6}
+.dsh-comfy-ui .cc-output-check{position:absolute;left:8px;top:8px;z-index:3;display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:8px;background:rgba(12,14,18,.72);color:#cfd6e6;box-shadow:0 2px 8px rgba(0,0,0,.35);pointer-events:none}
+.dsh-comfy-ui .cc-output-card.is-selected{border-color:var(--cc-accent);outline:2px solid var(--cc-accent);outline-offset:-2px}
+.dsh-comfy-ui .cc-output-card.is-selected .cc-output-check{background:var(--cc-accent);color:var(--cc-accent-text)}
 .dsh-comfy-ui .cc-output-counter{margin-left:auto;flex:0 0 auto;display:inline-flex;align-items:center;gap:6px;padding:4px 8px;border-radius:999px;background:var(--cc-control);font-size:10px;color:var(--cc-muted);white-space:nowrap}
 .dsh-comfy-ui .cc-output-quality{flex:0 0 auto;display:inline-flex;align-items:center;gap:4px;margin-left:2px;min-width:0;padding:3px 4px 3px 7px;border:1px solid var(--cc-border);border-radius:8px;background:var(--cc-control);font-size:10px;color:var(--cc-muted)}
 .dsh-comfy-ui .cc-output-quality-label{white-space:nowrap;margin-right:1px}
@@ -5558,8 +5618,6 @@ function postFaceInstallation(cells){const models={bbox:[],sam:[],segm:[]};for(c
 
 function movePostCell(cells,index,delta){const to=index+delta;if(to<0||to>=cells.length)return cells;const out=[...cells];[out[index],out[to]]=[out[to],out[index]];return out;}
 
-function postDims(o){let w=Number(o.w),h=Number(o.h);for(const c of normalizePost(o).cells.filter(c=>c.enabled!==false))if(c.kind==='upscale'){w=Math.round(w*Number(c.factor));h=Math.round(h*Number(c.factor));}return {w,h};}
-
 function postPortType(spec,field){const d=spec?.input?.required?.[field]||spec?.input?.optional?.[field];return Array.isArray(d?.[0])||d?.[0]==='COMBO'?'STRING':d?.[0];}
 
 function postDefaults(spec){const out={};for(const [key,desc] of Object.entries(spec?.input?.required||{})){if(desc[1]?.default!==undefined)out[key]=desc[1].default;else if(Array.isArray(desc[0]))out[key]=desc[0][0];else if(desc[0]==='COMBO')out[key]=desc[1]?.options?.[0];else if(desc[0]==='BOOLEAN')out[key]=false;else if(desc[0]==='STRING')out[key]='';}return out;}
@@ -5574,13 +5632,6 @@ function postWorkflowErrors(wf,info){
  const seen=new Set(),visiting=new Set();function walk(id){if(visiting.has(id)){errors.push('工作流不能循环连接');return;}if(seen.has(id))return;visiting.add(id);for(const v of Object.values(map.get(id)?.inputs||{}))if(v&&typeof v==='object'&&v.node)walk(v.node);visiting.delete(id);seen.add(id);}nodes.forEach(n=>walk(n.id));
  if(!wf?.output||!map.has(wf.output.node)||info[map.get(wf.output.node)?.type]?.output?.[wf.output.slot]!=='IMAGE')errors.push('请指定 IMAGE 处理结果');return [...new Set(errors)];
 }
-
-function postContext(g,o){
- const sampler=g['7'],guider=g[sampler?.inputs?.guider?.[0]],input=sampler?.inputs||{},guide=guider?.inputs||{};
- const model=input.model||guide.model,positive=input.positive||guide.positive||guide.conditioning,negative=input.negative||guide.negative;
- return {model,positive,negative,clip:g['4']?.inputs?.clip,vae:g['8']?.inputs?.vae};
-}
-
 
 function stageOutput(item,s){return {...item,...s,url:s.path?savedOutputUrl(s.path):s.url||viewUrl(s.imageInfo),params:s.params||item.params,stages:item.stages,activeStage:s.index};}
 
@@ -6053,6 +6104,11 @@ function PreviewConsole(props) {
     const [outputDetail,setOutputDetail]=React.useState(null);
     const [previewOutput,setPreviewOutput]=React.useState(null),[previewEditor,setPreviewEditor]=React.useState(null);
     const [outputDetailScope,setOutputDetailScope]=React.useState("output");
+    // 0.7.165：历史页批量删除。平时工具只有「刷新」，点「删除」进入勾选模式，
+    // 那一颗原地变成「确认删除 (N)」+「取消」，勾完一次删完。
+    const [outputDeleteMode,setOutputDeleteMode]=React.useState(false);
+    const [outputSelected,setOutputSelected]=React.useState(()=>new Set());
+    const [outputDeleting,setOutputDeleting]=React.useState(false);
     const [outputFilter,setOutputFilter]=React.useState({saved:"all",path:"",name:"",time:"all",dateFrom:"",dateTo:"",size:"all",shape:"all",minEdge:"",maxEdge:""});
     const [outputFilterPinned,setOutputFilterPinned]=React.useState(false);
     const [outputFilterHovered,setOutputFilterHovered]=React.useState(false);
@@ -7072,6 +7128,42 @@ function PreviewConsole(props) {
     async function manageOutput(item,action){
         if(action==='delete' && !window.confirm(item.path?'确定永久删除此图片文件？此操作无法撤销。':'确定从本次会话移除此 Temp 记录？'))return;
         try{if(!item.path){if(action==='delete'){SESSION_OUTPUTS.remove(item.promptId||outputKey(item));setOutputDetail(null);setMsg("已从本次会话列表移除 Temp 输出");}else setMsg("Temp 输出没有持久文件位置");return;}await jpost(EXPANDER+"/outputs/manage",{action,path:item.path},15000);if(action==='delete'){SESSION_OUTPUTS.remove(item.promptId||item.id||item.path||item.url);setOutputDetail(null);await loadOutputs();setMsg("输出图片已删除");}}catch(e){setMsg("输出管理失败："+errText(e));}}
+    // 0.7.165：历史页批量删除。单张删除仍走每张卡片右上角的按钮（manageOutput），
+    // 这里只管「进入勾选模式 → 全选/逐张勾 → 一次确认 → 逐张走同一个接口」。
+    function toggleOutputSelect(item){
+        const key=outputKey(item);
+        setOutputSelected(prev=>{const next=new Set(prev);if(next.has(key))next.delete(key);else next.add(key);return next;});
+    }
+    function exitOutputDeleteMode(){setOutputDeleteMode(false);setOutputSelected(new Set());}
+    function toggleOutputSelectAll(){
+        const keys=filteredOutputs().map(outputKey);
+        setOutputSelected(prev=>{
+            const next=new Set(prev);
+            if(keys.length&&keys.every(k=>next.has(k)))keys.forEach(k=>next.delete(k));
+            else keys.forEach(k=>next.add(k));
+            return next;
+        });
+    }
+    async function deleteSelectedOutputs(){
+        const picked=outputItems.filter(x=>outputSelected.has(outputKey(x)));
+        if(!picked.length){setMsg("请先勾选要删除的图片");return;}
+        const files=picked.filter(x=>x.path).length,temps=picked.length-files;
+        const ask="确定永久删除选中的 "+files+" 张图片文件？"+(temps?"另有 "+temps+" 条 Temp 记录会一起从本次会话移除。":"")+"此操作无法撤销。";
+        if(!window.confirm(ask))return;
+        setOutputDeleting(true);
+        let ok=0,fail=0;
+        for(const item of picked){
+            try{
+                if(!item.path){SESSION_OUTPUTS.remove(item.promptId||outputKey(item));ok++;continue;}
+                await jpost(EXPANDER+"/outputs/manage",{action:"delete",path:item.path},15000);
+                SESSION_OUTPUTS.remove(item.promptId||item.id||item.path||item.url);
+                ok++;
+            }catch(e){fail++;}
+        }
+        setOutputDeleting(false);setOutputSelected(new Set());setOutputDeleteMode(false);setOutputDetail(null);
+        try{await loadOutputs({force:true,silent:true});}catch(e){}
+        setMsg(fail?("已删除 "+ok+" 张，"+fail+" 张失败，请刷新后重试"):("已删除 "+ok+" 张图片"));
+    }
     async function copyOutputPath(item){if(!item?.path){setMsg("Temp 输出没有持久文件路径");return;}try{if(navigator.clipboard?.writeText)await navigator.clipboard.writeText(item.path);else{const ta=document.createElement('textarea');ta.value=item.path;ta.style.position='fixed';ta.style.opacity='0';document.body.appendChild(ta);ta.select();document.execCommand('copy');ta.remove();}setMsg("已复制图片路径");}catch(e){setMsg("复制路径失败："+errText(e));}}
     async function openOutputDetail(item,scope="output"){
         setOutputDetailScope(scope);setOutputDetail(item);
@@ -7086,7 +7178,7 @@ function PreviewConsole(props) {
             });
         }catch(e){setMsg("图片信息读取失败："+errText(e));}
     }
-    function applyOutputParams(item){if(expandPhaseRef.current!=="idle"){setMsg("请先完成或停止 AI 操作");return;}const p=item?.params?{...item.params,...(item.params.generationInputs||{})}:null;if(!p){setMsg("这张图片缺少可读取的 ComfyUI 生成参数，当前设置未改变");return;}/* 0.7.130：套用历史参数 = 完全还原这张图的状态，先把上一张卡挂着的插入与禁词锁清掉，否则 stabilizePrompt 会拿旧锁把新提示词里的词当禁词剔掉（<角色卡>的裙长闸 / 体型锁最明显，表现为「同样的词换个卡构图就不对」）。*/if(CLEAR_CARD_STATE_SINK){try{CLEAR_CARD_STATE_SINK();}catch(e){}}if(p.pos!==undefined)updatePrompt({pos:p.pos||"",neg:p.negativeApplied===false?promptRef.current.neg:p.neg||""});if(p.ckpt||p.modelConfig){restoreModelSetup(p);}else{if(p.clip)setClip(p.clip);if(p.vae)setVae(p.vae);}if(p.clipType)setClipType(p.clipType);if(Array.isArray(p.loras))setSelLoras(p.loras);setW(p.baseW||p.w||w);setHh(p.baseH||p.h||hh);setSizeMultiplier(preciseSizeMultiplier(p.sizeMultiplier));if(p.steps)setSteps(p.steps);if(p.cfg!==undefined)setCfg(p.cfg);if(p.sampler)setSampler(p.sampler);if(p.scheduler)setScheduler(p.scheduler);if(p.usedSeed!==undefined||p.seed!==undefined)setSeed(p.usedSeed??p.seed);setSeedMode(p.seedMode||"lock");if(p.postControls||p.upscale!==undefined)setPostControls(normalizePost(p));if(p.upscale!==undefined)setUpscale(!!p.upscale);if(p.upscaleModel)setUpscaleModel(p.upscaleModel);if(p.upscaleFactor)setUpscaleFactor(p.upscaleFactor);setOutputDetail(null);switchTab("gen");setMsg("已用该图片的生成参数替换当前设置");}
+    function applyOutputParams(item){if(expandPhaseRef.current!=="idle"){setMsg("请先完成或停止 AI 操作");return;}const p=item?.params?{...item.params,...(item.params.generationInputs||{})}:null;if(!p){setMsg("这张图片缺少可读取的 ComfyUI 生成参数，当前设置未改变");return;}/* 0.7.130：套用历史参数 = 完全还原这张图的状态，先把上一张卡挂着的插入与禁词锁清掉，否则 stabilizePrompt 会拿旧锁把新提示词里的词当禁词剔掉（絉林的裙长闸 / 体型锁最明显，表现为「同样的词换个卡构图就不对」）。*/if(CLEAR_CARD_STATE_SINK){try{CLEAR_CARD_STATE_SINK();}catch(e){}}if(p.pos!==undefined)updatePrompt({pos:p.pos||"",neg:p.negativeApplied===false?promptRef.current.neg:p.neg||""});if(p.ckpt||p.modelConfig){restoreModelSetup(p);}else{if(p.clip)setClip(p.clip);if(p.vae)setVae(p.vae);}if(p.clipType)setClipType(p.clipType);if(Array.isArray(p.loras))setSelLoras(p.loras);setW(p.baseW||p.w||w);setHh(p.baseH||p.h||hh);setSizeMultiplier(preciseSizeMultiplier(p.sizeMultiplier));if(p.steps)setSteps(p.steps);if(p.cfg!==undefined)setCfg(p.cfg);if(p.sampler)setSampler(p.sampler);if(p.scheduler)setScheduler(p.scheduler);if(p.usedSeed!==undefined||p.seed!==undefined)setSeed(p.usedSeed??p.seed);setSeedMode(p.seedMode||"lock");if(p.postControls||p.upscale!==undefined)setPostControls(normalizePost(p));if(p.upscale!==undefined)setUpscale(!!p.upscale);if(p.upscaleModel)setUpscaleModel(p.upscaleModel);if(p.upscaleFactor)setUpscaleFactor(p.upscaleFactor);setOutputDetail(null);switchTab("gen");setMsg("已用该图片的生成参数替换当前设置");}
     function outputModelsFor(item){
         const p=item?.params||{},rows=Array.isArray(p.models)?p.models.map(x=>({...x})):[],seen=new Set(rows.map(x=>(x.kind||'')+'|'+(x.name||'')));
         const add=(kind,name,detail='')=>{name=String(name||'').trim();if(!name)return;const key=kind+'|'+name;if(seen.has(key))return;seen.add(key);rows.push({kind,name,detail});};
@@ -7164,14 +7256,21 @@ function PreviewConsole(props) {
         const revealBtn=(x)=>h("div",{className:"cc-output-card-actions"},
             x.path?cardBtn(x,"folder","在资源管理器中打开图片位置","open",false):null,
             cardBtn(x,"trash",x.path?"永久删除这张图片":"从本次会话移除这条记录","delete",true));
-        const card=(x,index=0)=>h("article",{key:outputKey(x),className:"cc-output-card",tabIndex:0,onClick:()=>openOutputDetail(x),onKeyDown:e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();openOutputDetail(x);}}},
-            revealBtn(x),
-            h("img",{src:outputPreviewSrc(x),
-                onError:e=>{/* 0.7.131：原来靠 dataset.fallback 防重入，但 React 复用节点时标记会留到下一张图，导致后续加载失败时不再回退。改成比对当前 src。 */const im=e.currentTarget;if(!x.url||!im.src||im.src===x.url)return;im.src=x.url;},
-                loading:index<8?"eager":"lazy",decoding:"async",fetchPriority:index<4?"high":"low",alt:x.filename||"输出图片"}),
-            h("div",{className:"cc-output-card-meta"},
-                h("span",{className:"cc-output-card-name"},x.filename||"Temp 输出"),
-                h("div",{className:"cc-output-card-sub"},h("span",null,(x.width||"?")+" × "+(x.height||"?")+" · "+formatGenerationDuration(x)),h("span",{className:"cc-output-card-state"},x.saved?"已保存":"Temp"))));
+        const card=(x,index=0)=>{
+            // 0.7.165：删除模式下点卡片 = 勾选，不再打开详情；勾选圈盖住右上角按钮组。
+            const on=outputDeleteMode&&outputSelected.has(outputKey(x));
+            return h("article",{key:outputKey(x),className:"cc-output-card"+(on?" is-selected":""),tabIndex:0,
+                "aria-pressed":outputDeleteMode?on:undefined,
+                onClick:()=>{if(outputDeleteMode)toggleOutputSelect(x);else openOutputDetail(x);},
+                onKeyDown:e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();if(outputDeleteMode)toggleOutputSelect(x);else openOutputDetail(x);}}},
+                outputDeleteMode?h("span",{className:"cc-output-check","aria-hidden":"true"},h(PromptIcon,{name:on?"checkSquare":"square",size:19})):revealBtn(x),
+                h("img",{src:outputPreviewSrc(x),
+                    onError:e=>{/* 0.7.131：原来靠 dataset.fallback 防重入，但 React 复用节点时标记会留到下一张图，导致后续加载失败时不再回退。改成比对当前 src。 */const im=e.currentTarget;if(!x.url||!im.src||im.src===x.url)return;im.src=x.url;},
+                    loading:index<8?"eager":"lazy",decoding:"async",fetchPriority:index<4?"high":"low",alt:x.filename||"输出图片"}),
+                h("div",{className:"cc-output-card-meta"},
+                    h("span",{className:"cc-output-card-name"},x.filename||"Temp 输出"),
+                    h("div",{className:"cc-output-card-sub"},h("span",null,(x.width||"?")+" × "+(x.height||"?")+" · "+formatGenerationDuration(x)),h("span",{className:"cc-output-card-state"},x.saved?"已保存":"Temp"))));
+        };
         const iconBtn=(icon,label,onClick,pressed=false,disabled=false)=>h("button",{type:"button",className:"cc-icon-button cc-output-icon-btn","aria-label":label,"data-cc-tooltip":label,"aria-pressed":pressed,disabled,onClick},h(PromptIcon,{name:icon,size:17}));
         const qualityOptions=[
             {value:"medium",label:"中等",title:"中等预览：最长边约 512px，加载最快"},
@@ -7197,6 +7296,18 @@ function PreviewConsole(props) {
                        可滚动的工具栏里（overflow-x:auto + nowrap），窗口一窄就被推到可视区外，
                        看上去就像历史页根本没有刷新功能。这里在计数器左侧补一个带文字的按钮，
                        点击强制重扫磁盘（force:true 绕过 60 秒缓存）。 */
+                    /* 0.7.165：删除按钮就在「刷新」左边一颗。点一下进入勾选模式，这颗原地换成
+                       「确认删除 (N)」，右边多出「取消」；刷新按钮全程可用，边勾边刷新也不会丢已选（按 key 记）。 */
+                    outputDeleteMode?h(React.Fragment,null,
+                        h("button",{type:"button",className:"cc-output-mode-btn",title:"勾选当前筛选结果里的全部图片",disabled:outputDeleting,onClick:toggleOutputSelectAll},
+                            h(PromptIcon,{name:"checkSquare",size:14}),h("span",null,"全选")),
+                        h("button",{type:"button",className:"cc-output-mode-btn is-danger",title:"永久删除勾选的图片",disabled:outputDeleting,onClick:deleteSelectedOutputs},
+                            outputDeleting?h(PromptIcon,{name:"spinner",size:14}):h(PromptIcon,{name:"trash",size:14}),
+                            h("span",null,outputDeleting?"删除中…":("确认删除"+(outputSelected.size?" ("+outputSelected.size+")":"")))),
+                        h("button",{type:"button",className:"cc-output-mode-btn",title:"退出删除模式，已勾选的会清空",disabled:outputDeleting,onClick:exitOutputDeleteMode},
+                            h(PromptIcon,{name:"x",size:14}),h("span",null,"取消")))
+                    :h("button",{type:"button",className:"cc-output-mode-btn",title:"勾选并批量删除历史图片",onClick:()=>{setOutputSelected(new Set());setOutputDeleteMode(true);}},
+                        h(PromptIcon,{name:"trash",size:14}),h("span",null,"删除")),
                     h("button",{type:"button",className:"cc-output-refresh-text",title:"重新扫描输出目录，把新出的图拉进来",disabled:outputLoading,onClick:()=>loadOutputs({force:true,silent:false})},
                         outputLoading?h(PromptIcon,{name:"spinner",size:14}):h(PromptIcon,{name:"refresh",size:14}),
                         h("span",null,outputLoading?"刷新中…":"刷新")),
@@ -7237,7 +7348,7 @@ function PreviewConsole(props) {
 		// 连接设置在外层生成页有入口；其余动作在 A 线独立界面里仍然存在。
 		(props && props.page) ? null : h("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px", flexWrap: "wrap" } },
 			h("div", { style: { display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap", minWidth: 0 } },
-				h("strong", { style: { fontSize: "15px" } }, "ComfyUI 绘图台"),
+				h("strong", { style: { fontSize: "15px" } }, "Comfy Cards Next"),
 				status, renderTaskSummary()),
 			h("div", { style: { display: "flex", gap: "6px", flexWrap: "wrap", justifyContent: "flex-end", minWidth: 0 } },
 				comfyUpdate?.available?h("button",{type:"button",className:"cc-update-btn",title:"ComfyUI 有新版本可用",onClick:()=>{setUpdateError("");setUpdateOpen(true);}},"可更新"):null,
@@ -7689,6 +7800,11 @@ function Console() {
 		if (tab === "gen" && k !== "gen" && BG.isFinished()) BG.clear();
 		setTabRaw(k);
 	};
+	/** 实验性功能页：体检输出（放在主 Console 里，切 tab 不会丢） */
+	const [labProbe, setLabProbe] = React.useState("");
+	/** 版本更新检查结果（GitHub）；updBusy 供「立即检查」用 */
+	const [upd, setUpd] = React.useState(null);
+	const [updBusy, setUpdBusy] = React.useState(false);
 	const [online, setOnline] = React.useState(null);
 	const [conn, setConn] = React.useState(0);
 	// ---- 启动过程（顶栏「启动 ComfyUI」→ 转圈 + 停止启动）----
@@ -7831,7 +7947,29 @@ function Console() {
 					// ⚠️ 时序：clips / vaes 是异步填的，effect 第一次跑时可能还是空数组。
 					//    这时挑不到编码器就不能记 ref，否则列表到齐后 effect 重跑会被拦，
 					//    编码器永远是空的。只有该设的都设上了才落 ref。
-					const fam2 = wantUnet ? (/moss/i.test(ckpt) ? "moss" : "anima") : "";
+					//
+					// ⚠️ 2026-11：原来这里是 `wantUnet ? (/moss/i.test(ckpt) ? "moss" : "anima") : ""`
+					//    —— 只要底模在 diffusion_models 里，不是 moss 就当 anima。
+					//    Anima 与 MOSS 是本机唯二的 UNet 底模，所以当时成立；
+					//    但市面上还有 HunyuanDiT / Chroma / Qwen-Image / Lumina 这类同样放进
+					//    diffusion_models 的 DiT 底模，一律当 anima 会硬塞 qwen_3_06b 编码器 +
+					//    qwen_image 链 —— 提交后要么 400，要么出图是坏的却报成功。
+					//    认不出家族就不猜：只把加载链切对，编码器/VAE 原样留给用户，
+					//    并明确报出来。宁可给一条能看懂的不匹配提示，也不要静默出错图。
+					const fam2 = !wantUnet ? ""
+						: (/moss/i.test(ckpt) ? "moss"
+							: (/anima/i.test(ckpt) ? "anima" : ""));
+					if (wantUnet && !fam2) {
+						// 不猜配套件，也不动 clipType：UNet 链该用哪种编码器类型只有家族知道。
+						// 记一次 ref，避免每次列表刷新都重弹同一条提示。
+						adaptedCkptRef.current = ckpt;
+						try {
+							MSG("底模 " + ckpt + " 在 diffusion_models 里，但认不出是哪个家族；"
+								+ "文本编码器类型、编码器与 VAE 请手动选择 —— "
+								+ "自动猜会塞错编码器，出图报成功但内容是坏的。");
+						} catch (e) { /* ignore */ }
+						return;
+					}
 					const c2 = fam2 ? pickByHints(clips, PROFILE_CLIP_HINT[fam2]) : "";
 					const v2 = fam2 ? pickByHints(vaes, PROFILE_VAE_HINT[fam2]) : "";
 					const ready = wantUnet ? (!!c2 && !!v2) : (clips.length > 0 || vaes.length > 0 || ckpts.length > 0);
@@ -7860,6 +7998,13 @@ function Console() {
 						// checkpoint 自带 CLIP 与 VAE，外挂件必须清空，否则会盖掉内置的
 						setClip((cur) => (cur === "" ? cur : ""));
 						setVae((cur) => (cur === "" ? cur : ""));
+						// 家族认不出时，内置 CLIP/VAE 这条路对绝大多数整合包是对的，
+						// 所以照常走；但用户有权知道「系统没认出来」，否则他换了采样参数
+						// 对不上时会以为是自己的提示词问题。只说一次。
+						try {
+							MSG("底模 " + ckpt + " 的家族未能识别：已按 checkpoint 内置 CLIP/VAE 加载，"
+								+ "采样按当前面板设置执行。若出图异常，请先确认底模实际架构。");
+						} catch (e) { /* ignore */ }
 					}
 					return;
 				}
@@ -8073,6 +8218,36 @@ function Console() {
 	// 插件版本探针：loaded = 本进程装载的版本，disk = 磁盘版本；不一致=包换了但没重启
 	const [ver, setVer] = React.useState(null);
 	MSG_SINK = setMsg;   // 让模块级 MSG() 走同一个提示位
+
+	/**
+	 * 版本推送：启动 6 秒后静默问一次 GitHub（只提示，不下载、不替换文件）。
+	 * 手动检查在「实验性功能」页，带 force=1 绕缓存。失败静默——不能因为没网就弹一堆错。
+	 */
+	React.useEffect(() => {
+		let alive = true;
+		const tm = setTimeout(() => {
+			jget(EXPANDER + "/update/check", 15000).then((d) => {
+				if (!alive || !d) return;
+				setUpd(d);
+				if (d.ok && d.hasUpdate) MSG("有新版本 " + d.latest + "（当前 " + d.current + "）· 详情在「实验性功能」页");
+			}).catch(() => { /* 静默 */ });
+		}, 6000);
+		return () => { alive = false; clearTimeout(tm); };
+	}, []);
+
+	function checkUpdateNow() {
+		if (updBusy) return;
+		setUpdBusy(true);
+		jget(EXPANDER + "/update/check?force=1", 15000)
+			.then((d) => {
+				setUpd(d || null);
+				if (d && d.ok) setMsg(d.hasUpdate ? "有新版本 " + d.latest + "（当前 " + d.current + "）" : "已是最新版本 " + d.current);
+				else setMsg("检查失败：" + ((d && d.error) || "未知原因"));
+			})
+			.catch((e) => setMsg("检查失败：" + ((e && e.message) || e)))
+			.then(() => setUpdBusy(false));
+	}
+
 	REPAINT_SINK = () => setRegTick((t) => t + 1);   // 模块级同步完让面板重画
 	// 面板挂载后自动拉一次磁盘卡（0.7.47）；失败/空由 syncCardsFromDisk 自己重试
 	React.useEffect(() => { const tm = setTimeout(() => { try { syncAllDirs({ quiet: true }); } catch (e) { } }, 1200); return () => clearTimeout(tm); }, []);
@@ -8357,7 +8532,7 @@ const [outDraft, setOutDraft] = React.useState("");
 				catch (e) {
 					if (dead) return;
           setOnline(false);
-          setMsg("ComfyUI 未运行：点右上「启动 ComfyUI」手动启动（或双击 <ComfyUI父目录>\\start-comfy.ps1）");
+          setMsg("ComfyUI 未运行：点右上「启动 ComfyUI」，或在 ComfyUI 目录里手动跑 main.py");
           return;
 				}
 				if (dead) return;
@@ -9996,6 +10171,7 @@ const BUILTIN_GROUPS = [
 	{ key: "cloth", name: "服饰", src: ["衣服-军礼服", "衣服-驾驶员服", "服饰"] },
 	{ key: "comp", name: "构图", src: ["镜头", "构图"] },
 	{ key: "scene", name: "场景", src: ["背景", "场景"] },
+	{ key: "light", name: "光线", src: ["光线"] },
 	{ key: "quality", name: "质量", src: ["质量"] },
 	{ key: "style", name: "风格", src: ["风格"] },
 	{ key: "negative", name: "负面", src: ["负面"] },
@@ -10391,32 +10567,6 @@ function rndPoseFamily(v) {
 	}
 	return "其它";
 }
-// 换族抽姿势：排掉最近两族的候选，让连按三张必然是三种基础姿态。
-// 池子 90 条、11 个族，排掉两族后还剩至少 7 族可选，实际不会走到兜底；
-// 万一某个族的条目被删到极少，兜底也只退一步（只排最近一族），保证总能抽到东西。
-function rndPoseKey() {
-	const pool = rndPool("pose");
-	const ks = Object.keys(pool);
-	if (!ks.length) return "";
-	const hist = Array.isArray(rndLastPoseFam.current) ? rndLastPoseFam.current : [];
-	let cand = ks;
-	if (hist.length) {
-		const excl2 = ks.filter((k) => hist.indexOf(rndPoseFamily(pool[k])) < 0);
-		if (excl2.length) {
-			cand = excl2;
-		} else {
-			const last = hist[hist.length - 1];
-			const excl1 = ks.filter((k) => rndPoseFamily(pool[k]) !== last);
-			if (excl1.length) cand = excl1;
-		}
-	}
-	const pick = rndPick(cand);
-	if (pick) {
-		const f = rndPoseFamily(pool[pick]);
-		rndLastPoseFam.current = [f].concat(hist.slice(0, 1));
-	}
-	return pick;
-}
 // 分镜族：距离 + 角度两个维度。
 // 距离决定"画面里装多少"，角度决定"从哪看"——两者都换，机位才真的变。
 // 规则顺序是先具体后宽泛（极特写 → 近景 → 胸上 → 中景 → 全身 → 远景 → 大远景），
@@ -10547,29 +10697,6 @@ function rndPropFamily(v) {
 	}
 	return "其它";
 }
-// 换族抽道具：避开最近两族，157 段分 11~12 族，排完还剩至少 9 族可选。
-function rndPropKey() {
-	const pool = rndPool("prop");
-	const ks = Object.keys(pool);
-	if (!ks.length) return "";
-	const hist = Array.isArray(rndLastPropFam.current) ? rndLastPropFam.current : [];
-	let cand = ks;
-	if (hist.length) {
-		const strict = ks.filter((k) => hist.indexOf(rndPropFamily(pool[k])) < 0);
-		if (strict.length) cand = strict;
-		else {
-			const last = hist[hist.length - 1];
-			const one = ks.filter((k) => rndPropFamily(pool[k]) !== last);
-			if (one.length) cand = one;
-		}
-	}
-	const pick = rndPick(cand);
-	if (pick) {
-		const f = rndPropFamily(pool[pick]);
-		rndLastPropFam.current = [f].concat(hist.slice(0, 1));
-	}
-	return pick;
-}
 // 场景族：按「这是哪一类地方」分。顺序先特殊后常规——太空/高空/水下/极端天气的判定词
 // 一旦被「城市」「自然」先吃掉，就会出现「海滩被当成高空」（beach 带 sky）这种误判。
 // 所以高空族里刻意不含单独的 sky 一词。
@@ -10591,30 +10718,6 @@ function rndSceneFamily(v) {
 		if (RND_SCENE_FAM[i].re.test(s)) return RND_SCENE_FAM[i].k;
 	}
 	return "其它";
-}
-// 换族抽场景：避开最近两族，让连按三张必然落在三种不同性质的地方。
-// 170 段分 9~10 族，排掉两族后还剩至少 7 族可选，不会抽空。
-function rndSceneKey() {
-	const pool = rndPool("scene");
-	const ks = Object.keys(pool);
-	if (!ks.length) return "";
-	const hist = Array.isArray(rndLastSceneFam.current) ? rndLastSceneFam.current : [];
-	let cand = ks;
-	if (hist.length) {
-		const strict = ks.filter((k) => hist.indexOf(rndSceneFamily(pool[k])) < 0);
-		if (strict.length) cand = strict;
-		else {
-			const last = hist[hist.length - 1];
-			const one = ks.filter((k) => rndSceneFamily(pool[k]) !== last);
-			if (one.length) cand = one;
-		}
-	}
-	const pick = rndPick(cand);
-	if (pick) {
-		const f = rndSceneFamily(pool[pick]);
-		rndLastSceneFam.current = [f].concat(hist.slice(0, 1));
-	}
-	return pick;
 }
 // 通用填充：keep 里的槽位有值就不动；其余按来源重抽
 function rndFill(keep, opts) {
@@ -10664,25 +10767,6 @@ const RND_ALL_SLOTS = SEG.order.filter((k) => k !== "preset" && k !== "character
 function rndIdOf(v) {
 	const s = String(v || "").trim();
 	return s ? s.split(/\s+/)[0] : "";
-}
-// 追加到正向提示词末尾，逐词去重，不清空原有内容。返回实际新增的词数。
-// 去重口径和 applyStyleInsert 一致：全部小写比较，保留原有的大小写写法。
-function setPosAppend(text) {
-	const add = String(text || "").trim();
-	if (!add) return 0;
-	const items = add.split(",").map((x) => x.trim()).filter(Boolean);
-	const cur = String(pos || "").trim();
-	const have = new Set(cur.toLowerCase().split(",").map((x) => x.trim()).filter(Boolean));
-	const added = cur ? items.filter((t) => !have.has(t.toLowerCase())).length : items.length;
-	setPos((prev) => {
-		const c = String(prev || "").trim();
-		if (!c) return add;
-		const h = new Set(c.toLowerCase().split(",").map((x) => x.trim()).filter(Boolean));
-		const fresh = add.split(",").map((x) => x.trim()).filter(Boolean).filter((t) => !h.has(t.toLowerCase()));
-		if (!fresh.length) return c;
-		return c.replace(/[,\s]+$/, "") + ", " + fresh.join(", ");
-	});
-	return added;
 }
 // 从提示词里逐词删掉 texts 中出现过的词（大小写不敏感），其余顺序原样保留。
 function posDropWords(cur, texts) {
@@ -11378,6 +11462,35 @@ function libTab() {
 			h("button", { style: S.btn2, onClick: () => { setDictPasteText2(""); setDictPasteOpen2(true); }, title: "不依赖文件对话框：把词库包 JSON 粘进来" }, "粘贴 JSON"),
 			dictPasteOpen2 ? dictPasteModal2() : null,
 			h("span", { style: { marginLeft: "auto", fontSize: "11.5px", color: "var(--c-fg4)" } }, g.name + " " + shown.length + " 条")),
+		// 内置词库被隐藏时不提示的话，用户只会觉得"词条/新卡片怎么没了"。
+		// 「清空含内置」和右键隐藏分类都会写进 localStorage，刷新也不会自己回来。
+		(() => {
+			const hiddenCats = dictHiddenCats().filter((k) => k.indexOf("cat:") !== 0);
+			const libOff = !!(USER && USER.hideBuiltinDict);
+			if (!libOff && !hiddenCats.length) return null;
+			const names = groups.filter((x) => hiddenCats.indexOf(x.key) >= 0).map((x) => x.name);
+			const extra = hiddenCats.length - names.length;
+			return h("div", {
+				style: {
+					display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap",
+					padding: "6px 10px", marginBottom: "2px", fontSize: "12.5px", lineHeight: "1.5",
+					border: "1px solid rgba(220,160,60,.5)", background: "rgba(220,160,60,.10)",
+					borderRadius: "6px", color: "var(--c-fg2)",
+				},
+			},
+				h("span", null, libOff
+					? "内置词库整体被隐藏了（点过「清空含内置」）—— 所以新加的分类和词条都看不到"
+					: ("有 " + hiddenCats.length + " 个内置分类被隐藏" + (names.length ? "：" + names.join("、") + (extra > 0 ? " 等" : "") : ""))),
+				h("button", {
+					style: Object.assign({}, S.btn2, { marginLeft: "auto" }),
+					onClick: () => {
+						USER.hideBuiltinDict = false;
+						USER.groupHide = (USER.groupHide || []).filter((k) => k.indexOf("cat:") === 0);
+						saveUser(); repaint();
+						setMsg("已恢复内置词库与全部分类");
+					},
+				}, "全部恢复"));
+		})(),
 		h("div", { style: { display: "flex", gap: "6px", flexWrap: "wrap", alignItems: "center" } },
 			groups.map(chipGroup),
 			h("span", {
@@ -11769,7 +11882,7 @@ function writeCardToDisk(rec) {
     /**
      * 0.7.85：落盘曾经只写上面这份白名单 —— 卡 JSON 里白名单之外的字段（`id`、`schemaVersion`、
      * `loraNote`、`cover`、`packMode` …）会被**悄悄抹掉**：面板里还在，存一次盘就没了。
-     * 2026-10-22 实测 <角色卡>.json 少了 `schemaVersion: 2` 与整条 `loraNote`（只有备份里还有）。
+     * 2026-10-22 实测 絉林.json 少了 `schemaVersion: 2` 与整条 `loraNote`（只有备份里还有）。
      * 现在以「面板里那张卡」为底，白名单字段覆盖上去，其余原样保留。
      */
     const keep = Object.assign({}, rec || {});
@@ -13060,7 +13173,6 @@ const addLora = () => {
 		    set("loras", cur.concat([{ name: nm, w: w }]));
 		    set("loraPick", "");
 		  };
-const noNeg = normPart(d.neg).length;
 		  return h("div", { style: { display: "flex", flexDirection: "column", gap: "2px", maxWidth: "860px", width: "100%", minHeight: 0, paddingBottom: "6px" } },
 		    h("div", { style: { fontWeight: 700, fontSize: "14px", color: "var(--c-fg)", marginBottom: "10px" } }, d.isNew ? "新建风格卡" : ("编辑风格卡 · " + (d.name || ""))),
 		    h("div", { style: row }, h("span", { style: lab }, "名称"), h("input", { style: inp, value: d.name || "", placeholder: "例如：干净线稿 · 平涂", onChange: (e) => set("name", e.target.value) })),
@@ -13411,6 +13523,124 @@ function stabilizePrompt(text, negText, cards) {
 
 	// ==================== 预设页 ====================
 			
+	/**
+	 * 实验性功能：这里的东西不进主流程，随时可能改或撤。
+	 * 放的都是"当场就能给出结论"的诊断入口，不写任何用户数据。
+	 */
+	async function runLabProbe() {
+		const t0 = Date.now();
+		const out = [];
+		out.push("时间：" + new Date().toLocaleString());
+		try {
+			const hh = await jget(EXPANDER + "/health", 6000);
+			out.push("侧车 /health：" + (hh && hh.ok === true ? "在线 ✓" : "返回异常")
+				+ "　service=" + ((hh && hh.service) || "?") + "　apiVersion=" + ((hh && hh.apiVersion) || "?"));
+		} catch (e) {
+			out.push("侧车 /health：连不上（" + ((e && e.message) || e) + "）");
+		}
+		try {
+			const vv = await jget(EXPANDER + "/version", 6000);
+			out.push("侧车 /version：loaded=" + vv.loaded + "　disk=" + vv.disk
+				+ "　stale=" + vv.stale + "　pid=" + vv.pid + "　configVersion=" + vv.configVersion);
+		} catch (e) {
+			out.push("侧车 /version：读不到（" + ((e && e.message) || e) + "）");
+		}
+		try {
+			const cs = await jget(COMFY + "/system_stats", 6000);
+			out.push("ComfyUI " + COMFY + "：" + (cs && cs.system ? "在线 ✓（" + (cs.system.os || "?") + "）" : "返回异常"));
+		} catch (e) {
+			out.push("ComfyUI " + COMFY + "：连不上（" + ((e && e.message) || e) + "）");
+		}
+		out.push("浏览器：" + (navigator.userAgent || "?"));
+		out.push("耗时：" + (Date.now() - t0) + " ms");
+		setLabProbe(out.join("\n"));
+	}
+
+	function exportLabDiag() {
+		let ports = {};
+		try { ports = JSON.parse(window.localStorage.getItem(PORTS_KEY) || "{}") || {}; } catch { ports = {}; }
+		const data = {
+			at: new Date().toISOString(),
+			href: String(window.location && window.location.href || ""),
+			ua: navigator.userAgent || "",
+			probe: labProbe || "(还没跑体检)",
+			ports: ports,
+			errors: readClientErrors(),
+		};
+		downloadText(JSON.stringify(data, null, 2), "comfy-cards-next-diagnostics.json");
+		setMsg("诊断包已下载（不含提示词与图片）");
+	}
+
+	function clearPortsCache() {
+		try {
+			window.localStorage.removeItem(PORTS_KEY);
+			window.localStorage.removeItem("dsh-comfyui-console/ports");
+		} catch { /* ignore */ }
+		setMsg("端口缓存已清；刷新页面后会重新探测");
+	}
+
+	function experimentalTab() {
+		const preStyle = {
+			margin: "6px 0 0", padding: "10px 12px", borderRadius: "8px",
+			background: "rgba(127,127,127,.10)", border: "1px solid rgba(127,127,127,.22)",
+			fontSize: "12.5px", lineHeight: "1.6", whiteSpace: "pre-wrap", wordBreak: "break-all",
+			maxHeight: "320px", overflow: "auto",
+		};
+		return h(React.Fragment, null,
+			h("div", { style: S.card },
+				h("span", { style: S.label }, "实验性功能"),
+				h("span", { style: S.dim }, "这里的入口不进主流程、随时可能改或撤；下面的诊断都只读，不写你的预设、词库和出图目录。")),
+
+			h("div", {
+				style: Object.assign({}, S.card, upd && upd.ok && upd.hasUpdate
+					? { borderColor: "rgba(150,200,120,.62)", background: "rgba(150,200,120,.08)" }
+					: {}),
+			},
+				h("span", { style: S.label }, "版本更新"),
+				h("div", { style: S.row },
+					h("button", { style: S.btn, onClick: checkUpdateNow, title: "问一次 GitHub（force 绕开 6 小时缓存）" },
+						updBusy ? "检查中…" : "立即检查"),
+					upd && upd.ok && upd.url
+						? h("button", { style: S.btn2, onClick: () => window.open(upd.url, "_blank", "noopener") }, "打开 Release 页")
+						: null,
+					h("span", { style: S.dim },
+						upd && upd.ok
+							? ("当前 " + upd.current + " · 最新 " + upd.latest
+								+ (upd.hasUpdate ? " · 有新版本" : " · 已是最新")
+								+ "（" + (upd.source === "tag" ? "按 tag" : "按 Release") + "，" + (upd.cached ? "缓存" : "刚查") + "）")
+							: upd && upd.error
+								? ("查不到：" + upd.error)
+								: "启动 6 秒后自动查一次，也可以点「立即检查」")),
+				upd && upd.ok && upd.notes
+					? h("pre", { style: preStyle }, String(upd.notes).slice(0, 1200))
+					: null,
+				upd && upd.hint ? h("span", { style: S.dim }, upd.hint) : null,
+				upd && upd.configured === false
+					? h("span", { style: S.dim }, "配置方式：config.json 加 \"updateRepo\": \"owner/repo\"（GitHub 仓库全名），走代理再加 \"updateProxy\"")
+					: null),
+
+			h("div", { style: S.card },
+				h("span", { style: S.label }, "侧车 / ComfyUI 体检"),
+				h("div", { style: S.row },
+					h("button", { style: S.btn, onClick: runLabProbe, title: "分别问侧车 /health、/version 和 ComfyUI /system_stats" }, "跑一次体检"),
+					h("button", { style: S.btn2, onClick: () => { setLabProbe(""); setMsg("已清空体检结果"); } }, "清空"),
+					h("span", { style: S.dim }, "连不上、版本对不上、端口被别的程序占了，先用这个看")),
+				labProbe ? h("pre", { style: preStyle }, labProbe) : null),
+
+			h("div", { style: S.card },
+				h("span", { style: S.label }, "诊断包"),
+				h("div", { style: S.row },
+					h("button", { style: S.btn2, onClick: exportLabDiag, title: "版本 + 体检输出 + 前端错误日志 + 端口缓存" }, "下载 diagnostics.json"),
+					h("span", { style: S.dim }, "发给别人排查用；里面没有提示词、没有图片、没有卡包"))),
+
+			h("div", { style: S.card },
+				h("span", { style: S.label }, "端口缓存"),
+				h("div", { style: S.row },
+					h("button", { style: S.btn2, onClick: clearPortsCache, title: "删掉 localStorage 里记的 comfy / sidecar 地址" }, "清掉并重新探测"),
+					h("span", { style: S.dim }, "侧车端口换过、或者界面一直显示连不上时用（清完刷新页面）"))),
+		);
+	}
+
 function presetTab() {
 		const list = USER.presets || [];
 		const cats = Array.from(new Set(list.map((p) => p.cat)));
@@ -13495,7 +13725,7 @@ function presetTab() {
 		// 顶栏
 		h("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px", flexWrap: "wrap" } },
 			h("div", { style: { display: "flex", gap: "10px", alignItems: "baseline", flexWrap: "wrap", minWidth: 0, flex: "1 1 auto" } },
-				h("strong", { style: { fontSize: "15px" } }, "ComfyUI 绘图台"),
+				h("strong", { style: { fontSize: "15px" } }, "Comfy Cards Next"),
 						h("span", { style: { fontSize: "11px", color: "var(--c-fg5)", letterSpacing: ".3px" }, title: "插件版本（/version 的 loaded 字段，= 当前进程装载的代码版本）" }, (ver && ver.loaded ? "v" + ver.loaded : "v?") + " · " + (rW > 0 ? rW + "px" : "?")),
 						(ver && ver.stale)
 							? h("span", {
@@ -13583,14 +13813,27 @@ function presetTab() {
 			h("button", { style: S.btn2, onClick: () => BG.clear() }, "清除"),
 			h("span", { style: S.dim }, "切到别的面板也会继续跑")) : null,
 
+		// 状态条：单独占页签上方一行。原来挤在页签右侧用省略号截断，
+		// 「磁盘同步（D:\…\角色卡）：6 张 · 新增 0 · 更新 6 · 保护跳过 0 · 移除 0」这种长串看不全。
+		msg ? h("div", {
+			key: "statusline",
+			title: msg,
+			style: {
+				display: "flex", alignItems: "flex-start", justifyContent: "flex-end", gap: "6px",
+				padding: "2px 2px 6px", fontSize: "12.5px", lineHeight: "1.55",
+				color: /失败|连不上|离线|没认出来/.test(msg) ? "var(--c-bad, #d33)" : "var(--c-fg3)",
+				whiteSpace: "normal", wordBreak: "break-word", overflowWrap: "anywhere",
+			},
+		}, h("span", { style: { textAlign: "right" } }, msg)) : null,
+
 		// 标签页
 		h("div", { style: { display: "flex", gap: "2px", alignItems: "center", borderBottom: "1px solid rgba(127,127,127,.25)" } },
-			  [["gen", "生成"], ["style", "风格卡"], ["card", "角色卡"], ["lib", "词库"], ["pv-output", "历史"], ["preset", "预设"]].map(([k, label]) =>
+			  [["gen", "生成"], ["style", "风格卡"], ["card", "角色卡"], ["lib", "词库"], ["pv-output", "历史"], ["preset", "预设"], ["lab", "实验性功能"]].map(([k, label]) =>
 			    h("div", {
 			      key: k, onClick: () => setTab(k),
 			      style: Object.assign({}, S.tab, tab === k ? S.tabOn : S.tabOff),
 			    }, label)),
-					  msg ? h("span", { title: msg, style: Object.assign({}, S.dim, { marginLeft: "auto", padding: "0 8px", fontSize: "12px", maxWidth: "60%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flexShrink: 1 }, /失败|连不上|离线|没认出来/.test(msg) ? S.bad : {}) }, msg) : null),
+					  null),
 
 		// 模型库是二级页：只在生成页那个「模型库」按钮拉起时出现，tab 条上没有它的位置，
 		// 所以给它一条返回生成页的导航条，否则进来就出不去（其它 tab 都不高亮）。
@@ -13605,7 +13848,8 @@ function presetTab() {
 			tab === "style" ? styleCardTab() : null,
 			tab === "card" ? cardTab() : null,
 			tab === "lib" ? h(libTab, { key: "lib" }) : null,
-			tab === "preset" ? h(presetTab, { key: "preset" }) : null),
+			tab === "preset" ? h(presetTab, { key: "preset" }) : null,
+			tab === "lab" ? h(experimentalTab, { key: "lab" }) : null),
 		impRep ? importReportPanel() : null,
 
 

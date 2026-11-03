@@ -95,7 +95,7 @@ if (-not (Test-Path $srcPlug)) { Step 'locate' 'failed' ('plugin\ not found next
 if (-not $DshHome) {
     if ($env:DSH_HOME) { $DshHome = $env:DSH_HOME }
     elseif ($env:DSH_PROFILE_DIR) { $DshHome = Split-Path -Parent (Split-Path -Parent $env:DSH_PROFILE_DIR) }
-    else { $DshHome = 'D:\dshl\.dsh' }
+    else { $DshHome = '<DSH目录>\.dsh' }
 }
 Step 'dshHome' 'ok' $DshHome
 

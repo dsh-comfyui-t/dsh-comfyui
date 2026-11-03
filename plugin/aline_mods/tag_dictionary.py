@@ -134,6 +134,87 @@ CREATE TABLE IF NOT EXISTS user_categories (name TEXT PRIMARY KEY);
 CREATE TABLE IF NOT EXISTS metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 '''
 
+# 内置「姿势 / 场景 / 构图」词组（2026-11-03）。
+#
+# 为什么不写进 dictionary_seed.json：seed() 用 metadata 键 builtin-v038 做一次性闸门，
+# 已经导过的库永远不会再读那个 JSON，追加进去对存量机器等于没写。所以内置内容走
+# 自己的版本键（creative-seed-v1），新装机与升级机走同一条路径。
+#
+# 三元组 = (分类, 中文名, 英文提示词片段)。分类沿用现有命名：姿态-* 与新增的 场景 / 构图。
+CREATIVE_SEED = [
+    # ---- 姿态-动态：带方向、带动势的姿势 ----
+    ('姿态-动态', '奔跑', 'running, running towards viewer, dynamic pose'),
+    ('姿态-动态', '走动', 'walking, walking forward, one leg forward'),
+    ('姿态-动态', '转身', 'turning around, looking over shoulder, motion blur'),
+    ('姿态-动态', '旋身', 'spinning, twirling, skirt flaring, motion lines'),
+    ('姿态-动态', '后仰', 'leaning back, arched back, arms behind'),
+    ('姿态-动态', '前倾', 'leaning forward, looking at viewer, hands on knees'),
+    ('姿态-动态', '单膝跪地', 'kneeling on one knee, one knee on the ground, hand on ground'),
+    ('姿态-动态', '单手撑地', 'crouching, one hand on the ground, low angle'),
+    ('姿态-动态', '伸懒腰', 'stretching, arms up, closed eyes, yawning'),
+    ('姿态-动态', '弯腰', 'bending over, looking at viewer, from side'),
+    ('姿态-动态', '攀爬', 'climbing, holding onto ledge, looking up'),
+    ('姿态-动态', '跑开回望', 'running away, waving hand, looking back'),
+    # ---- 姿态-站 / 姿态-坐 / 姿态-其他：补充站坐细节 ----
+    ('姿态-站', '交叉腿站', 'standing, crossed legs, one leg in front of the other'),
+    ('姿态-站', '单腿站', 'standing on one leg, balancing, other leg raised'),
+    ('姿态-站', '手扶墙', 'leaning against wall, one hand on wall, contrapposto'),
+    ('姿态-站', '手遮阳光', 'hand shading own eyes, looking into distance'),
+    ('姿态-站', '提裙行礼', 'holding own skirt, lifting skirt, curtsy'),
+    ('姿态-站', '抬手打招呼', 'raising hand, waving, greeting'),
+    ('姿态-坐', '侧坐台阶', 'sitting on stairs, leaning to one side, hand supporting'),
+    ('姿态-坐', '坐栏杆', 'sitting on railing, legs hanging'),
+    ('姿态-坐', '跪坐回望', 'kneeling, looking back over shoulder'),
+    ('姿态-坐', '坐车内', 'sitting in car, car seat, looking out window'),
+    ('姿态-其他', '趴在桌上', 'lying on desk, head on arms, sleeping'),
+    ('姿态-其他', '趴床看书', 'lying on stomach on bed, reading book, legs up'),
+    # ---- 场景：可以直接当背景用的环境词 ----
+    ('场景', '教室走廊', 'school hallway, lockers, sunlight through windows'),
+    ('场景', '天台', 'school rooftop, chain-link fence, blue sky'),
+    ('场景', '图书馆', 'library, bookshelves, warm lighting'),
+    ('场景', '咖啡厅', 'cafe, wooden table, window seat'),
+    ('场景', '便利店', 'convenience store, shelves, fluorescent lighting'),
+    ('场景', '地铁车厢', 'subway interior, train window, commuters'),
+    ('场景', '月台', 'train station platform, railway, evening'),
+    ('场景', '雨夜街道', 'rainy street at night, wet road, reflections, neon lights'),
+    ('场景', '海边日落', 'beach at sunset, orange sky, waves'),
+    ('场景', '樱花隧道', 'cherry blossom tunnel, pink petals, spring'),
+    ('场景', '神社石阶', 'shrine stone steps, torii, forest'),
+    ('场景', '公园长椅', 'park bench, trees, afternoon light'),
+    ('场景', '泳池', 'swimming pool, water surface, tiles'),
+    ('场景', '卧室', 'bedroom, bed, curtains, morning light'),
+    ('场景', '浴室', 'bathroom, bathtub, steam, tiles'),
+    ('场景', '厨房', 'kitchen, counter, utensils'),
+    ('场景', '酒吧', 'bar, counter, bottles, dim light'),
+    ('场景', '机甲驾驶舱', 'cockpit, control panel, HUD, straps'),
+    ('场景', '城市废墟', 'ruins, broken concrete, overgrown plants'),
+    ('场景', '雪原', 'snowfield, falling snow, breath vapor'),
+    ('场景', '花田', 'flower field, blooming, horizon'),
+    ('场景', '天文台', 'observatory, telescope, dome, night sky'),
+    ('场景', '城市夜景', 'cityscape at night, skyline, lights, from above'),
+    ('场景', '雨中伞下', 'under umbrella in rain, raindrops, wet'),
+    ('场景', '战场硝烟', 'battlefield, smoke, dust, distant explosions'),
+    # ---- 构图：与「镜头」互补，这里管画面结构与视线 ----
+    ('构图', '三分法', 'rule of thirds, subject off-center'),
+    ('构图', '对角构图', 'diagonal composition, dynamic lines'),
+    ('构图', '框架构图', 'framing, framed by doorway, foreground framing'),
+    ('构图', '前景遮挡', 'foreground blur, out-of-focus foreground, depth of field'),
+    ('构图', '引导线', 'leading lines, perspective lines towards subject'),
+    ('构图', '黄金分割', 'golden ratio composition, balanced asymmetry'),
+    ('构图', '镜面倒影', 'mirror reflection, reflecting surface'),
+    ('构图', '水面倒影', 'water reflection, ripples'),
+    ('构图', '过肩构图', 'over-the-shoulder shot, depth staging'),
+    ('构图', '背影构图', 'back view, seen from behind, walking away'),
+    ('构图', '极简留白', 'minimalism, negative space, simple composition'),
+    ('构图', '满版构图', 'full-bleed composition, edge-to-edge detail'),
+    ('构图', '低机位', "low angle, worm's-eye view, looking up"),
+    ('构图', '高机位', "high angle, bird's-eye view, looking down"),
+    ('构图', '广角特写', 'wide-angle close-up, exaggerated perspective'),
+    ('构图', '环形构图', 'circular composition, vignette framing'),
+    ('构图', '画框边框', 'border, picture frame, illustrated margin'),
+    ('构图', '双人并排', 'two characters, side by side, balanced composition'),
+]
+
 class Dictionary:
     def __init__(self, path, seed=None, recover=True):
         self.path = Path(path)
@@ -159,6 +240,8 @@ class Dictionary:
             with open(seed, encoding='utf-8') as f:
                 self.seed(json.load(f))
             self.seed_semantic_core()
+            self.seed_creative_v1()
+            self.index_categories_v1()
 
     @contextmanager
     def connect(self):
@@ -197,6 +280,11 @@ class Dictionary:
         row = db.execute('SELECT e.*,o.label AS correction FROM entries e LEFT JOIN entry_overrides o ON o.entry_id=e.id WHERE e.id=?', (eid,)).fetchone()
         custom = db.execute('SELECT names FROM entry_name_overrides WHERE entry_id=?',(eid,)).fetchone()
         names = [(row['correction'] or row['label'], 'zh'), (row['output'], 'en')]
+        # 分类名也进索引：搜索是前缀匹配，不挂分类名的话「构图」「场景」「动作」这类
+        # 分类词一条都搜不出来（索引前缀是 normalized，中间词永远命中不了）。
+        category = (row['category'] or '').strip()
+        if category:
+            names.append((category, 'zh'))
         if custom:
             names.extend((value,'zh') for value in json.loads(custom[0]))
         if row['correction']:
@@ -285,6 +373,38 @@ class Dictionary:
             # without claiming that "orange" is a synonym/alias of mandarin.
             db.execute('INSERT OR IGNORE INTO concept_relations(source_id,target_id,relation,provenance) VALUES(?,?,?,?)',
                        (concepts['orange-fruit'], concepts['mandarin-fruit'], 'related', sid))
+            db.execute('INSERT INTO metadata VALUES(?,?)', (key, 'done'))
+
+    def seed_creative_v1(self):
+        """内置「姿势 / 场景 / 构图」词组（2026-11-03）。
+
+        与 seed() 的区别：seed() 被 builtin-v038 这个一次性键锁住，跑过一次就再也不会
+        读 dictionary_seed.json，后来追加的词只能走自己的版本键，否则存量机器拿不到。
+        这里用 creative-seed-v1 做闸门，新装机与升级机走同一条路径，重复启动不会重复插入。
+        """
+        with self.write_lock, self.connect() as db:
+            key = 'creative-seed-v1'
+            if db.execute('SELECT 1 FROM metadata WHERE key=?', (key,)).fetchone():
+                return
+            sid = self.source(db, 'dsh-builtin-creative',
+                              'DSH authored pose / scene / composition snippets; MIT', '1.0')
+            for i, (category, label, output) in enumerate(CREATIVE_SEED):
+                self._entry(db, sid, 'c%03d' % i, label, output, category)
+            db.execute('INSERT INTO metadata VALUES(?,?)', (key, 'done'))
+
+    def index_categories_v1(self):
+        """一次性把已有条目重建成「分类名也可搜」（2026-11-03）。
+
+        _index() 新增了分类名之后，老条目的 search_names 还是旧的，得全量重跑一遍；
+        用版本键锁住，只在升级后第一次启动时做，之后不再扫表。
+        """
+        with self.write_lock, self.connect() as db:
+            key = 'search-category-index-v1'
+            if db.execute('SELECT 1 FROM metadata WHERE key=?', (key,)).fetchone():
+                return
+            ids = [r[0] for r in db.execute('SELECT id FROM entries')]
+            for eid in ids:
+                self._index(db, eid)
             db.execute('INSERT INTO metadata VALUES(?,?)', (key, 'done'))
 
     def _rows(self, db, ids):
@@ -721,6 +841,9 @@ class Dictionary:
         out=''.join(parts)
         out=re.sub(r'[,，、；]+\s*',', ',out).strip(', \n')
         out=re.sub(r'\x01(\d+)\x02',lambda m:hits[int(m[1])][1],out)
+        # 命中词自带前后逗号，原文的逗号会叠成「, ,」——替换后再收敛一次。
+        out=re.sub(r',(?:\s*,)+',', ',out)
+        out=re.sub(r'[ \t]{2,}',' ',out).strip(', \n')
         return {'out':out,'hits':hits,'misses':sorted(set(misses)),'ambiguities':ambiguities}
 
     def new_upload(self,payload):

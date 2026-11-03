@@ -1,4 +1,4 @@
-# train.ps1 -- <画风卡> style LoRA retrain driver.
+# train.ps1 -- julst2 style LoRA retrain driver.
 #
 # Host rule (AGENTS.md sec.1 + handover 7.1): Windows PowerShell 5.1 decodes a
 # BOM-less .ps1 as GBK, so this file is PURE ASCII. Every path that may contain
@@ -7,20 +7,21 @@
 # Usage:
 #   powershell -ExecutionPolicy Bypass -File train.ps1 -Smoke
 #   powershell -ExecutionPolicy Bypass -File train.ps1 -Steps 1200 -SaveEvery 100
+#   powershell -ExecutionPolicy Bypass -File train.ps1 -Card '<card name>'   # annotate card baseModels on success
 #   powershell -ExecutionPolicy Bypass -File train.ps1 -Steps 2000 `
-#       -ResumeFrom <OUTDIR>\<画风卡>-001200.safetensors   (OUTDIR must be passed in; see -OutDir)
+#       -ResumeFrom <OUTDIR>\julst2-001200.safetensors   (OUTDIR must be passed in; see -OutDir)
 #
 # The script never writes to existing weight files: the output name is derived
 # from -Name and a clobber assert runs before training starts.
 
 param(
-  [string]$Ckpt        = 'D:\paint\ComfyUI\models\diffusion_models\anima-aesthetic-v1.1.safetensors',
-  [string]$Vae         = 'D:\paint\ComfyUI\models\vae\qwen_image_vae.safetensors',
-  [string]$Qwen3       = 'D:\paint\ComfyUI\models\text_encoders\qwen_3_06b_base.safetensors',
+  [string]$Ckpt        = '<ComfyUI父目录>\ComfyUI\models\diffusion_models\anima-aesthetic-v1.1.safetensors',
+  [string]$Vae         = '<ComfyUI父目录>\ComfyUI\models\vae\qwen_image_vae.safetensors',
+  [string]$Qwen3       = '<ComfyUI父目录>\ComfyUI\models\text_encoders\qwen_3_06b_base.safetensors',
   [string]$TrainDataDir = '',
   [string]$DatasetConfig = '',
   [string]$OutDir      = '',
-  [string]$Name        = '<画风卡>',
+  [string]$Name        = 'julst2',
   [string]$ResumeFrom  = '',
   [string]$NetworkModule = 'networks.lora_anima',
   [int]$Dim            = 32,
@@ -36,13 +37,22 @@ param(
   [int]$BucketMax      = 1024,
   [string]$MinSnr      = '5',
   [string]$NoiseOffset = '0.03',
+  [string]$Card        = '',
+  [string]$CardRoot    = '',
+  [string]$AnnotationsDir = '',
   [switch]$Smoke,
   [switch]$RefreshLatents,
-  [string]$VPy         = 'D:\paint\venv312\Scripts\python.exe',
-  [string]$Trainer     = 'D:\paint\sd-scripts\anima_train_network.py'
+  [string]$VPy         = '<ComfyUI父目录>\venv312\Scripts\python.exe',
+  [string]$Trainer     = '<ComfyUI父目录>\sd-scripts\anima_train_network.py'
 )
 
 $ErrorActionPreference = 'Continue'
+
+# Default card root built from code points so this file stays pure ASCII
+# (AGENTS.md sec.1: PS 5.1 decodes a BOM-less .ps1 as GBK).
+if ($CardRoot -eq '') {
+  $CardRoot = '<工作区>\' + [char]0x672C + [char]0x5730 + [char]0x7ED8 + [char]0x753B + '\' + [char]0x89D2 + [char]0x8272 + [char]0x5361
+}
 # 8GB card at 768 fragments and spills: enable expandable_segments
 if (-not $env:PYTORCH_CUDA_ALLOC_CONF) { $env:PYTORCH_CUDA_ALLOC_CONF = 'expandable_segments:True' }
 $env:HF_HUB_OFFLINE       = '1'
@@ -114,7 +124,7 @@ $argList.Add('--save_model_as=safetensors')
 $argList.Add('--gradient_checkpointing')
 $argList.Add('--cache_latents')
 if (-not $RefreshLatents) { $argList.Add('--cache_latents_to_disk')
-# 8GB: freeze TE + cache TE outputs (DiT-only, same shape as <画风LoRA>)
+# 8GB: freeze TE + cache TE outputs (DiT-only, same shape as julinst)
 $argList.Add('--network_train_unet_only')
 $argList.Add('--cache_text_encoder_outputs')
 $argList.Add('--cache_text_encoder_outputs_to_disk') }
@@ -132,7 +142,7 @@ $argList.Add('--persistent_data_loader_workers')
 $argList.Add('--sdpa')
 $argList.Add('--log_with=tensorboard')
 
-Write-Host '=== <画风卡> retrain pre-flight ==='
+Write-Host '=== julst2 retrain pre-flight ==='
 $argList | ForEach-Object { Write-Host ('  ' + $_) }
 Write-Host ''
 Write-Host ("stdout log: " + $stdout)
@@ -151,4 +161,30 @@ if ($code -ne 0) { Write-Host 'TRAINING FAILED -- read the log above; nothing wa
 $last = Select-String -Path $stdout -Pattern 'steps:.*it/s' | Select-Object -Last 1
 if ($last) { Write-Host ('speed: ' + $last.Line.Trim()) }
 Write-Host ("outputs: " + (Get-ChildItem $outAbs -Filter '*.safetensors' | ForEach-Object { $_.Name }) -join ', ')
+# ---------------------------------------------------------------------------
+# Post-run annotation: write this run's base model into the character card.
+# Only runs with -Card; silent no-op otherwise so existing callers are unaffected.
+# Failure here never fails training -- the weights are already on disk.
+# ---------------------------------------------------------------------------
+if ($Card -ne '') {
+  Write-Host ''
+  Write-Host '=== annotate card with base model ==='
+  $annot = Join-Path $PSScriptRoot 'annotate_card.py'
+  if (-not (Test-Path $annot)) {
+    # fall back to the plugin copy (train.ps1 also lives under skills\)
+    $alt = '<DSH目录>\.dsh\plugins\dsh-comfyui-console\plugin\tools\annotate_card.py'
+    if (Test-Path $alt) { $annot = $alt }
+  }
+  if (-not (Test-Path $annot)) {
+    Write-Host 'SKIP: annotate_card.py not found -- card was not annotated.'
+  } else {
+    $baseName = [IO.Path]::GetFileName($Ckpt)
+    $aArgs = @($annot, '--card', $Card, '--base', $baseName, '--root', $CardRoot)
+    & $VPy @aArgs 2>&1 | ForEach-Object { Write-Host ('  ' + $_) }
+    if ($LASTEXITCODE -ne 0) {
+      Write-Host 'WARN: card annotation failed -- training output is still valid.'
+    }
+  }
+}
+
 Write-Host 'NEXT: run acceptance.py against the checkpoint you want to judge, then copy only the winner into ComfyUI models\loras.'

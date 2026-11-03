@@ -1,14 +1,32 @@
-# DSH 绘图台（dsh-comfyui-console）
+# Comfy Cards Next（dsh-comfy-cards-next）
+
+> 2026-11-03 起正式更名为 **Comfy Cards Next**；旧包名 `dsh-comfyui-console` 停用。
+> 包内标识保持不变（localStorage 键、侧车 `service` 名、计划任务 `dsh-comfyui-console-cleanup`），
+> 所以已装用户的设置、词库、历史任务都不会因为改名而丢。
 
 DSH 里的 ComfyUI 前端：底模切换、LoRA 多选、提示词扩展、**角色卡 / 风格卡**、LLLite 身份控制、卡包导入导出。
+
+## 新版本提示
+
+在 `config.json` 里填一行 GitHub 仓库全名，插件启动 6 秒后会去问一次有没有新版本：
+
+```json
+"updateRepo": "owner/repo"
+```
+
+有新版就写在页签上方的状态条里，「实验性功能」页还能看更新说明和 Release 链接。**只提示，不下载不替换** —— 升级仍走 `tools/update.ps1` 或 `dsh plugin`。
+没网/走代理时用 `"updateProxy": "http://127.0.0.1:7890"`；不想让插件自动查就 `"updateCheck": false`。
+
+界面分七个页签：**生成 / 风格卡 / 角色卡 / 词库 / 历史 / 预设 / 实验性功能**。最后一个只放只读诊断（侧车与 ComfyUI 体检、诊断包下载、端口缓存清理），不进主流程。
 
 插件只负责"界面 + 编排 + 侧车"，**不含模型**。模型与卡走另外两条分发线（见第 6 节）。
 
 ## 1. 环境要求
 
+- **宿主版本**：最低 `dsh 0.2.0-rc.2`（对应 `package.json` 的 `dsh.minHost`）；更低的宿主装不上，会直接判为不兼容。
+
 | 项 | 要求 |
 |---|---|
-| minHost | `dsh.configVersion` 2 / `minHost` 见 `package.json` |
 | DSH | 宿主版本能加载 Cordis 插件（`@deepseek-ai/cordis ^0.5.3`） |
 | Node | 随 DSH 自带的版本即可 |
 | Python | 3.10+。核心路径**只用标准库**（侧车不依赖 torch）；`Pillow` 强烈建议装（缩略图与卡包封面），`psutil` / `PyYAML` / `ctranslate2` 按需 —— 详见 `requirements.txt`。侧车按职责拆成 9 个模块：`expander.py` 只剩 HTTP 分发，其余见 `sidecar_*.py`（state / util / routes / llm / comfy / config / cards / pack / auth） |
@@ -19,16 +37,16 @@ DSH 里的 ComfyUI 前端：底模切换、LoRA 多选、提示词扩展、**角
 
 ```powershell
 # 1) 放进 DSH 主目录
-Copy-Item -Recurse . "$env:USERPROFILE\.dsh\plugins\dsh-comfyui-console"
+Copy-Item -Recurse . "$env:USERPROFILE\.dsh\plugins\dsh-comfy-cards-next"
 
 # 2) 生成 config.json（自动探测 ComfyUI 与 Python）
-powershell -ExecutionPolicy Bypass -File "$env:USERPROFILE\.dsh\plugins\dsh-comfyui-console\plugin\install.ps1"
+powershell -ExecutionPolicy Bypass -File "$env:USERPROFILE\.dsh\plugins\dsh-comfy-cards-next\plugin\install.ps1"
 
 # 3) 在 profile 的 composition 里加一行
 #    - insert:
 #        - id: comfyui-console
-#          name: 'dsh-comfyui-console'
-#    或：dsh plugin --profile <profile> add "dsh-comfyui-console"
+#          name: 'dsh-comfy-cards-next'
+#    或：dsh plugin --profile <profile> add "dsh-comfy-cards-next"
 
 # 4) 重启 dsh web 进程（插件代码按进程缓存，刷新页面不够）
 # 5) 验证侧车
@@ -38,6 +56,29 @@ Invoke-RestMethod http://127.0.0.1:8199/health
 `install.ps1` 参数：`-ComfyRoot`、`-PythonExe`、`-CardsDir`、`-WorkDir`、`-OutputDir`、`-ComfyPort 8188`、`-SidecarPort 8199`、`-AllowLan`、`-Force`。
 没传的项会去常见位置探测；`config.json` 已存在时加 `-Force` 才覆盖。
 **首次装载时若没有 `config.json`，插件会按 `config.example.json` 自动生成一份**（填探测到的 comfyRoot/pythonExe/workDir，`cardsDir`/`outputDir` 留给你确认）。
+
+### 2.1 卸载（连残留一起带走）
+
+插件在包外写过四样东西，直接删包会留下它们。`tools/uninstall.ps1` 负责收尾，`package.json` 的 `preuninstall` 已经挂上（`-Auto` 非交互）。
+
+```powershell
+# 卸载前手动跑一遍最稳妥（dsh plugin remove 不保证触发 npm 生命周期脚本）
+powershell -NoProfile -ExecutionPolicy Bypass -File tools\uninstall.ps1 -DryRun   # 先看要删什么
+powershell -NoProfile -ExecutionPolicy Bypass -File tools\uninstall.ps1           # 真删
+```
+
+| 处理 | 对象 |
+| :-- | :-- |
+| 停进程 | 跑 `py\expander.py` 的 pythonw 侧车 |
+| 删 | 计划任务 `dsh-comfyui-console-cleanup` |
+| 删 | `<comfyMain>\custom_nodes\dsh_post_controls`（装进 ComfyUI 的桥接节点） |
+| 先备份再删 | `%LOCALAPPDATA%\DSH\ComfyUIConsole\` → 词库 `tags.sqlite3` 先拷到 `<工作区>\日志\comfyui-词库备份-<时间戳>\`，校验大小一致才删原目录 |
+| 删 | `<comfyRoot>\comfyui-console-data\`（旧版 `console.db` 与 work 日志） |
+| 删 | 包内 `work\`（侧车令牌、运行日志） |
+
+**不碰**：角色卡、LoRA、出图目录、ComfyUI 本体与它的工作流、`custom_nodes` 里别人的节点。
+
+开关：`-KeepData`（保留词库与旧数据目录，只清代码侧）、`-DryRun`（只打印）、`-BackupDir <路径>`（改备份落点）、`-TestRoot <目录>`（把全部目标重定向到临时目录演练）、`-FailOnError`（失败时退 1；默认退 0，否则 npm 会中止整次卸载反而删不掉）。
 
 ## 3. config.json 字段
 
@@ -67,7 +108,7 @@ Invoke-RestMethod http://127.0.0.1:8199/health
 浏览器会把该地址作为 `Origin` 发过来，**默认会被 403 拒绝**。要开就给 `config.json` 加 `"allowLan": true` 并重启 dsh web
 （或在 `install.ps1` 时加 `-AllowLan`）。只放行私网段，公网地址始终拒绝；服务端脚本/curl 不带 Origin，不受影响。
 
-## 5.1 鉴权与请求体上限（0.7.164 起重写）
+## 5.1 鉴权与请求体上限（0.8.0 起重写）
 
 侧车（127.0.0.1:8199）能花 API key（`/expand`）、写卡（`/cards/write`）、停服务（`/comfy/stop`），所以设两道**叠闸**：
 
@@ -146,8 +187,8 @@ Get-NetTCPConnection -LocalPort 8199 -State Listen | ForEach-Object { Stop-Proce
 | 场景 | 做法 |
 |---|---|
 | 手里有新版目录 / zip / `npm pack` 的 tgz | `.\\tools\\update.ps1 -Source <路径>`（推荐） |
-| 新版解到了另一个目录 | 把 profile 里的 junction 指过去：`profiles/<p>/node_modules/dsh-comfyui-console` → 新目录，再重启 |
-| 发布到 registry | `dsh plugin --profile <p> add dsh-comfyui-console@<ver>`，pnpm 直接换目录，依赖名不变 |
+| 新版解到了另一个目录 | 把 profile 里的 junction 指过去：`profiles/<p>/node_modules/dsh-comfy-cards-next` → 新目录，再重启 |
+| 发布到 registry | `dsh plugin --profile <p> add dsh-comfy-cards-next@<ver>`，pnpm 直接换目录，依赖名不变 |
 
 `update.ps1` 会：校验包名与版本 → 备份旧 `lib/` `expander.py` `package.json` 到 `.bak-update-<时间戳>/` → 替换 `lib/ tools/ expander.py routes.json cordis.patch.yml install.ps1 README.md CHANGELOG.md config.example.json` 与其它根级 `*.json` → `node --check` + `py_compile` + `dsh --dump-config` → 提示重启。`-DryRun` 只看计划，`-Force` 允许同版本覆盖。
 
@@ -177,7 +218,7 @@ ESM 缓存是**按进程**的，所以页面刷新不够；也不要给插件名
 
 ## 10. 包名与改名
 
-当前包名是 `dsh-comfyui-console`（v0.7.164，已去掉 `private`、带 `files` 白名单与 `dsh` 更新元数据，可 `npm pack` / 拷目录安装）。
+当前包名是 `dsh-comfy-cards-next`（v0.8.0，已去掉 `private`、带 `files` 白名单与 `dsh` 更新元数据，可 `npm pack` / 拷目录安装）。
 
 再改名要**同时**动五处，漏一处就装载失败：
 

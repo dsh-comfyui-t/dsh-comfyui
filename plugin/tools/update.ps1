@@ -1,12 +1,12 @@
-# dsh-comfyui-console :: in-place updater (PowerShell 5.1 compatible, ASCII only)
+# dsh-comfy-cards-next :: in-place updater (PowerShell 5.1 compatible, ASCII only)
 #
 # Replaces plugin CODE only. Never touches config.json, workDir, cardsDir or outputDir,
 # so an update never needs a reinstall and never loses user data.
 #
 # Examples
-#   .\tools\update.ps1 -Source D:\dl\dsh-comfyui-console-0.5.0           # directory
-#   .\tools\update.ps1 -Source D:\dl\dsh-comfyui-console-0.5.0.zip       # zip
-#   .\tools\update.ps1 -Source D:\dl\dsh-comfyui-console-0.5.0.tgz       # npm pack tarball
+#   .\tools\update.ps1 -Source D:\dl\dsh-comfy-cards-next-0.8.0           # directory
+#   .\tools\update.ps1 -Source D:\dl\dsh-comfy-cards-next-0.8.0.zip       # zip
+#   .\tools\update.ps1 -Source D:\dl\dsh-comfy-cards-next-0.8.0.tgz       # npm pack tarball
 #   .\tools\update.ps1 -Source D:\dl\next -DryRun                        # show plan only
 #   .\tools\update.ps1 -Source D:\dl\next -Force                         # same version allowed
 #
@@ -76,7 +76,11 @@ $srcRoot = $srcPkg.DirectoryName
 $new = Get-Content $srcPkg.FullName -Raw | ConvertFrom-Json
 Info ("incoming: " + $new.name + " " + $new.version + " (configVersion " + $new.dsh.configVersion + ")")
 
-if ($new.name -ne 'dsh-comfyui-console') { Fail "package name mismatch: $($new.name)" }
+# 0.8.0 改名分界：旧包不能被就地覆盖（否则 patch 变新名、profile 仍指旧名 -> 插件不加载）
+if ($new.name -eq 'dsh-comfyui-console') { Fail 'PRE-RENAME build (dsh-comfyui-console): dsh plugin remove dsh-comfyui-console, then add link:<new-dir>\plugin, then restart dsh web' }
+if ($new.name -ne 'dsh-comfy-cards-next') { Fail "package name mismatch: $($new.name)" }
+if ($cur.name -and $cur.name -ne $new.name) { Fail ('installed ' + $cur.name + ' != source ' + $new.name + ' - rename needs remove + add') }
+
 if (-not $new.version) { Fail 'incoming package has no version' }
 if ($new.version -eq $cur.version -and -not $Force) {
     Fail ("same version " + $new.version + " - pass -Force to overwrite anyway")
@@ -89,7 +93,7 @@ if ($new.version -eq $cur.version -and -not $Force) {
 # (2026-10-22 report: sidecar_dirs.py / sidecar_loras.py). The plan is now derived
 # from the source tree, with an explicit deny list for user data.
 $keepNames = @('package.json', 'config.json', 'routes.json', 'sidecar-token.txt')
-$keepDirs  = @('work', '__pycache__', 'node_modules', '.git', '.pytest_cache')
+$keepDirs  = @('work', 'logs', '__pycache__', 'node_modules', '.git', '.pytest_cache')
 function Test-Keep([string]$rel) {
     foreach ($p in ($rel -split '\\')) { if ($keepDirs -contains $p) { return $true } }
     $leaf = ($rel -split '\\')[-1]
@@ -159,7 +163,7 @@ if (-not $SkipVerify) {
     }
     $py = if ($PythonExe) { $PythonExe } else { (Get-Command python -ErrorAction SilentlyContinue).Source }
     if ($py) {
-        Get-ChildItem (Join-Path $PluginDir '*.py') | ForEach-Object {
+        Get-ChildItem (Join-Path $PluginDir 'py') -Filter '*.py' | ForEach-Object {
               & $py -m py_compile $_.FullName
               if ($LASTEXITCODE -ne 0) { Fail ('py_compile failed: ' + $_.Name) }
           }

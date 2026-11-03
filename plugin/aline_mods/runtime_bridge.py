@@ -24,7 +24,7 @@ def inspect_runtime(config_path=''):
         with open(config_path,encoding='utf-8-sig') as stream:cfg=json.load(stream)
         if not isinstance(cfg,dict):raise ValueError('配置顶层须为对象')
     return {'ok':True,'platform':os.name,'python':sys.executable,'version':sys.version.split()[0],
-            'cwd':os.getcwd(),'pluginReadable':(Path(__file__).parent/'expander.py').is_file(),
+            'cwd':os.getcwd(),'pluginReadable':(Path(__file__).parent/'expander.py').is_file() or (Path(__file__).parent.parent/'py'/'expander.py').is_file(),
             'configReadable':bool(config_path),'instanceId':cfg.get('instanceId','')}
 
 

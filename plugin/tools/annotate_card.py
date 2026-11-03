@@ -24,7 +24,7 @@ import json
 import os
 import sys
 
-DEFAULT_ROOT = r"D:\dsh\本地绘画\角色卡"
+DEFAULT_ROOT = r"<工作区>\本地绘画\角色卡"
 EXTS = (".safetensors", ".ckpt", ".pt", ".pth", ".bin", ".gguf", ".onnx")
 
 

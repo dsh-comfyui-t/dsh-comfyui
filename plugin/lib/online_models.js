@@ -56,9 +56,7 @@ const ONLINE_BASE_GROUPS=[
     ['视频 Video',['CogVideoX','Hunyuan Video','LTXV','LTXV2','LTXV 2.3','LTXV 2.5','Mochi','SVD','SVD XT','Wan Video','Wan Video 1.3B t2v','Wan Video 14B t2v','Wan Video 14B i2v 480p','Wan Video 14B i2v 720p','Wan Video 2.2 TI2V-5B','Wan Video 2.2 I2V-A14B','Wan Video 2.2 T2V-A14B','Wan Video 2.5 T2V','Wan Video 2.5 I2V']],
     ['其他 Other',['Upscaler','Other']]
 ];
-const ONLINE_BASES=ONLINE_BASE_GROUPS.flatMap(([,names])=>names);
 function onlineNameCompare(a,b){return String(a).localeCompare(String(b),'en',{sensitivity:'base',numeric:true});}
-const ONLINE_BASE_QUICK=['SDXL 1.0','Illustrious','Pony','Anima'].sort(onlineNameCompare);
 const ONLINE_TYPES=[['','全部'],['Checkpoint','Checkpoint'],['LORA','LoRA'],['LoCon','LoCon'],['DoRA','DoRA'],
     ['UNet','UNet'],['VAE','VAE'],['TextEncoder','Text Encoder'],['CLIP','CLIP'],['CLIPVision','CLIP Vision'],
     ['TextualInversion','Embedding'],['Controlnet','ControlNet'],['Upscaler','Upscaler'],
@@ -116,7 +114,6 @@ function OnlineBaseFilter({provider,value,onChange,theme}) {
                     }}))),
         menu);
 }
-const ONLINE_PAGE_SIZE=24;
 function onlineMergePages(prev,next){
     const seen=new Set((prev?.items||[]).map(m=>m.provider+':'+m.id));
     const items=[...(prev?.items||[]),...((next?.items||[]).filter(m=>!seen.has(m.provider+':'+m.id)))];

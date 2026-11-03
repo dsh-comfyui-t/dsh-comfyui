@@ -158,7 +158,7 @@ def main():
     print('[OK] import 覆盖：%d 个 py 的本地依赖全部在包内' % len([f for f in os.listdir(plug) if f.endswith('.py')]))
 
     REQUIRED = ('plugin/package.json', 'plugin/cordis.patch.yml', 'plugin/lib/index.js',
-                'plugin/lib/client.js', 'plugin/expander.py', 'VERSION.json', 'LICENSE')
+                'plugin/lib/client.js', 'plugin/py/expander.py', 'VERSION.json', 'LICENSE')
     miss = [r for r in REQUIRED if r not in wanted]
     if miss:
         die('包内缺少必需文件：' + ', '.join(miss))

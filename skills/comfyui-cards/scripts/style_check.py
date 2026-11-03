@@ -38,7 +38,7 @@ from PIL import Image, ImageFilter
 
 sys.stdout.reconfigure(encoding="utf-8")
 
-DELIV = r"D:\dsh\训练区\素材\捏Ta-二次元画风训练集-2026-10-11"
+DELIV = r"<工作区>\训练区\素材\捏Ta-二次元画风训练集-2026-10-11"
 REF = os.path.join(DELIV, r"dataset\10_nietastyle")   # 与 light_metric 用同一份素材基准
 
 # 各轴的容差下限。标准差为 0 的轴（例如所有素材高度一致的特征）需要兜底，

@@ -1,7 +1,7 @@
 ---
 name: "comfyui-cards"
-description: "dsh-comfyui-console 插件里角色卡与风格卡的完整机制与自训流程：两种卡存哪、字段（含 conditioning 身份控制）、特征锁与 scope、完整/换装插入、全量卡包导出与三档 API 语义、导入与 dest 路由、缺件下载、分发口径；以及从零训练角色 LoRA / 画风 LoRA / LLLite 身份控制的数据配比、打标口径、超参、评测取件、坑表与画风剥离。风格卡制作流水线（画风 LoRA 为工序的一环）、**角色卡硬规定：不得混入画风**（四条禁止 / 互斥表 / E1–E3 验收 / 配套超参）；出图侧生成参数与采样（底模、剂量、分辨率、种子对照、症状对照）；工作流与节点链（三份工作流、节点顺序、三种导入、改完必重建）；侧车 74 条 HTTP 接口（鉴权、分组、常用调用）。另有词库小卡片（胶囊词条）：卡片网格、分类与「全部」、胶囊中文备注、胶囊词性（正/负/自）与按词性插入、拖拽排序与换分类、`dsh-dict-cards` JSON 导入导出。用户提到角色卡、风格卡、特征锁、插入、导出卡、导入卡、.dslcard、.dslrecipe、卡包、LoRA 内嵌、LLLite 身份控制、训练 LoRA、数据集打标、caption、重训、画风剥离、facetraining、不得混入画风、画风串味、生成参数、剂量、同 seed 对照、工作流 JSON、节点顺序、侧车接口、8199、词库、词条、小卡片、胶囊、正负词性、拖拽排序、词库导出时才加载。"
-whenToUse: "要新建/修改/导入/导出/分发角色卡或风格卡——**此时第一动作是贴 §0.0 的三档表（A 提示词卡 / B + 角色 LoRA / C + 身份控制）与预计时间，等用户选档后才能动手；未选档前不建卡、不生成数据集、不开训**；要调特征锁与 scope；要配或排查 LLLite 身份控制；要从零训练或重训角色 LoRA、画风 LoRA、LLLite，要准备数据集与打标、定超参、评测挑选存档、做画风剥离；要给风格卡加画风 LoRA 或按两档完整度推进；要落实「角色卡不得混入画风」这条硬规定（打标禁词、素材口径、E1 换画风 LoRA / E2 删画风词 / E3 秩检查验收、16/8 与 1e-5 配套超参）；要定出图参数（底模、剂量 0.45–0.55、分辨率桶、同 seed 对照）或按症状反查原因；要改工作流 JSON、调节点顺序、用拖拽导入、判断要不要重建 client.js；要调侧车 8199 的接口（鉴权三件套、/version 自检、/lllite/resolve、/loras/import、/dir/write）；要判断一张角色卡/风格卡做完了没有（LoRA / cond 图 / LLLite 权重 / 三把锁齐不齐，A·B·C 哪一档）、按流水线顺序推进制作、或判断某次改动是否需要重建 client.js 或重启侧车；要核对卡包往返与验收命令时；要改词库小卡片（胶囊词性、拖拽、导入导出）或排查 `xxx is not defined` 时。"
+description: "Comfy Cards Next（dsh-comfy-cards-next，旧名 dsh-comfyui-console）插件里角色卡与风格卡的完整机制与自训流程：两种卡存哪、字段（含 conditioning 身份控制）、特征锁与 scope、完整/换装插入、全量卡包导出与三档 API 语义、导入与 dest 路由、缺件下载、分发口径；以及从零训练角色 LoRA / 画风 LoRA / LLLite 身份控制的数据配比、打标口径、超参、评测取件、坑表与画风剥离。风格卡制作流水线（画风 LoRA 为工序的一环）、**角色卡硬规定：不得混入画风**（四条禁止 / 互斥表 / E1–E3 验收 / 配套超参）；出图侧生成参数与采样（底模、剂量、分辨率、种子对照、症状对照）；工作流与节点链（三份工作流、节点顺序、三种导入、改完必重建）；侧车 74 条 HTTP 接口（鉴权、分组、常用调用）；**角色卡可迁移三件套**（`baseModels` 必须存 ComfyUI 清单全名带扩展名、`training` 训练记录、`regression` 回归锚）与训练收尾自动标注（`train.ps1 -Card` + `annotate_card.py`）。另有词库小卡片（胶囊词条）：卡片网格、分类与「全部」、胶囊中文备注、胶囊词性（正/负/自）与按词性插入、拖拽排序与换分类、`dsh-dict-cards` JSON 导入导出。用户提到角色卡、风格卡、特征锁、插入、导出卡、导入卡、.dslcard、.dslrecipe、卡包、LoRA 内嵌、LLLite 身份控制、训练 LoRA、数据集打标、caption、重训、画风剥离、facetraining、不得混入画风、画风串味、生成参数、剂量、同 seed 对照、工作流 JSON、节点顺序、侧车接口、8199、词库、词条、小卡片、胶囊、正负词性、拖拽排序、词库导出时才加载。**机器上还没装 ComfyUI 或没有任何底模时**，先按 §0.2 给「装 ComfyUI + 装 Anima 三件套」的下载与自检流程，再进制卡流程。"
+whenToUse: "要新建/修改/导入/导出/分发角色卡或风格卡——**此时第一动作是贴 §0.0 的三档表（A 提示词卡 / B + 角色 LoRA / C + 身份控制）与预计时间，等用户选档后才能动手；未选档前不建卡、不生成数据集、不开训**；**若这台机器还没装 ComfyUI（8188 不通）或没有任何底模（diffusion_models 与 checkpoints 都空），先按 §0.2 装 ComfyUI + Anima 三件套并自检，不要跳到制卡**；要调特征锁与 scope；要配或排查 LLLite 身份控制；要从零训练或重训角色 LoRA、画风 LoRA、LLLite，要准备数据集与打标、定超参、评测挑选存档、做画风剥离；要给风格卡加画风 LoRA 或按两档完整度推进；要落实「角色卡不得混入画风」这条硬规定（打标禁词、素材口径、E1 换画风 LoRA / E2 删画风词 / E3 秩检查验收、16/8 与 1e-5 配套超参）；要定出图参数（底模、剂量 0.45–0.55、分辨率桶、同 seed 对照）或按症状反查原因；要改工作流 JSON、调节点顺序、用拖拽导入、判断要不要重建 client.js；要调侧车 8199 的接口（鉴权三件套、/version 自检、/lllite/resolve、/loras/import、/dir/write）；要判断一张角色卡/风格卡做完了没有（LoRA / cond 图 / LLLite 权重 / 三把锁齐不齐，A·B·C 哪一档）、按流水线顺序推进制作、或判断某次改动是否需要重建 client.js 或重启侧车；要核对卡包往返与验收命令时；要改词库小卡片（胶囊词性、拖拽、导入导出）或排查 `xxx is not defined` 时。"
 ---
 
 ## 0.0 角色卡请求的第一动作（硬规定，2026-10-28 起）
@@ -63,34 +63,34 @@ whenToUse: "要新建/修改/导入/导出/分发角色卡或风格卡——**�
 
 | 本机路径 | 含义 | 换机器时替换成 |
 |---|---|---|
-| `D:\dshl\.dsh\` | **DSH_HOME**：插件、技能、profile 都在这 | 你的 `$DSH_HOME` |
-| `D:\dsh\` | 会话工作区（卡、数据集、脚本、日志、交付区） | 你的工作区根 |
-| `D:\dsh\本地绘画\角色卡` | 角色卡 / 风格卡的默认 `cardsDir` | 任意目录，写进 `config.json` 的 `cardsDir` |
-| `D:\paint\` | ComfyUI 便捷根（junction），模型在 `models\` | 你的 ComfyUI 根 |
-| `D:\paint\venv312\Scripts\python.exe` | 装了依赖的 Python（渲染 / 合成脚本用） | 你的 Python 3.10+ |
-| `D:\paint\runtime\python312\pythonw.exe` | 侧车用（无控制台）Python | 你的 `pythonw.exe` |
+| `<DSH目录>\.dsh\` | **DSH_HOME**：插件、技能、profile 都在这 | 你的 `$DSH_HOME` |
+| `<工作区>\` | 会话工作区（卡、数据集、脚本、日志、交付区） | 你的工作区根 |
+| `<工作区>\本地绘画\角色卡` | 角色卡 / 风格卡的默认 `cardsDir` | 任意目录，写进 `config.json` 的 `cardsDir` |
+| `<ComfyUI父目录>\` | ComfyUI 便捷根（junction），模型在 `models\` | 你的 ComfyUI 根 |
+| `<ComfyUI父目录>\venv312\Scripts\python.exe` | 装了依赖的 Python（渲染 / 合成脚本用） | 你的 Python 3.10+ |
+| `<ComfyUI父目录>\runtime\python312\pythonw.exe` | 侧车用（无控制台）Python | 你的 `pythonw.exe` |
 
 **正文命令块里的写法约定**（2026-10-22 按使用报告补）：为了不把占位符塞进每个代码块，命令块里保留作者机器的真实路径，读的时候按下表替换——
 **但叙述与判断一律用占位符**，两者不要混：
 
 | 占位符 | 指什么 | 作者机器实测值 |
 |---|---|---|
-| `$DSH_HOME` | DSH 主目录（插件、技能、profile） | `D:\dshl\.dsh` |
-| `$WORKSPACE` | 会话工作区（卡、数据集、脚本、日志、交付区） | `D:\dsh` |
-| `$COMFY_ROOT` | ComfyUI 根（`main.py` 所在层） | `D:\paint` |
-| `$PYTHON` | 装了 sd-scripts 依赖的 Python | `D:\paint\venv312\Scripts\python.exe` |
-| `$PYTHONW` | 侧车用的无控制台 Python | `D:\paint\runtime\python312\pythonw.exe` |
+| `$DSH_HOME` | DSH 主目录（插件、技能、profile） | `<DSH目录>\.dsh` |
+| `$WORKSPACE` | 会话工作区（卡、数据集、脚本、日志、交付区） | `<工作区>` |
+| `$COMFY_ROOT` | ComfyUI 根（`main.py` 所在层） | `<ComfyUI父目录>` |
+| `$PYTHON` | 装了 sd-scripts 依赖的 Python | `<ComfyUI父目录>\venv312\Scripts\python.exe` |
+| `$PYTHONW` | 侧车用的无控制台 Python | `<ComfyUI父目录>\runtime\python312\pythonw.exe` |
 
-**注意 `D:\dsh` 与 `D:\dshl\.dsh` 只差一个字母**，含义完全不同（工作区 vs DSH 主目录）。照文档排查时先确认自己在哪个根下。
+**注意 `<工作区>` 与 `<DSH目录>\.dsh` 只差一个字母**，含义完全不同（工作区 vs DSH 主目录）。照文档排查时先确认自己在哪个根下。
 
 **探路命令：动手前先跑这个，五个关键路径全 True 才继续**
 
 ```powershell
-$DSH_HOME  = 'D:\dshl\.dsh'
-$WORKSPACE = 'D:\dsh'
-$COMFY_ROOT= 'D:\paint'
-$PYTHON    = 'D:\paint\venv312\Scripts\python.exe'
-$PYTHONW   = 'D:\paint\runtime\python312\pythonw.exe'
+$DSH_HOME  = '<DSH目录>\.dsh'
+$WORKSPACE = '<工作区>'
+$COMFY_ROOT= '<ComfyUI父目录>'
+$PYTHON    = '<ComfyUI父目录>\venv312\Scripts\python.exe'
+$PYTHONW   = '<ComfyUI父目录>\runtime\python312\pythonw.exe'
 @(
   @{p = "$COMFY_ROOT\ComfyUI\main.py";                                  what = 'ComfyUI 主程序' },
   @{p = "$COMFY_ROOT\ComfyUI\custom_nodes";                             what = '自定义节点目录' },
@@ -98,15 +98,15 @@ $PYTHONW   = 'D:\paint\runtime\python312\pythonw.exe'
   @{p = "$COMFY_ROOT\sd-scripts\anima_train_network.py";                what = '角色/画风 LoRA 训练器（sd-scripts）' },
   @{p = "$PYTHON";                                                        what = '训练用 Python' },
   @{p = "$PYTHONW";                                                       what = '侧车 Python' },
-  @{p = "$DSH_HOME\plugins\dsh-comfyui-console\plugin\expander.py";   what = '插件侧车' }
+  @{p = "$DSH_HOME\plugins\dsh-comfy-cards-next\plugin\expander.py";   what = '插件侧车' }
 ) | ForEach-Object { "{0,-58} {1,-8} {2}" -f $_.p, (Test-Path $_.p), $_.what }
 ```
 
 约定：卡与数据集永远是**用户数据**，不放在插件目录里；插件升级不碰它们。
 
-# 角色卡 / 风格卡 机制与用法（dsh-comfyui-console）
+# 角色卡 / 风格卡 机制与用法（Comfy Cards Next / dsh-comfy-cards-next）
 
-插件目录 `D:\dshl\.dsh\plugins\dsh-comfyui-console\plugin\`：
+插件目录 `<DSH目录>\.dsh\plugins\dsh-comfy-cards-next\plugin\`（2026-11-03 起产品名 **Comfy Cards Next**，包名 `dsh-comfy-cards-next`；旧名 `dsh-comfyui-console` 已停用）：
 `lib\app.js`（源码，界面主体）、`lib\dict.js`、`lib\presets.js`、`lib\workflow.js`、
 `lib\client.js`（**浏览器只加载这个，由上面四份拼接生成**）、`expander.py`（侧车 :8199）、`config.json`、`lora来源.json`。
 
@@ -130,14 +130,79 @@ $PYTHONW   = 'D:\paint\runtime\python312\pythonw.exe'
 - **组件拆文件**：编辑弹层与输入行搬到 `lib/dictcard.js`（第五个拼接段），构建脚本 `SOURCES` 变成 `('dict','presets','workflow','dictcard','app')`。
 - 词库改动的**唯一**生效路径：改源码 → `build_client.py` → 刷新页面（`lib/dict.js` 一行没动，用户增量只进 `USER.frags`）。
 
+## 0.2 环境闸门：没装 ComfyUI / 没有任何底模时，先补环境再谈卡（2026-11-03 起）
+
+**这一节排在制卡流程之前。** 检测到环境缺件就直接给用户「装 ComfyUI + 装 Anima」两件事和下面的命令，不要只回一句「请先安装 ComfyUI」把活推回去，也不要硬着头皮往下写卡——没有底模写出来的 `baseModels` 一定是猜的，换机器必缺件。
+
+### 判据（三条，任一为空就先补环境）
+
+```powershell
+# 1) ComfyUI 在不在跑（最直接：8188 能否应答）
+Invoke-RestMethod http://127.0.0.1:8188/system_stats        # 连不上 = 没有 ComfyUI 跑着
+
+# 2) 有没有可选底模（两处都要看：UNet 型放 diffusion_models，整包放 checkpoints）
+Get-ChildItem $COMFY_ROOT\models\diffusion_models\*.safetensors -ErrorAction SilentlyContinue
+Get-ChildItem $COMFY_ROOT\models\checkpoints\*.safetensors    -ErrorAction SilentlyContinue
+
+# 3) Anima 链的三个配件
+Get-ChildItem $COMFY_ROOT\models\text_encoders\*.safetensors, $COMFY_ROOT\models\vae\*.safetensors
+```
+
+判读：**1 不通 = 没装 ComfyUI**；**2 两处都空 = 没有任何底模**；**2 有 SDXL 但 3 缺 qwen3/vae = 只有 SDXL，没有 Anima**。后两种都要走下面的安装。
+
+### 为什么推荐 Anima 而不是 SDXL
+
+| | Anima（本插件默认链） | SDXL |
+|---|---|---|
+| 提示词预算 | ≈ 6000 字符 | ≈ 600 字符 |
+| 本仓主卡（正词 1886 字符） | 完整生效 | **只剩开头，后半段被静默丢掉** |
+| 默认模型链 | `lib/app.js` 的 `MODEL_DEFAULTS` 就是 Anima | 要手动改 unet/clip/vae |
+| 8 GB 显存 | 1024×1408 可跑（本机 4070 Laptop 实测） | 可跑 |
+
+所以「从零装」默认推荐 **ComfyUI + Anima**；用户已有 SDXL 且只想试水，才退到 SDXL，并明确告知 600 字符的预算限制。
+
+### 装 ComfyUI（约 10 分钟）
+
+1. 下载 Windows 便携版（自带 Python 与依赖，解压即用）：[ComfyUI Portable for Windows](https://docs.comfy.org/installation/comfyui_portable_windows)；发布页 <https://github.com/comfyanonymous/ComfyUI/releases> 里的 `ComfyUI_windows_portable_nvidia.7z`。
+2. 解压到**不含空格和中文**的路径（如 `<ComfyUI父目录>\ComfyUI`），双击 `run_nvidia_gpu.bat`。
+3. 首次启动会自己装 torch，看到 `To see the GUI go to: http://127.0.0.1:8188` 才算起来（8 GB 卡冷启约 36 秒）。
+4. 回到插件：`powershell -File install.ps1 -ComfyRoot <ComfyUI父目录> -PythonExe <ComfyUI父目录>\venv312\Scripts\python.exe`，再重启侧车。
+
+### 装 Anima（三件套，合计约 5.3 GB）
+
+| 文件（**名字必须一模一样**） | 放到 | 体积 |
+|---|---|---|
+| `anima-aesthetic-v1.1.safetensors` | `models\diffusion_models\` | 3.90 GB |
+| `qwen_3_06b_base.safetensors` | `models\text_encoders\` | 1.11 GB |
+| `qwen_image_vae.safetensors` | `models\vae\` | 0.24 GB |
+
+来源：Hugging Face 仓库 [`circlestone-labs/Anima`](https://huggingface.co/circlestone-labs/Anima) 的 `split_files/`（`diffusion_models/`、`text_encoders/`、`vae/` 三个子目录各取一个）。同名文件以仓库里的 SHA256 为准，别用不知名转存。
+
+- **显存紧**用 FP8 量化版（如 [`Bedovyy/Anima-FP8`](https://huggingface.co/Bedovyy/Anima-FP8)），下载后仍要落成上面那个文件名，或在插件「底模」里改 unet 名。
+- **国内直连 HF 会超时**（本机实测 civitai / HF / hf-mirror 全超时）：优先走插件「在线模型」页，它的默认来源已经是 **modelscope**；或用代理下完再拷进目录。
+- 三个文件是**一条链**，缺一个都跑不出图：`UNETLoader` 读 diffusion_models，`CLIPLoader(type=qwen_image)` 读 text_encoders，`VAELoader` 读 vae。
+
+### 装完自检（出图成功才回到制卡流程）
+
+```powershell
+# 模型清单里要能看到文件（刷新 ComfyUI 页面右侧的 Refresh 之后）
+Invoke-RestMethod http://127.0.0.1:8188/object_info/UNETLoader | ConvertTo-Json -Depth 8 | Select-String 'anima-aesthetic'
+
+# 最小出图链：UNETLoader → CLIPLoader(qwen_image) → CLIPTextEncode ×2 → EmptyLatentImage
+#            → KSampler → VAEDecode → SaveImage
+# 768×768 / 12 步 / cfg 5 / euler·normal，成功时 history.status.status_str == "success"
+```
+
+出图成功 → 把 `baseModels` 写成 **ComfyUI 清单里的全名**（带 `.safetensors`），再继续 §0.0 的三档表。
+
 ## 1. 两种卡不是一回事
 
 | | 角色卡 | 风格卡 |
 |---|---|---|
-| 存放 | **磁盘为底稿**：`config.json` 的 `cardsDir`（当前 `D:\dsh\本地绘画\角色卡`），侧车 `/cards` 扫描；**0.7.47 起前端启动会拉一次并打 `fromDisk` 标记**（旧版只读 localStorage，见下） | **浏览器 localStorage**，换机器/换浏览器不带，只能靠导出导入搬家 |
+| 存放 | **磁盘为底稿**：`config.json` 的 `cardsDir`（当前 `<工作区>\本地绘画\角色卡`），侧车 `/cards` 扫描；**0.7.47 起前端启动会拉一次并打 `fromDisk` 标记**（旧版只读 localStorage，见下） | **浏览器 localStorage**，换机器/换浏览器不带，只能靠导出导入搬家 |
 | 扫描规则 | 只扫该目录**根层、不递归、只认 `.json`、按 mtime 升序**，面板按 `name` upsert ⇒ **后读到的盖前读到的** | 面板内状态，按 `name` + 分类去重覆盖 |
 | 回写 | 面板保存/改锁 → `/cards/write` 写回它来自的 `__file`（按 id 匹配那张） | 只落 localStorage |
-| 归集目录 | `D:\dsh\本地绘画\角色卡\` | `D:\dsh\本地绘画\画风\` |
+| 归集目录 | `<工作区>\本地绘画\角色卡\` | `<工作区>\本地绘画\画风\` |
 
 **同一目录里绝不要留两张同名卡**：会互相盖，表现为「锁丢了」「标签变少」。历史版挪进子目录（扫描不进子目录）。
 
@@ -156,19 +221,93 @@ $PYTHONW   = 'D:\paint\runtime\python312\pythonw.exe'
 
 ```jsonc
 {
-  "id": "<角色件>", "name": "<角色卡>", "schemaVersion": 3,
-  "tags": "<角色LoRA>, 1girl, solo, long black hair, …, small breasts, slim",
+  "id": "<身份LLLite>-v3", "name": "絉林", "schemaVersion": 3,
+  "tags": "julin, 1girl, solo, long black hair, …, small breasts, slim",
   "parts": { "trigger":[], "base":[], "hair":[], "eyes":[], "glasses":[], "outfit":[], "extra":[] },
   "neg": [ { "t": "adult, tall, dark skin" } ],       // 对象数组，n 是手写中文备注
   "lora": "<角色LoRA>.safetensors", "loraW": 0.9, "loraAlt": "",
   "cover": "", "note": "",
   "locks": [ { "name": "服饰特征锁", "tags": ["…"], "scope": "full" } ],
   "conditioning": { /* 见第 5 节 */ },
-  "packMode": "baked", "embeddedLoras": ["<角色LoRA>"]
+  "packMode": "baked", "embeddedLoras": ["<角色LoRA>"],
+
+  "baseModels": ["anima-aesthetic-v1.1.safetensors"],   // 全名，带扩展名，见 §2.1
+  "training": { /* 训练记录，见 §2.1 */ },
+  "regression": { "seeds": [20261101, 20261102] }      // 回归锚，见 §2.1
 }
 ```
 
 `parts` 决定「分解插入」按模块拼词；`tags` 是整卡插入的正向基准；`lora`/`loraW` 是角色 LoRA 与权重；`cover` 空串 = 无封面。落盘时 `_cards_write` 会跳过 `__` 开头字段与 `builtin`，`id` 以请求里的为准。
+
+## 2.1 可迁移三件套：底模 / 训练记录 / 回归锚（0.7.130 起）
+
+这三项决定「这张卡换台机器还能不能活」，缺了不影响出图，但侧车 `/cards/validate` 会报警。
+
+### baseModels：必须写 ComfyUI 清单里的全名，带扩展名
+
+```jsonc
+"baseModels": ["anima-aesthetic-v1.1.safetensors"]   // ✓
+"baseModels": ["anima-aesthetic-v1.1"]               // ✗ 侧车对不上，报「底模不在本机」
+```
+
+侧车是拿 `baseModels` 去对 `/object_info/UNETLoader` 的 `unet_name` 列表，**列表里是带 `.safetensors` 的文件名**。写成短名时文件明明在 `models\diffusion_models\` 下也永远匹配失败——这是 2026-11-01 踩过的坑，`annotate_card.py` 早期版本主动去扩展名导致的。
+
+`bmBadge` 显示时会自己去掉扩展名，所以**存全名不影响卡面观感**。
+
+### training：换机器能重建
+
+侧车只检查「有没有」，不校验结构。建议至少写进这些：
+
+```jsonc
+"training": {
+  "dataset": "角色-<角色>-2026-11-01", "images": 21, "repeats": 8,
+  "resolution": 1024, "steps": 600,
+  "networkDim": 32, "networkAlpha": 16,
+  "learningRate": "4e-5", "textEncoderLr": "2e-5",
+  "optimizer": "AdamW", "mixedPrecision": "fp16",
+  "lrScheduler": "cosine_with_restarts", "lrWarmupSteps": 80,
+  "minSnrGamma": 5, "noiseOffset": 0.03, "seed": 20261020,
+  "trigger": "svan", "baseModel": "anima-aesthetic-v1.1.safetensors",
+  "trainer": "sd-scripts anima_train_network.py",
+  "trainedAt": "2026-11-01", "chosen": "step600"
+}
+```
+
+**人工截断要写进 `note`**（例：「600 步为人工截断，原计划 800」），否则半年后看到 600 步会以为是训练失败。剔除文件也要记 `excluded` + `excludedReason`。
+
+### regression：结构极轻，只认 seeds
+
+`runRegression` 只读 `regression.seeds`，**其余参数全部取面板当前值**（底模 / LoRA / 宽高 / 步数 / CFG / 采样器）。所以：
+
+```jsonc
+"regression": { "seeds": [20261101, 20261102, 20261103, 20261104] }
+```
+
+面板里选好底模和 LoRA，点「跑回归锚」就能复现，不用重填参数。没有 `seeds` 时按钮会提示「这张卡没有 regression.seeds」。出图前缀用 `d.id`——**`id` 与 `name` 不一致时，按改后的名字找不到图**（见 §9 坑表）。
+
+### 收尾：训练成功自动标注
+
+`train.ps1` 加 `-Card` 即可，训练成功后自动把本次 `-Ckpt` 的**文件名全名**写进该卡 `baseModels`（追加去重）：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\train.ps1 `
+  -DatasetConfig ... -OutDir ... -Name svan -Steps 600 -Card <角色>
+```
+
+- 不传 `-Card` 完全跳过，现有调用不受影响。
+- 训练失败不标注（`exit $code` 在标注之前）；标注失败只给 WARN，不影响已落盘权重。
+- `-Card` 支持文件名（含/不含 `.json`）、卡内 `name`、卡内 `id` 三种匹配；重名时停下报候选，不乱写。
+- `-CardRoot` 默认由字符码拼出（`本地绘画\角色卡`），保持 `train.ps1` 纯 ASCII——PS 5.1 按 GBK 解码无 BOM 的 `.ps1`，中文硬编码会乱码。
+
+单独补标（不训练）：
+
+```powershell
+& $PYTHON scripts\annotate_card.py --card <角色> --base anima-aesthetic-v1.1.safetensors
+& $PYTHON scripts\annotate_card.py --card <角色> --base X.safetensors --replace   # 覆盖而非追加
+& $PYTHON scripts\annotate_card.py --card <角色> --base X.safetensors --dry-run   # 只看不写
+```
+
+写盘 UTF-8 无 BOM，先写 `.tmp-annotate` 再 `os.replace`；重复跑报「已存在，未改动」。
 
 ## 3. 特征锁 = 禁词锁
 
@@ -177,13 +316,13 @@ $PYTHONW   = 'D:\paint\runtime\python312\pythonw.exe'
   - `full`：只在**完整插入**时生效；
   - `swap`：只在**换装插入**那一刻生效；
   - `both`：两者都生效。
-- **现役三锁**：<角色卡>特征锁（23 词，both）、服饰特征锁（97 词，full）、体型特征锁（18 词，both）。
-- **裙长闸**（在服饰锁内，7 词）：`knee-length skirt, midi skirt, ankle length skirt, floor-length skirt, low hem, microskirt, micro mini skirt`。基准 = 短黑百褶裙、裙摆大腿中段；正向只写 `black skirt`；验收与基准图 `捏Ta-成稿-<角色卡>-站姿全身-1024x1496.png` 并排比。
+- **现役三锁**：絉林特征锁（23 词，both）、服饰特征锁（97 词，full）、体型特征锁（18 词，both）。
+- **裙长闸**（在服饰锁内，7 词）：`knee-length skirt, midi skirt, ankle length skirt, floor-length skirt, low hem, microskirt, micro mini skirt`。基准 = 短黑百褶裙、裙摆大腿中段；正向只写 `black skirt`；验收与基准图 `捏Ta-成稿-絉林-站姿全身-1024x1496.png` 并排比。
 - 113 词表是盯着用的既有资产：**只追加、不重写、不删原词**。
 
 ## 4. 两种插入
 
-- **完整插入**：卡的正向 `tags` + `parts` 全上，服装按卡来，`full`/`both` 锁生效 → 标准<角色卡>。
+- **完整插入**：卡的正向 `tags` + `parts` 全上，服装按卡来，`full`/`both` 锁生效 → 标准絉林。
 - **换装插入**：只上角色部分，服装词自己写，`swap`/`both` 锁生效 → 换装不被服饰锁抢词（裙长闸此时不拦）。
 - 两张卡的统计信息（条数/锁数/负向数/LoRA/LLLite）在**编辑器**里看，卡面不再显示。
 
@@ -192,7 +331,7 @@ $PYTHONW   = 'D:\paint\runtime\python312\pythonw.exe'
 角色卡的 `conditioning` 与 `lora` 同构：选中卡即自动解析出「控制图 + 权重档 + 强度」，由图上的三个原生节点消费：
 
 ```
-UNETLoader(anima-aesthetic-v1.1) → LoraLoader(角色 LoRA) → ModelPatchLoader(<身份LLLite-v2>/v3-400)
+UNETLoader(anima-aesthetic-v1.1) → LoraLoader(角色 LoRA) → ModelPatchLoader(<身份LLLite>-v2/v3-400)
    → AnimaLLLiteApply(LoadImage 控制图) → LoraLoader(风格 LoRA) → KSampler
 CLIPLoader(qwen_3_06b_base, type=qwen_image) + VAELoader(qwen_image_vae)
 ```
@@ -207,7 +346,7 @@ CLIPLoader(qwen_3_06b_base, type=qwen_image) + VAELoader(qwen_image_vae)
                  "promptAdd": "close-up, upper body", "negAdd": "",
                  "image": { "name": "face.png", "b64": "…", "sha256": "…", "w": 1024, "h": 1408 } }
   },
-  "weights": { "v2-400": { "name": "<身份LLLite-v2>.safetensors", "sha256": "b2eb…", "bytes": 31457280 } }
+  "weights": { "v2-400": { "name": "<身份LLLite>-v2-400.safetensors", "sha256": "b2eb…", "bytes": 31457280 } }
 }
 ```
 
@@ -242,7 +381,7 @@ CLIPLoader(qwen_3_06b_base, type=qwen_image) + VAELoader(qwen_image_vae)
 
 1. **发 `.dslcard` 全量卡包**，不要发 `.json` 单卡、也不要发 `.dslrecipe`：自训 LoRA 在对方机器上无处可取。
 2. 对方还需要：
-   - **底模三件套**：`<底模>.safetensors`（UNETLoader）、`qwen_3_06b_base.safetensors`（CLIPLoader, type=`qwen_image`）、`qwen_image_vae.safetensors`。容器只写 `baseModel` 元数据。
+   - **底模三件套**：`anima-aesthetic-v1.1.safetensors`（UNETLoader）、`qwen_3_06b_base.safetensors`（CLIPLoader, type=`qwen_image`）、`qwen_image_vae.safetensors`。容器只写 `baseModel` 元数据。
    - **同版本或更新的插件**：锁解释器、词典、`conditioning` 支持、面板 UI 全在 `client.js`；老版本能导入卡但**静默忽略 locks 与 conditioning**。
 3. 风格卡只在 localStorage —— 让对方拿到的唯一途径就是导出卡包。
 
@@ -262,7 +401,7 @@ CLIPLoader(qwen_3_06b_base, type=qwen_image) + VAELoader(qwen_image_vae)
 | 裙子越出越长 | 正向写了长度修饰词，或长度闸被挪出服饰锁 | 正向只写 `black skirt`，闸词留在服饰锁 |
 | 改了 `app.js` 界面没变 | 浏览器只加载 `lib\client.js` | `python plugin\tools\build_client.py` 重建，刷新；仍不变就重启 `dsh web`（模块按进程缓存） |
 | 侧车改动不生效 | `expander.py` 由 8199 那个 pythonw 进程加载 | 停 8199 的 PID 后重新拉起（见第 10 节） |
-| 词库卡片一渲染就 `capNoteOf is not defined` | 助手写在 `app.js` 顶格，但实际落在 `genTab` 的嵌套作用域（该文件从 `condForSave` 起有一层历史错层），模块级的 `dictcard.js` 看不见 | 把用到的符号提到模块级（`allLib()` 之后）；跑 `日志\<工作区>\日志\<探针脚本>.js` 验证 |
+| 词库卡片一渲染就 `capNoteOf is not defined` | 助手写在 `app.js` 顶格，但实际落在 `genTab` 的嵌套作用域（该文件从 `condForSave` 起有一层历史错层），模块级的 `dictcard.js` 看不见 | 把用到的符号提到模块级（`allLib()` 之后）；跑 `日志\probe-client-scope.js` 验证 |
 | 新建卡报 `dictCardTargetCat is not defined` | 同上，`PR_HOME_CAT` + `dictCardTargetCat` 一起在嵌套作用域 | 两个一起提到模块级 |
 | 拖拽调好的顺序换机器就没了 | 顺序只在 `USER.order[分类]`（localStorage），导出 JSON 不含它 | 关键顺序靠分类拆分；要带走就重排一次 |
 | 导入别人的词库包后词性没了 | 老包只有 `cards[].polarity`；`tagPol` 是 0.7.44+ 才有的字段 | 用新版导出的包（导入仍兼容老包） |
@@ -270,7 +409,15 @@ CLIPLoader(qwen_3_06b_base, type=qwen_image) + VAELoader(qwen_image_vae)
 | 点「导入」没反应、拖 .json 也没反应（Electron / 桌面版） | `display:none` 的 `<input type=file>` 走 label 代理失效；拖拽拿不到 `dataTransfer.files`（主进程没转发） | 0.7.47 起 input 改成透明 overlay 覆盖按钮，并加了「粘贴 JSON」兜底；导入失败会有「收到文件：…」提示 |
 | 按技能 §11.9 找不到 `anima_train_network.py` 等训练脚本 | 技能旧版没写脚本出处（只写了作者机器路径） | 见 §11「获取方式」：全部来自 kohya-ss/sd-scripts 上游，`git clone` 后即得 |
 | 按技能找 `train.ps1` / `style_check.py` / `make-lora-sheet*.py` 找不到 | 这些是作者本地脚本，旧版没随技能分发（2026-10-22 报告问题 1 的同类） | 0.7.47 起随技能放在 `$DSH_HOME\skills\comfyui-cards\scripts\`（`scripts\README.md` 给换机命令） |
-| `train.ps1` 一跑就 `required file missing: D:\paint\...` | 参数默认值指向作者机器 | 显式传 `-Ckpt -Vae -Qwen3 -VPy -Trainer`（README 有整段示例） |
+| `train.ps1` 一跑就 `required file missing: <ComfyUI父目录>\...` | 参数默认值指向作者机器 | 显式传 `-Ckpt -Vae -Qwen3 -VPy -Trainer`（README 有整段示例） |
+| 侧车报「底模不在本机」，但文件确实在 `models\diffusion_models\` | `baseModels` 存了短名（去扩展名），侧车对的是 `/object_info` 清单全名 | 改成带 `.safetensors` 的全名；`annotate_card.py` 0.7.130 起已保留扩展名（见 §2.1） |
+| 编辑器「底模」输入框永远是空的，一保存底模就没了 | `editCard` 组装 `cardEdit` 时没带 `baseModels` / `baseModelsText` / `training` / `regression` | 0.7.130 已修；老版本只能在保存前手填，否则每存必清空 |
+| 底模填了又变空，但编辑器里明明有值 | `_cardBm` 判断写的是「`baseModelsText` 非 null 就优先」，空字符串把已有数组吃掉了 | 0.7.130 改成「非空文本才优先」（`txt \|\| arr`） |
+| 生成页提示词输入框每敲一个字就失焦，必须重新点 | `genTab` / `styleCardTab` / `cardTab` 是 `Console` 内的**嵌套函数**，`h(genTab)` 每次渲染都是新组件类型 → React 卸载重建整棵子树。`key` 拦不住，key 只能区分兄弟，不能对抗 type 变化 | 改成**内联调用** `genTab()`；前提是那三个函数**零 hooks**，有 hooks 会 #300 白屏。`libTab` / `presetTab` 是模块级且有 hooks，仍用 `h()` |
+| 卡的 `parts.proportion` 填了比例词，出图却完全不生效 | `proportion` 原本是**风格卡**专属段，角色卡 `CARD_ORDER` 里没有它，`joinCardParts` 遍历时直接跳过 | 0.7.130 起 `CARD_ORDER` / `CF_ORDER` 都含 `proportion`，`joinCardParts` / `cfTagsOf` 走 `proportionTags` 展开（兼容老卡数组与 `{preset,custom}`） |
+| `build_client.py` 报「client.js 分段标记不对：……（应为 [...,'online_models','app']）」 | `SOURCES` 漏了新源码模块（`randomlib` 曾被漏掉），断言失败 | 把缺的模块名按实际拼接顺序补进 `build_client.py` 的 `SOURCES` |
+| 给 `train.ps1` 加中文默认路径后训练直接乱码 | PS 5.1 按 GBK 解码无 BOM 的 `.ps1`，文件必须是**纯 ASCII** | 中文路径用字符码拼：`'<工作区>\' + [char]0x672C + ...`；改完查非 ASCII 字节数为 0 |
+| `id` 与 `name` 不一致，跑完回归锚按名字找不到图 | `runRegression` 的出图前缀用 `d.id` | 统一 `id` 与 `name`，或按 `id` 去找图 |
 
 ## 10. 验收与命令
 
@@ -283,13 +430,20 @@ Invoke-RestMethod http://127.0.0.1:8199/cards | ConvertTo-Json -Depth 4 -Compres
 #   POST /lllite/resolve  {dir, card, framing, canvas:[1024,1408]}
 
 # 重建浏览器包（五份源码 dict/presets/workflow/dictcard/app → client.js；改完任一源码必做）
-& D:\paint\venv312\Scripts\python.exe D:\dshl\.dsh\plugins\dsh-comfyui-console\plugin\tools\build_client.py
-& D:\paint\venv312\Scripts\python.exe D:\dshl\.dsh\plugins\dsh-comfyui-console\plugin\tools\build_client.py --check   # 只比对
+& <ComfyUI父目录>\venv312\Scripts\python.exe <DSH目录>\.dsh\plugins\dsh-comfy-cards-next\plugin\tools\build_client.py
+& <ComfyUI父目录>\venv312\Scripts\python.exe <DSH目录>\.dsh\plugins\dsh-comfy-cards-next\plugin\tools\build_client.py --check   # 只比对
 
+# 卡的可迁移性校验（底模 / training / regression 三项；ComfyUI 起着才真查底模）
+#   POST /cards/validate  {card:{baseModels:[...], training:{...}, regression:{...}}}
+#   返回 missingBaseModels / presentBaseModels / notes
+
+# 训练结束后补标底模（只想看不写就加 --dry-run）
+& <ComfyUI父目录>\venv312\Scripts\python.exe <DSH目录>\.dsh\skills\comfyui-cards\scripts\annotate_card.py `
+  --card <角色> --base anima-aesthetic-v1.1.safetensors
 # 重启侧车
 Get-NetTCPConnection -LocalPort 8199 -State Listen | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force }
-Start-Process D:\paint\runtime\python312\pythonw.exe -ArgumentList 'expander.py','--port','8199' `
-  -WorkingDirectory D:\dshl\.dsh\plugins\dsh-comfyui-console\plugin -WindowStyle Hidden
+Start-Process <ComfyUI父目录>\runtime\python312\pythonw.exe -ArgumentList 'expander.py','--port','8199' `
+  -WorkingDirectory <DSH目录>\.dsh\plugins\dsh-comfy-cards-next\plugin -WindowStyle Hidden
 ```
 
 - 硬验收 = 打包/解包往返：`POST /stylecards/pack`（元数据在 `X-Card-Meta`）→ `POST /stylecards/unpack`（二进制 body）→ 比对 `tags`/`parts`/`neg`/`note`/`locks`/`conditioning` 逐项相等，且 `_cond/assets.json` 的 key 与卡里 `presets[*].asset` 对得上。
@@ -306,7 +460,7 @@ Start-Process D:\paint\runtime\python312\pythonw.exe -ArgumentList 'expander.py'
 | 1 | 图集与打标 | 30–60 张同角色图 + caption（trigger + 只写变化项） | — | 去重、1024 桶、身份词不进 caption | §12 |
 | 2 | 角色 LoRA | `xxx_comfyui.safetensors`（ANIMA→ComfyUI 转换后） | `lora` / `loraAlt` / `loraW`(0.7–0.9) | 同 seed 换词脸不漂；`loraAlt` 留旧件可回滚 | §12 |
 | 3 | 控制图（cond assets） | 正脸近景 / 全身正面 canny 线条稿，登记 `_cond/assets.json` | `conditioning.presets.*.asset` | 面板「导入控制图库」后能选中 | §5 |
-| 4 | LLLite 身份控制 | `xxx-<身份LLLite-v2>` / `v3-400.safetensors`（各 29.6 MB）+ `lllite-index.json` 登记 | `conditioning.presets.*.weights` / `strength` / `preprocess` | 目标动作能被条件图拽住，乘数守 1.0 | §14 |
+| 4 | LLLite 身份控制 | `xxx-lllite-v2-400` / `v3-400.safetensors`（各 29.6 MB）+ `lllite-index.json` 登记 | `conditioning.presets.*.weights` / `strength` / `preprocess` | 目标动作能被条件图拽住，乘数守 1.0 | §14 |
 | 5 | 特征锁（禁词锁） | 3 把：特征锁(both) / 服饰锁(full) / 体型锁(both) | `locks` | **对着已训件的实际漂移项写**，不照抄别人的锁 | §3 |
 | 0 | 卡本体 | `parts`(≥6 段) / `neg`(≥40) / `tags` / `cover` / `id` | 同左 | 导入面板能插、能出图 | §2 |
 
@@ -318,7 +472,7 @@ Start-Process D:\paint\runtime\python312\pythonw.exe -ArgumentList 'expander.py'
 | **B + LoRA** | A + `lora` 非空（`conditioning.enabled` 仍可 false） | 身份稳住，姿态/比例自由 | 大多数日常出图停在这档 |
 | **C + 身份控制** | B + cond 图 + LLLite 权重 + `presets`≥3 档（`enabled=true`） | 姿态/角度/构图被硬约束 | 需要固定动作或角度时才做 |
 
-**注意**：`conditioning.enabled` 可以是 `false` 而卡仍算完整——现役<角色卡>卡就是 `enabled=false`、
+**注意**：`conditioning.enabled` 可以是 `false` 而卡仍算完整——现役絉林卡就是 `enabled=false`、
 presets 6 档待命。**判据是"文件与登记齐不齐"，不是"开关开不开"**。
 
 ### 11.1 工序顺序与依赖（不能乱）
@@ -369,18 +523,18 @@ $c = (Get-Content "$CARD_DIR\<名>.json" -Raw | ConvertFrom-Json).cards[0]
 |---|---|---|---|---|
 | 角色 LoRA | 身份（脸/发/饰物）+ **比例** | `<角色LoRA-v2>.safetensors`（比例版 v2） | 87.6 MB | 0.7–0.8 |
 | 画风 LoRA | 笔触/媒介/上色 | `<画风LoRA>.safetensors` | 175.1 MB | 0.45–0.55 |
-| LLLite | 构图/姿态/角度硬约束 | `<身份LLLite-v2>` / `v3-400.safetensors` | 29.6 MB | 条件乘数 1.0 |
+| LLLite | 构图/姿态/角度硬约束 | `<身份LLLite>-v2-400` / `v3-400.safetensors` | 29.6 MB | 条件乘数 1.0 |
 
 旧件保留可回滚：`<角色LoRA>`（角色 v1，dim32）/ `<画风LoRA>`（画风）/ `<角色LoRA-v2>`（角色 v2）。
 
 **工具链**
 
 ```
-训练器   D:\paint\sd-scripts\
+训练器   <ComfyUI父目录>\sd-scripts\
            anima_train_network.py              角色/画风 LoRA
            anima_train_control_net_lllite.py   LLLite（28 模块 / 7,758,752 参数）
            networks\convert_anima_lora_to_comfy.py   ANIMA → ComfyUI 格式
-解释器   D:\paint\venv312\Scripts\python.exe
+解释器   <ComfyUI父目录>\venv312\Scripts\python.exe
 启动器   $DSH_HOME\skills\comfyui-cards\scripts\train.ps1   （随技能分发，参数化，见下）
 底模     anima-base-v1.0（画风） / anima-aesthetic-v1.1（角色）
          + qwen_3_06b_base.safetensors（TE） + qwen_image_vae.safetensors
@@ -408,7 +562,8 @@ $c = (Get-Content "$CARD_DIR\<名>.json" -Raw | ConvertFrom-Json).cards[0]
 
 | 文件 | 字节 | sha256 前 12 | 说明 |
 |---|---|---|---|
-| `train.ps1` | 6,833 | `487bda616421` | 参数化启动器；纯 ASCII 无 BOM；默认值指向作者机器，换机必显式传 `-Ckpt -Vae -Qwen3 -VPy -Trainer`，缺一个就在开跑前 `Fail` 报 `required file missing` |
+| `train.ps1` | 6,833 | `487bda616421` | 参数化启动器；纯 ASCII 无 BOM；默认值指向作者机器，换机必显式传 `-Ckpt -Vae -Qwen3 -VPy -Trainer`，缺一个就在开跑
+| `annotate_card.py` | 7,093 | `44ba2a39da6f` | 训练收尾把本次底模写进卡的 `baseModels`（追加去重，带扩展名全名）；`train.ps1 -Card` 自动调用，也可单独跑；UTF-8 无 BOM，--dry-run 只看不写前 `Fail` 报 `required file missing` |
 | `dataset-character.toml` | 334 | — | 角色 / 画风数据集模板（改 `image_dir` 即用） |
 | `dataset-lllite.toml` | 378 | — | LLLite 模板（`image_dir` + `conditioning_data_dir` 成对） |
 | `make-lora-sheet.py` | 656 | `f45da6f5cff7` | 对比带拼图（裁切版） |
@@ -419,13 +574,13 @@ $c = (Get-Content "$CARD_DIR\<名>.json" -Raw | ConvertFrom-Json).cards[0]
 
 | 用途 | 放在 ComfyUI 的哪个目录 | 文件名 | 大小 | sha256 前 16 |
 |---|---|---|---|---|
-| 角色底模（也用于训练 ckpt） | `models\diffusion_models` | `<底模>.safetensors` | 4,182,230,656 B | `3C1868387A3A1FF5` |
+| 角色底模（也用于训练 ckpt） | `models\diffusion_models` | `anima-aesthetic-v1.1.safetensors` | 4,182,230,656 B | `3C1868387A3A1FF5` |
 | 文本编码器 | `models\text_encoders` | `qwen_3_06b_base.safetensors` | 1,192,135,096 B | `CD2A512003E2F9F3` |
 | VAE | `models\vae` | `qwen_image_vae.safetensors` | 253,806,246 B | `A70580F0213E6796` |
 
 模型本体按模型方仓的说明取（Anima：`circlestone-labs/Anima`；Qwen-Image 系：`Comfy-Org/Qwen-Image_ComfyUI` 的 `split_files`）。**这两个链接 2026-10-22 没能联网核对**（本机访问 HF 超时），所以以上表的大小 / sha 为准——下完先对一遍再训。
 
-`train.ps1` 关键参数（默认值）：`-Ckpt/-Vae/-Qwen3`、`-DatasetConfig`、`-OutDir`（必填）、`-Name`、
+`train.ps1` 关键参数（默认值）：`-Ckpt/-Vae/-Qwen3`、`-DatasetConfig`、`-OutDir`（必填）、`-Name`、`-Card`（训练成功后自动标注卡底模，见 §2.1）、`-CardRoot`（卡目录，默认字符码拼出）、
 `-Dim 32 -Alpha 16`、`-Reso 768`、`-Steps 1200 -SaveEvery 100 -SaveLast 400`、`-Lr 4e-5 -TeLr 2e-5`、
 `-Seed 20261020`、`-GradAcc 2`、`-BucketMax 1024`、`-MinSnr 5 -NoiseOffset 0.03`、`-ResumeFrom`、`-Smoke`。
 
@@ -450,7 +605,7 @@ max_bucket_reso = 1024
 resolution = 1024
 batch_size = 1
   [[datasets.subsets]]
-  image_dir = "<工作区>/素材区/角色外观-<角色卡>-比例版-2026-10-19"
+  image_dir = "D:/dsh/素材区/角色-絉林-比例版-2026-10-19"
   num_repeats = 4
   caption_dropout_rate = 0.05
 ```
@@ -523,7 +678,7 @@ Test-Path "$COMFY_ROOT\models\loras\<卡里的 lora 值>"
 
 > 前置：训练脚本与依赖按 §11.9「获取方式」备好（全部来自 kohya-ss/sd-scripts 上游，无需私有件）；下面命令里的路径按 §0 换成你的。
 
-**1) 定一个比例基准图**。只能有一张，manual 的（`捏Ta-成稿-<角色卡>-站姿全身-1024x1496.png`：八头身、长腿、小头、细五官）。所有"比例对不对"的争论都回到它与它的并排图。
+**1) 定一个比例基准图**。只能有一张，manual 的（`捏Ta-成稿-絉林-站姿全身-1024x1496.png`：八头身、长腿、小头、细五官）。所有"比例对不对"的争论都回到它与它的并排图。
 
 **2) 凑数据（23 张就够）**
 
@@ -539,7 +694,7 @@ Test-Path "$COMFY_ROOT\models\loras\<卡里的 lora 值>"
 
 ```
 # 身份 + 服装（逐字固定）
-<角色LoRA>, 1girl, solo, long black hair, blue eyes, glasses, maple leaf hair ornament,
+julin, 1girl, solo, long black hair, blue eyes, glasses, maple leaf hair ornament,
 beige trench coat, white shirt, blue necktie, black pleated skirt, above knee, white socks, black mary janes,
 # 取景（逐图不同）
 full body, feet visible
@@ -564,9 +719,9 @@ delicate facial features, elongated silhouette, detailed face
 **6) 取件 + 转格式 + 挂卡**
 
 ```powershell
-$env:PYTHONPATH='D:\paint\sd-scripts'
-& D:\paint\venv312\Scripts\python.exe D:\paint\sd-scripts\networks\convert_anima_lora_to_comfy.py `
-    <out>\<比例LoRA>-v2-000006.safetensors D:\paint\ComfyUI\models\loras\<角色LoRA-v2>.safetensors
+$env:PYTHONPATH='<ComfyUI父目录>\sd-scripts'
+& <ComfyUI父目录>\venv312\Scripts\python.exe <ComfyUI父目录>\sd-scripts\networks\convert_anima_lora_to_comfy.py `
+    <out>\<比例LoRA>-v2-000006.safetensors <ComfyUI父目录>\ComfyUI\models\loras\<角色LoRA-v2>.safetensors
 ```
 
 转完**重启 ComfyUI**（启动时扫 loras 并缓存），卡里 `lora` 字段写文件名**带 `.safetensors`**。
@@ -622,7 +777,7 @@ $env:PYTHONPATH='D:\paint\sd-scripts'
 
 ### 12A.6 同义词过载：同一属性超过三个词必然走极端
 
-**实测（2026-10-29，anima-aesthetic-v1.1 + <画风卡> styleA 0.38）**。目标发色取自参考图实测值 `#6C90C8`（低饱和灰蓝，明度 65%）：
+**实测（2026-10-29，anima-aesthetic-v1.1 + 絉彩绘 styleA 0.38）**。目标发色取自参考图实测值 `#6C90C8`（低饱和灰蓝，明度 65%）：
 
 | 正向发色词 | 实测出图色 | 明度 | 判定 |
 |---|---|---|---|
@@ -734,7 +889,7 @@ num_repeats = 14          # 特写是崩得最厉害的一档，重复给足
 ## 15. 评测与取件（三件套共用）
 
 - **口径固定**：同 seed（20261014 / 20261018）、同提示词、同分辨率、同步数 CFG，**带与不带触发词各一组**，
-  **必须有一组"零 LoRA 底图"对照**——没有零对照的结论一律不成立（曾因此误判"<画风LoRA> 自带角色身份"，后作废）。
+  **必须有一组"零 LoRA 底图"对照**——没有零对照的结论一律不成立（曾因此误判"julinst 自带角色身份"，后作废）。
 - **强度扫描**：0.3 / 0.5 / 0.7 + 目标档；epoch 取 2–3 个候选（e2/e5/e10）同场比。
 - **拼图看完整画幅**（`$DSH_HOME\skills\comfyui-cards\scripts\make-lora-sheet-full.py`；裁切版是同一个目录下的 `make-lora-sheet.py`），不要裁切后再比——裁切会掩盖取景漂移。
   用法：`python make-lora-sheet-full.py out.png "e2=a.png" "e10=b.png"`
@@ -752,9 +907,9 @@ num_repeats = 14          # 特写是崩得最厉害的一档，重复给足
 | 后台启动的训练进程半路没了 | `Start-Process -RedirectStandardOutput` 的子进程活不过父进程；作业结束整树回收 | 长任务放普通调用里脱离启动，或让调用本身即任务 |
 | 日志几分钟不动，以为挂了 | 重定向到文件的 tqdm 分块刷盘 | 判活看三者：作业状态 + 进程资源 + 产物落盘 |
 | ComfyUI 报 `value_not_in_list` | 启动后才放进 `models\loras` 的 LoRA 不被识别（启动时扫描缓存） | 重启 ComfyUI；`lora_name` 带 `.safetensors` |
-| `convert_anima_lora_to_comfy.py` 报 `library` 找不到 | 脚本要在仓库根目录、`library` 在 `sys.path` | `$env:PYTHONPATH='D:\paint\sd-scripts'` 再跑 |
+| `convert_anima_lora_to_comfy.py` 报 `library` 找不到 | 脚本要在仓库根目录、`library` 在 `sys.path` | `$env:PYTHONPATH='<ComfyUI父目录>\sd-scripts'` 再跑 |
 | exit=1 但训练其实成功了 | PS 把 tqdm 的 stderr 当 `NativeCommandError` | 看产物与 `avr_loss`，别只看退出码；用 `Tee-Object` 收日志 |
-| toml 跑起来 0 张图 | `image_dir` 是绝对路径，目录被归档搬走 | 开训前 `Test-Path`；数据集现在放 `D:\dsh\素材区\` |
+| toml 跑起来 0 张图 | `image_dir` 是绝对路径，目录被归档搬走 | 开训前 `Test-Path`；数据集现在放 `<工作区>\素材区\` |
 | 画风件一挂就变特写 | 训练集取景偏斜 + caption 没标取景 | 补统一取景轴 + 提高分辨率重训（v1→v2 的修法） |
 | 画风件把裙子款式一起换掉 | 风格 caption 写了服装/身份词 | 风格件只写媒介与画风，服装词归角色件 |
 | 自训学不会某种媒介（纸纹/干笔） | 底模缺该先验，不是步数不够 | 换有先验的底模或叠参考件；别加步数硬怼 |
@@ -904,16 +1059,16 @@ LoRA 的 840 张量按模块可分三段，用途不同：
 
 ```powershell
 # 模块级可见性（假 loader 跑真 bundle，打印 typeof；全 function/object 才算过）
-node D:\dsh\日志\<工作区>\日志\<探针脚本>.js D:\dshl\.dsh\plugins\dsh-comfyui-console\plugin\lib\client.js
+node <工作区>\日志\probe-client-scope.js <DSH目录>\.dsh\plugins\dsh-comfy-cards-next\plugin\lib\client.js
 
 # 目录绑定：三个 kind 都要 200，并返回各自目录
 Invoke-RestMethod 'http://127.0.0.1:8199/dir/list?kind=dict' -Headers @{ 'X-Console-Client' = '1' } | Select-Object ok, count, dir
 
 # 一卡一文件自检：每个 json 里只有一张卡
-(Get-ChildItem 'D:\dsh\本地绘画\词库' -Filter *.json | ForEach-Object { (Get-Content $_.FullName -Raw -Encoding UTF8 | ConvertFrom-Json).dictCards.Count }) -join ','
+(Get-ChildItem '<工作区>\本地绘画\词库' -Filter *.json | ForEach-Object { (Get-Content $_.FullName -Raw -Encoding UTF8 | ConvertFrom-Json).dictCards.Count }) -join ','
 
 # 组件渲染冒烟（编辑已有卡 / 新建卡 / 带词性输入行 / 三键）
-node D:\dsh\日志\<工作区>\日志\<冒烟脚本>.js  D:\dshl\.dsh\plugins\dsh-comfyui-console\plugin\lib\client.js
+node <工作区>\日志\smoke-dictcard.js  <DSH目录>\.dsh\plugins\dsh-comfy-cards-next\plugin\lib\client.js
 ```
 
 两条都过 + `check_contract.py` 15 项 PASS，再往生产目录同步。
@@ -940,13 +1095,13 @@ node D:\dsh\日志\<工作区>\日志\<冒烟脚本>.js  D:\dshl\.dsh\plugins\ds
 
 | 位置 | 内容 | 性质 |
 |---|---|---|
-| `install.ps1` / `sidecar_state.py` / `lib/index.js` | `E:/D:/C:/F:\ComfyUI_windows_portable`、`~/Desktop/…`、`D:\paint\venv312` | **探测候选**，命中才用；都不命中就报错要求填 `config.json` |
+| `install.ps1` / `sidecar_state.py` / `lib/index.js` | `E:/D:/C:/F:\ComfyUI_windows_portable`、`~/Desktop/…`、`<ComfyUI父目录>\venv312` | **探测候选**，命中才用；都不命中就报错要求填 `config.json` |
 | `sidecar_routes.py` | `127.0.0.1:8083/11434/1234/8080/8000/5001/5000/8001/8081/8090` | 本地 LLM 端口探测清单 |
-| `sidecar_comfy.py` / `sidecar_config.py` / `sidecar_state.py` 的 docstring | `D:\paint\…` | 注释里讲历史原因，不参与逻辑 |
+| `sidecar_comfy.py` / `sidecar_config.py` / `sidecar_state.py` 的 docstring | `<ComfyUI父目录>\…` | 注释里讲历史原因，不参与逻辑 |
 | `CHANGELOG.md` / `README.md` | 大量本机路径 | 文档 |
 | `skills/comfyui-cards/scripts/train.ps1` | `-Ckpt -Vae -Qwen3 -VPy -Trainer` 的默认值指向作者机器 | **必传参**：缺一个就在开跑前 `Fail` |
-| `skills/comfyui-cards/scripts/style_check.py` | 默认数据集 `D:\dsh\训练区\素材\…` | 第一个参数覆盖即可 |
-| `tools/update.ps1` | 原来默认 `D:\dshl\.dsh\plugins\…` | 0.7.68 起改按 `$PSScriptRoot\..` 推 |
+| `skills/comfyui-cards/scripts/style_check.py` | 默认数据集 `<工作区>\训练区\素材\…` | 第一个参数覆盖即可 |
+| `tools/update.ps1` | 原来默认 `<DSH目录>\.dsh\plugins\…` | 0.7.68 起改按 `$PSScriptRoot\..` 推 |
 
 ### 19.3 前端端口（0.7.68 起可覆盖）
 
@@ -1014,7 +1169,7 @@ Invoke-RestMethod ('http://127.0.0.1:' + $cfg.sidecarPort + '/dir/list?kind=dict
 侧车每次解包都往 `plugin/work/unpack.log` 追加一行（同时打 stdout）：
 
 ```
-[unpack 2026-10-22 21:20:11] 87.6 MB 0.16s auto=0 ok=True card=<画风卡> v2 · 纯新件 err=
+[unpack 2026-10-22 21:20:11] 87.6 MB 0.16s auto=0 ok=True card=絉彩绘 v2 · 纯新件 err=
 ```
 
 排查顺序：① 看这行有没有出现 —— 没出现＝请求没到侧车（前端/端口/侧车没起）；出现了且 `ok=False`，看 `err=`；② `127.0.0.1:8199` 是否在听；③ 面板消息里的 `已传 x%` 卡在一位数＝上传通道问题（防火墙/代理拦了 localhost POST）；④ `ok=True` 但面板不回＝前端异常，看 DevTools Console 与 `client-err.log`。
@@ -1082,7 +1237,7 @@ Invoke-RestMethod ('http://127.0.0.1:' + $cfg.sidecarPort + '/dir/list?kind=dict
 ```
 UNETLoader(anima-aesthetic-v1.1)
   → LoraLoader(角色 LoRA)
-  → ModelPatchLoader(<身份LLLite-v2> / v3-400)
+  → ModelPatchLoader(<身份LLLite>-v2 / v3-400)
   → AnimaLLLiteApply(LoadImage 控制图)
   → LoraLoader(风格 LoRA)
   → KSampler

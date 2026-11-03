@@ -40,7 +40,7 @@ powershell -ExecutionPolicy Bypass -File .\train.ps1 -Smoke `
 # 5) 正式：去掉 -Smoke，参数照技能 §12 表
 ```
 
-**注意**：`train.ps1` 的默认值指向作者机器（`D:\paint\...`）。换机器**必须显式传** `-Ckpt -Vae -Qwen3 -VPy -Trainer`；少传任何一个，脚本会在开跑前 `Fail` 并打印 `required file missing: <路径>`，不会静默跑错。
+**注意**：`train.ps1` 的默认值指向作者机器（`<ComfyUI父目录>\...`）。换机器**必须显式传** `-Ckpt -Vae -Qwen3 -VPy -Trainer`；少传任何一个，脚本会在开跑前 `Fail` 并打印 `required file missing: <路径>`，不会静默跑错。
 
 ## 两条硬规则（踩过）
 

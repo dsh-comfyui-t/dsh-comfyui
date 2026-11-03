@@ -1,13 +1,13 @@
 # -*- coding: utf-8 -*-
 """make_release_zip.py —— 按 MANIFEST.sha256 打成品包。
 
-包内顶层目录 dsh-comfyui-console-<version>/，清单逐条打入 + 清单自身。
+包内顶层目录 dsh-comfy-cards-next-<version>/，清单逐条打入 + 清单自身。
 """
 import io, os, sys, json, zipfile, hashlib
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 VER = json.load(io.open(os.path.join(ROOT, 'VERSION.json'), encoding='utf-8'))['version']
-NAME = 'dsh-comfyui-console-%s' % VER
+NAME = 'dsh-comfy-cards-next-%s' % VER
 
 manifest = os.path.join(ROOT, 'MANIFEST.sha256')
 items = []

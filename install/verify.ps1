@@ -1,7 +1,7 @@
 # bundle verify (ASCII only, PowerShell 5.1). Read-only: never writes or starts anything.
 #
 #   powershell -ExecutionPolicy Bypass -File verify.ps1
-#   powershell -ExecutionPolicy Bypass -File verify.ps1 -DshHome D:\dshl\.dsh -Json
+#   powershell -ExecutionPolicy Bypass -File verify.ps1 -DshHome <DSH目录>\.dsh -Json
 #
 # Exit code 0 = all required checks passed; 1 = something is wrong (see rows with FAIL).
 
@@ -24,7 +24,7 @@ function Add-Check([string]$name, [string]$status, [string]$detail) {
 if (-not $DshHome) {
     if ($env:DSH_HOME) { $DshHome = $env:DSH_HOME }
     elseif ($env:DSH_PROFILE_DIR) { $DshHome = Split-Path -Parent (Split-Path -Parent $env:DSH_PROFILE_DIR) }
-    else { $DshHome = 'D:\dshl\.dsh' }
+    else { $DshHome = '<DSH目录>\.dsh' }
 }
 if (-not $Profile) { $Profile = $env:DSH_PROFILE }
 

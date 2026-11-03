@@ -168,6 +168,11 @@ export function applyView(pos, neg, key) {	const v = VIEWS.filter((x) => x.key =
  * @param {string} pos
  * @returns {'high'|'eye'|'low'}
  */
+
+/**
+ * 从机位描述里认出「低机位 / 平视 / 高机位」—— 视角胶囊与取景标签的判据。
+ * 认不出就按高机位处理（原来两边都这么兜底）。
+ */
 export function detectView(pos) {
 	const s = String(pos || '');
 	if (/from below:1\.[4-9]|\(low angle shot|worm's-eye/.test(s)) return 'low';

@@ -1,179 +1,196 @@
-## 0.7.164 · 2026-11-01 · 身份控制开关、历史页刷新与缓存版本号
+## 0.8.0 · 2026-11-03 · 正式更名 Comfy Cards Next、历史批量删除、内置姿势场景构图词
 
-### 角色卡与风格卡
+### 1. 正式更名 Comfy Cards Next（包名 `dsh-comfyui-console` → `dsh-comfy-cards-next`）
 
-**PROPORTION 只剩一个分段。** 比例分段此前存了六个词（`eight heads tall` / `long legs` / `long limbs` / `small head` / `elongated silhouette`），叠在一个本来比例正常的 LoRA 上会把它拉长。现在只保留 `correct proportions`，具体身高交给 LoRA 自己的训练结果。
+产品名定为 **Comfy Cards Next**，包名同步改；版本从 0.7.164 直接跳到 0.8.0 作为改名里程碑。
 
-**插入改用分段优先。** `applyCardInsert` 原先取 `tags` 而不是 `parts`，导致只改了 `parts` 没同步 `tags` 的卡会整段丢失比例描述。改成 `parts` 优先、`tags` 兜底。
+**刻意没改的内部标识**（改了就会丢数据，属于契约而非品牌）：
 
-**风格卡撤回终于生效。** `applyStyleInsert` 从 `{ t, n }` 里读 `.text`，取到 `undefined`，`tokList(undefined)` 返回空数组，于是 `posTokens` 永远是空的——撤回按钮按下去切不掉任何词，却照样报「撤回 0 条词」。改为读 `.t` / `.n`，并补上 `text` / `added` 别名字段。
+| 保持不变 | 原因 |
+| :-- | :-- |
+| `localStorage` 键（`dsh-comfyui-console/v1`、`/ports`、`/model-pins/v1`、`/active-jobs`、`/error-log/v1`、`/last-tab`…） | 里面是用户的模型路径、参数、模型钉选、未完成任务、错误日志；换键等于把设置清零，老数据还留在浏览器里当垃圾 |
+| 侧车 `health.service = "dsh-comfyui-console"` | 前端靠这个字符串确认「连的是本插件的侧车」，两边必须一致 |
+| ComfyUI 的 `client_id = "dsh-comfyui-console"` | 只作 WS 会话标识，改名没有任何收益 |
+| 词库 / 数据目录 `%LOCALAPPDATA%\DSH\ComfyUIConsole` | 402 条词库、自定义词条、在线模型清单都在里面；目录名跟包名无关，改名后原样可用 |
 
-**换卡时清掉上一张卡的锁。** `lockCards` 在 `Console` 里，`applyOutputParams` 在 `PreviewConsole` 里，跨组件拿不到。加了一个模块级 sink。不清的后果是套用历史参数时 `stabilizePrompt` 拿着旧卡的禁词把新提示词里的词当禁词剔掉。
+**改了的**：`package.json` 的 `name` / `version` / `displayName` / `description`、`lib/index.js` 的 `export const name`、界面标题与崩溃提示文案、「Comfy Cards Next」品牌名出现在 README / 安装说明 / 更新器包名校验 / 卸载脚本文案。
 
-### 身份控制（LLLite）
+**装机侧影响**：profile 里的 `package.json` 依赖、`node_modules` 的 junction、`pnpm-lock.yaml` 都要重新指向新目录，**必须重启一次 dsh web** 才会重新挂载；词库与配置不受影响。计划任务改名 `dsh-comfy-cards-next-cleanup`，卸载脚本会同时清掉旧名 `dsh-comfyui-console-cleanup`，不留孤儿任务。
 
-生成页新增「身份控制」开关，位置在 LoRA 行下面，只有插入的卡带 `conditioning.presets` 时出现。
 
-默认关闭。控制图是纯角色线稿，开着会把背景削掉、姿态锁成正立，场景出图不该挂它。需要锁脸、锁衣服（定妆照、角色一致性对照）时临时勾开，右侧出现档位下拉，换档即时重新解析。
 
-开关走 `COND.resolve(card, canvas, force)` 新加的 `force` 参数，绕过卡里的 `conditioning.enabled`，只影响本次会话，卡文件保持 `enabled: false`。关掉时 `COND.plan` 清空，工作流里 `LoadImage` / `ModelPatchLoader` / `AnimaLLLiteApply` 三个节点整段不进图——不是把强度调成 0。
+### 2. 历史页支持批量删除
 
-另加两处兜底：开关开着但 plan 还是 `off`（刚插卡、改过画布尺寸、上个会话残留）时出图前补解析一次；解除插入后若已无可挂条件图的卡，自动关开关并清 plan。
+「刷新」旁边新增「删除」按钮：点一下进入勾选模式，每张图左上角出现勾选圈，工具栏那颗原地换成「确认删除 (N)」，并多出「全选 / 取消」。删除模式下点卡片＝勾选（不再打开详情），悬停的「打开位置 / 删除」小按钮隐藏，选中的卡片加一圈高亮。确认时一次弹窗说清数量与构成（几张图片文件 / 几条 Temp 记录），逐张复用既有的 `POST /outputs/manage {action:"delete"}`，结束统计成功失败数、重拉图库、自动退出模式。「全选」按当前筛选结果算，不是只选当前可见的那一屏。
 
-### 随机词库
+顺带补了三个图标（`check` / `square` / `checkSquare`），否则勾选圈没有可用字形。
 
-**新词内部去重。** `rndApply` 只拿新词和原提示词比，不管新词自己重不重。`from above` 同时挂在动作槽和取景槽，两段都进 `items`，`have` 里又没有它，于是写了两遍。同一个词重复三次等于抬高权重，模型被死死钉在那个视角上。现在对新词也去重，只保留第一次出现。
+### 3. 内置「姿势 / 场景 / 构图」词条（67 条）
 
-**角度互斥。** `rndFrameAngle` 本来就能把 `from above` / `high angle` 归为同一族「俯视」，但它只用于抽取时避重，从不清理已经写进提示词的词。`from above` 是正上方垂直俯拍，`high angle` 是高角度斜俯拍，两套透视落在同一张图里，而背景词没跟着换视角，画面就裂成角色俯视、场景平视。现在按族归类，同族只留先出现的那个。
+新增 `CREATIVE_SEED` + `Dictionary.seed_creative_v1()`：`姿态-动态` 12（奔跑 / 走动 / 转身 / 旋身 / 后仰 / 前倾 / 单膝跪地 / 单手撑地 / 伸懒腰 / 弯腰 / 攀爬 / 跑开回望）、`姿态-站` +6、`姿态-坐` +4、`姿态-其他` +2、`场景` 25（走廊 / 天台 / 图书馆 / 咖啡厅 / 地铁 / 月台 / 雨夜街道 / 神社石阶 / 机甲驾驶舱 / 城市废墟 / 雪原 / 花田 / 天文台 / 战场…）、`构图` 18（三分法 / 对角 / 框架 / 前景遮挡 / 引导线 / 黄金分割 / 镜面倒影 / 过肩 / 极简留白 / 低机位 / 高机位 / 广角特写…）。
 
-### 历史页
+**为什么没写进 `dictionary_seed.json`**：`seed()` 被 metadata 键 `builtin-v038` 锁成一次性导入，已经导过的库永远不再读那个 JSON，追加进去对存量机器等于没写。所以内置内容走自己的版本键 `creative-seed-v1`，新装机与升级机同一条路径，重复启动不会重复插入。`_entry()` 是 upsert，改文案后清掉闸门键重启即可更新。
 
-**带文字的刷新按钮。** 工具栏最左边原来有一个 31px 的纯图标刷新，但工具栏是 `flex-wrap:nowrap` + `overflow-x:auto`，窗口一窄就被推到可视区外。现在「N 张」计数器左边多一个带文字的按钮，点击强制重扫输出目录。
+### 4. 搜索索引补分类名（`search-category-index-v1`）
 
-**缓存版本号。** `/outputs/thumb` 带 `Cache-Control: private, max-age=300`，而前端拼的 URL 只有 `path` 和 `quality`。同名文件被重新生成或覆盖时 URL 一字不变，浏览器 5 分钟内继续用旧缩略图，卡片上的图就和文件对不上。现在把 `mtime` 拼进 URL 当版本号，文件一改 URL 就变。原图 URL 同样处理。
+`search_names` 原本只收「标签 + 英文提示词」，而查询走 `search_prefix` 前缀匹配，于是分类词（`构图`、`场景`、`动作`）一条都搜不出来。`_index()` 现在把分类名一起写进索引，并用版本键做一次性全量重建（402 条，只跑一次）。`屋顶天台 / 车站月台` 两个标签改成 `天台 / 月台`，否则按尾词永远命中不了。
 
-**回退标记不再残留。** 图片加载失败时回退到原图，原来靠 `dataset.fallback` 防重入，但 React 复用节点时标记会留到下一张图上，导致那张加载失败后不再回退。改成直接比对当前 `src`。
+### 5. 卸载后包外残留（新增 `tools/uninstall.ps1` + `preuninstall` 钩子）
 
-### 界面
+删包不会带走插件在包外写的东西：`%LOCALAPPDATA%\DSH\ComfyUIConsole`（词库 `tags.sqlite3`）、`<comfyRoot>\comfyui-console-data`（旧版 `console.db`）、`<comfyMain>\custom_nodes\dsh_post_controls`（桥接节点）、计划任务 `dsh-comfyui-console-cleanup`。新脚本按「停侧车 → 删任务 → 删桥接节点 → 备份词库并校验大小后删数据目录 → 删旧数据目录 → 删包内 work」收尾，脚本自包含（不 import 插件代码、不依赖 Python），包删掉后仍可单独重跑。
 
-**输入框不再每敲一个字就失焦。** 嵌套定义的函数组件每次渲染都是新身份，React 卸载重建导致输入框丢焦点。把 `genTab` / `styleCardTab` / `cardTab` 三处改成内联调用。
+`preuninstall` 用 `-Auto` 非交互执行；脚本默认退 0，只有 `-FailOnError` 才把失败暴露成退出码——preuninstall 非 0 会让 npm 中止整次卸载，反而删不掉。演练用 `-TestRoot`，只打印用 `-DryRun`，保留数据用 `-KeepData`。
 
-**历史卡片右上角按钮组。** 鼠标悬停出现「在资源管理器中打开图片位置」和「删除」，不用先点进详情。删除复用详情页的 `manageOutput`，自带确认。
+### 6. 「更新 ComfyUI」按钮一直是断连（改动前就存在）
 
-**底模 badge 不再空白。** 卡片只存了 `baseModels` 数组、没存 `baseModelsText` 时，编辑器里显示为空。改为文本优先、数组兜底。
+`sidecar_aline._apply_comfy_update()` 一进门就 `with _COMFY_UPDATE_LOCK`，而这个锁全仓从未定义，`POST /comfy/update` 必然 `NameError`，被 `BaseHTTPRequestHandler` 吞掉 → 连接被掐断，前端只显示网络错误。补上 `threading.Lock()`，并给该路由加 `except Exception` 兜底返回 JSON 500，避免异常类型漏网再次变成断连。
 
----
+### 7. 词库翻译输出叠出 `, ,`
 
-## 0.7.153 · 2026-10-29 · 安装后插件不加载（bundles 缺注册）
+命中词自带前后逗号，原文逗号与之相邻就叠成 `"white hair, , 校园"`。`tag_dictionary.translate()` 在替换标记之后补两步收敛（重复逗号、重复空格），输出稳定为 `white hair, 校园, 侧光, 1girl`。
 
-### 现象与机制
+### 8. 改名后自检捞出并修掉的四个缺陷
 
-装完重启，侧边栏没有「ComfyUI 绘图台」。没有弹窗，没有红色报错，其它面板都在。
+| # | 缺陷 | 修法 |
+| :-- | :-- | :-- |
+| 1 | 侧车可能被拉起两次：`launch()` 只看端口通不通，冷启动那 1–3 秒探不到就又 spawn 一个，两个 pythonw 并存、config.json 与 work/ 日志双写 | host 侧：`index.js` 加 20 秒拉起抑制窗口（`LAUNCH_GRACE_MS`）+ 拉起后改轮询探活（500ms×16，封顶 8 秒），不再"死等 3 秒就判失败"；侧车侧：`expander.py` 加命名互斥体单实例锁 —— Windows 上 HTTPServer 的 `allow_reuse_address=1` 允许两个进程同绑一个端口，原来的"连一下看有没有人应答"在有并发启动时有窗口，锁是内核级的，没有窗口 |
+| 2 | 改名版本没法用 `tools/update.ps1` 就地升级：包名硬校验会把旧包覆盖成"patch 新名 + profile 旧名"的半残状态，正好复现入口消失 | 更新器识别到 `dsh-comfyui-console` 时直接拒绝，并打印迁移三行（remove / add link / 重启） |
+| 3 | `tools/uninstall.ps1` 不碰 profile：卸载后 `node_modules\<包名>` 成悬空链接、`bundles` 还留着包名，下次启动 dsh 解析失败 | 新增第 6 步「profile 挂载」：删 junction，包名仍在 profile 依赖里时调 `dsh plugin remove`，没有 dsh 就打印命令 |
+| 4 | `package.json.files` 白名单与实际不符：`tools/update.ps1`、`build_client.py`、`build_suite.py`、`annotate_card.py`、两个 check 脚本都没列入，成品包里缺就地更新器与构建脚本 | 白名单补齐到 59 项，`cordis.patch.yml` 同时加入 `dsh.update.inPlace` |
 
-根因在 `install/install-ai.ps1` 的 `-LinkJunction` 分支：它只做了
+**顺带纠正一条误判**：`routes.json` 看着像空的 HTTP 路由表，其实是用户的 LLM 扩写路由配置（`sidecar_routes.load_user_routes` 读它），`keepNames` 保留它是对的，不动。
 
-```powershell
-cmd /c mklink /J "$link" "$pluginDst"
-```
+### 9. 新增「实验性功能」页签（排在「预设」之后）
 
-目录链接建好了，包文件也在 `<DshHome>\plugins\dsh-comfyui-console\plugin`，
-但**没有把 `dsh-comfyui-console` 写进 profile 的 `dsh.profile.bundles`**。
+- 页签条从 6 个变 7 个：生成 / 风格卡 / 角色卡 / 词库 / 历史 / 预设 / **实验性功能**
+- 页面只放只读入口，坏了也不影响出图：
+  1. **侧车 / ComfyUI 体检**：一次问完 `/health`、`/version`、ComfyUI `/system_stats`，哪一步断的直接写在结果里（侧车没起、版本对不上、8188 没开）
+  2. **诊断包**：下载 `diagnostics.json` = 时间 + 浏览器 + 端口缓存 + 体检输出 + 前端错误日志；不含提示词、图片、卡包
+  3. **端口缓存**：一键清掉 localStorage 里的 comfy / sidecar 地址记录（端口改过、界面一直显示连不上时用，清完刷新页面）
+- 坑：`labProbe` 这个 state 必须放在**主 Console** 作用域（`useState("gen")` 那一层）。第一版放进了 PreviewConsole，运行期 `labProbe` 未定义，整页渲染抛错、看起来像"点了没反应"——冒烟测试（`<调试脚本>.mjs`，11 条断言）当场抓到。
 
-`@deepseek-ai/dsh-app-boot` 的 `loadProfileDirectory()` 是这样找插件的：
+### 10. 全局提示条挪到页签上方整行
 
-```js
-const bundles = readProfileManifest(binName, dir).dsh?.profile?.bundles ?? [];
-for (const packageName of bundles) try {
-  const packageDir = resolveBundleDir(binName, packageName, installAnchor, dir);
-  const bundle = bundleManifest.dsh?.bundle;
-  if (bundle === void 0) throw new Error('... declares no dsh.bundle');
-  const patches = bundlePatchPaths(packageDir, bundle).flatMap((p) => loadOverlayPatches(binName, p));
-  layers.push({ packageName, packageDir, patches });
-} catch (error) { skippedBundles.push({ packageName, reason: String(error) }); }
-```
+「磁盘同步（<工作区>\本地绘画\角色卡）：6 张 · 新增 0 · 更新 6 · 保护跳过 0 · 移除 0」这类长串原来塞在页签行的右端（`marginLeft:auto` + `maxWidth:60%` + `text-overflow:ellipsis`），路径一长就被截成「磁盘同步（D:\…）：6 张 ·…」，新增/更新/保护跳过/移除四项计数全看不见。
 
-遍历的是 `dsh.profile.bundles`，`dependencies` 不参与这个判断。名字不在数组里，包的 `dsh.bundle.patch` 就永远不会被加载。
-解析失败只进 `skippedBundles`，不抛、不打印——**所以整件事静默发生**。
+- 改成页签**上方**单独一行：`padding: 2px 2px 6px`，`whiteSpace:normal` + `wordBreak:break-word`，长路径自动换行、完整可读
+- 失败类文案（含「失败/连不上/离线/没认出来」）仍走红色，其余用次要前景色
+- **靠右对齐**（`justifyContent:flex-end` + `text-align:right`）：文字贴右边，左侧留白，不再顶到左边缘
+- 页签行本身清空，只剩 7 个页签；`title` 保留整串，鼠标悬停仍可看到全文
 
-`dsh plugin add` 之所以「装了就有」，是 pnpm 之后 boot 会自动补：
+### 11. 新版本推送（GitHub 有新版就在页面提示）
 
-```js
-for (const dependency of after.dependencies)
-  if (dependency.bundle && !bundles.includes(dependency.name)) bundles.push(dependency.name);
-```
+只查不装：发现新版本只提示 + 给 Release 链接，下载与替换仍走 `tools/update.ps1` 或 `dsh plugin`。
 
-手工建 junction 不经过这一步。
+- 侧车新增 `GET /update/check`（`?force=1` 绕缓存）：问 GitHub `/releases/latest`（draft / prerelease 不算），没有 Release 就退到 `/tags` 取最大的
+- 版本比较按数字三元组：`0.10.0 > 0.9.9` 成立，`1.0-rc.2` 不算比 `1.0` 新
+- 缓存：成功 6 小时、失败 10 分钟（匿名 API 限 60 次/小时，这样不会打穿）
+- 前端：启动 6 秒后静默查一次，有新版本就把整串写进页签上方的状态条；「实验性功能」页新增「版本更新」卡片（立即检查 / 打开 Release 页 / 更新说明 / 缓存标记）
+- 配置（`config.json`）：`updateRepo` = GitHub 的 `owner/repo`（**必填，否则只提示"还没配仓库"**）；`updateProxy` = 走代理时的地址（本机直连 `api.github.com` 实测 200/0.7s，一般不用）；`updateCheck=false` 关掉启动自动检查
+- 网络口径：读 `HTTPS_PROXY` / `HTTP_PROXY`；配了 `GITHUB_TOKEN` 就走认证额度（5000 次/小时）并绕开部分限制
 
-### 修法
+### 12. 词库内置卡片扩容：姿势 / 服饰 / 构图 / 场景 / 光线
 
-新增 `EnsureBundle($profileDir, $name)`，读 profile 的 `package.json`，缺失就追加到
-`dsh.profile.bundles` 并用 `[IO.File]::WriteAllText` + `UTF8Encoding($false)` 写回（不能带 BOM，
-Node 的 `JSON.parse` 不剥 BOM）。
+内置分类卡片早就建好了（`BUILTIN_GROUPS` 里的 `pose` / `cloth` / `comp` / `scene`），但 `src` 指向的 `"姿势"` `"服饰"` `"构图"` `"场景"` 四个分类在 `lib/dict.js` 的 `LIB` 里是空的 —— 点开卡片只看到「镜头」「衣服-军礼服」这点偏门内容。这次把内容填上，并新增一张「光线」卡片。
 
-三条路径全部接上：
+- **姿势** 30 条：站立 / 双手抱胸 / 双手插兜 / 跪姿 / 蹲下 / 侧躺 / 回眸 / 撩头发 / 托腮 / 伸懒腰 / 靠墙 / 鸭子坐 …
+- **服饰** 31 条：白衬衫 / 卫衣 / 水手服 / 百褶裙 / 旗袍 / 浴衣 / 西装 / 风衣 / 泳装 / 过膝袜 / 白丝 / 领结 / 贝雷帽 …
+- **构图** 26 条：三分法 / 中心构图 / 对角线 / 引导线 / 框架构图 / 前景遮挡 / 过肩 / 浅景深 / 逆光剪影 / 留白 / 黄金分割 / 鸟瞰 / 鱼眼 …
+- **场景** 28 条：城市街道 / 便利店 / 咖啡馆 / 图书馆 / 天台 / 沙滩 / 花田 / 神社 / 废墟 / 雨天街道 / 城市夜景 / 地铁车厢 …
+- **光线** 19 条（新卡片）：顺光 / 逆光 / 侧光 / 柔光 / 硬光 / 黄昏光 / 月光 / 霓虹光 / 舞台光 / 伦勃朗光 / 轮廓光 / 体积光 / 烛光 …
 
-| 分支 | 处理 |
-|---|---|
-| `-ApplyProfile`（`dsh plugin add`） | 命令成功后再校验一次，不假设它一定注册了 |
-| `-LinkJunction` 新建 | 建完链接立即 EnsureBundle，失败则整步判 failed |
-| `-LinkJunction` + `-Force` 重建 | 同上 |
-| `-LinkJunction` 链接已存在 | 仍然补一次，不跳过 |
+共 134 条。与既有分类重名的 17 条自动跳过（如「白衬衫」「跪姿」已存在于兄弟分类），全库新增重复为 0。
+卡片点开即可勾选插入，走原有的「正向/负面按胶囊词性分流」逻辑，不新增交互。
 
-幂等：已存在就返回 `already listed`，不重复追加。实测连跑三次，数组里始终只有一条。
+### 13. 清掉内置词库里的真重复
 
-`install/verify.ps1` 新增检查 `bundle:registered`：
+三类口径分开处理，只删重复，不动别名（中文不同、英文相同是有用的同义输入，比如「站姿」/「站立」）。
 
-| 状态 | 含义 |
-|---|---|
-| `ok` | 数组里有且只有一条 |
-| `WARN` | 出现多次，重复注册可能导致 boot 失败 |
-| `FAIL` | 缺失，直接说明「没有侧边栏入口且无报错」，并给修复命令 |
+| 类 | 现象 | 处理 |
+|---|---|---|
+| A | `LIB` 里同一英文标签出现在两个分类 —— 卡片里并排两条一样的标签 | 删 3 条 |
+| B | `EXTRA` 里同一中文写了两遍 | 删后出现的那份 |
+| C | `EXTRA` 与 `LIB` 撞同一中文 —— 别名表和卡片抢同一个中文名，译名还不一致 | 删 `EXTRA` 侧 |
 
-### 验收
+- A：`姿态-站/抱臂`（同一标签为 `crossed arms`）、`构图/全身构图`（`full body`）、`镜头/居中`（`centered composition`）
+- B：`军装`、`礼服` 各重复一次
+- C：`披风` `宇宙服` `蹲姿` `跪姿` `生气` `全身` `半身` `特写` `正面` `侧面` `背面` 共 11 条
 
-用临时 profile 实测三段：
+结果：`LIB` 277 条、`EXTRA` 90 条；中文重名 0、英文完全相同 0、`EXTRA` 与 `LIB` 撞名 0。
+卡片条数随之变化：构图 26→25、镜头 18→17、姿态-站 8→7。
 
-```
-未注册          -> FAIL  "missing from dsh.profile.bundles -> no sidebar entry and no error"
-已注册一条      -> ok    "dsh.profile.bundles lists dsh-comfyui-console"
-重复两条        -> WARN  "listed 2 times; duplicates can break boot"
-```
+## 0.7.164 · 2026-11-01 · 输入框失焦、撤回失效、换卡不清锁等十三项
 
-安装脚本实测 `-LinkJunction`：`profile` 步骤输出 `junction -> ... ; bundles: added`，
-profile 的 `bundles` 从 `["@deepseek-ai/dsh-base"]` 变为 `["@deepseek-ai/dsh-base", "dsh-comfyui-console"]`。
-## 0.7.152 · 2026-10-29 · 删卡同步磁盘、导卡补字段、比例分段
+> **本节是补记。** `0.7.152` 到 `0.7.164` 之间（2026-10-29 ~ 2026-11-01 15:00）本机做过 60 多次构建，没有逐条留档；下面 13 项是这段区间里能逐条对上的改动，152 / 153 两条已确认的修复附在末尾。更细的逐条差异只能翻同目录的 `.bak` 快照（258 个）。
+>
+> **版本号算法**：用户定「按本地迭代次数加」。`0.7.151` + 本轮 13 项可证改动 = `0.7.164`；那段无记录的构建不计入。
 
-### 删卡为什么删不掉
+所有改动都在 `lib/app.js`（约 13,600 行），改完必须跑 `tools/build_client.py` 重建 `lib/client.js`——构建脚本拿旧 `client.js` 里的分段标记当模板，先删会 `FileNotFoundError`。
 
-「删除这张」按钮的回调是这样写的：
+### 1. 输入框一打字就失焦
 
-```js
-onClick: () => { const cc = styleEdit; setStyleEdit(null); delStyleCard(cc); }
-```
+`genTab` / `styleCardTab` / `cardTab` 三个页面把输入组件定义在渲染函数内部，父组件一重渲染组件身份就变、React 卸载重建，焦点随之丢失。改为把子组件提到渲染函数外、以参数形式调用（内联调用而非重新定义）。
 
-传进去的是 `styleEdit` —— 编辑器弹层的状态对象，不是面板里的卡片记录。
-而 `editStyleCard()` 只构造了十一个字段：
+### 2. 底模 badge 显示空白
 
-```js
-{ id, name, note, cover, neg, parts, loras, ckpt, gen, isNew, builtin }
-```
+卡里只存了 `baseModels` 数组、没存 `baseModelsText` 时，badge 取文本恒为空。改为**文本优先、数组兜底**：有 `baseModelsText` 用它，否则由数组 join 出来。
 
-**`file` 不在里面。**
+### 3. 卡编辑丢掉三个字段
 
-于是删除逻辑里所有 `String(c.file || "")` 取到的都是空串，
-唯一能定位落盘文件的入口恒为空 —— 删除退化成「只清内存」。
-而 `mergeDiskStyle` 是磁盘为准的：下次同步把磁盘上的记录推回来，卡片复活。
+`editCard` / `newCard` 构造编辑态时只搬 13 个字段里的 10 个，`baseModels` / `training` / `regression` 一编辑就被清空（导入侧 `applyStyleImport` 早前修过同一个坑）。两处补齐，`_cardBm` 一并重写。
 
-侧车侧一直是好的：`/dir/del` 在带 token、仅 Origin、端到端三种条件下都实测通过。
-问题全在前端拿不到路径。
+### 4. PROPORTION 收敛为 `correct proportions`
 
-**修法分三层，任一层命中即可**
+`CARD_ORDER` / `joinCardParts` / `cfTagsOf` 补上 `proportion` 分段，内容从六词收敛为单词组 `correct proportions`。六词叠加会把本来就正常的 LoRA 比例拉长。
 
-1. `editStyleCard` 补 `file` / `diskDir`，从 `USER.styleCards` 里的真实记录带过来
-2. 删除时先查 `USER` 里同 `id` 的记录取 `file`
-3. 再退到 `/dir/list?kind=style`，按 **name** 匹配 `__file`
+### 5. 风格卡「撤回」失效
 
-`delCard`（角色卡）同病同治。同时把确认框文案改成写明「会同时从磁盘文件里删掉这张卡」，
-失败时用 `clientLog` 打出 `name` / `file` / `有真实记录=`，便于下次直接定位。
+`applyStyleInsert` 从 `{t, n}` 结构里读 `.text`，恒得 `undefined`，`tokList(undefined)` 返回空数组，于是 `posTokens` 永远为空——撤回再插入等于什么都没做。改读 `.t` / `.n`，并补 `text` / `added` 别名兼容老数据。
 
-### 导入丢字段
+### 6. 插入改 parts 优先
 
-`applyStyleImport` 只取十个字段，而 `saveStyleCard` 与 `exportAllStyleCards` 都是十三个。
-落下的三个是 `baseModels` / `training` / `regression`。已补齐。
+`applyCardInsert` 原来只取 `tags`，只维护 `parts` 的卡会整段丢掉比例描述。改为 `parts` 优先、`tags` 兜底。
 
-### 比例分段
+### 7. 换卡不清锁
 
-`parts` 增加 `proportion` 段，`STYLE_ORDER` 里排在 `style` 之前。
-预设表 `PROPORTION_PRESETS` 提供 `chibi` / `half` / `adult` 等档位，`custom` 可自行填写。
-拼进提示词，不碰 LoRA 权重。
+`lockCards` 在 `Console` 里，`applyOutputParams` 在 `PreviewConsole` 里，跨组件拿不到引用，换卡后旧卡的禁词还在生效——`stabilizePrompt` 会拿旧卡禁词去剔新卡的词。新增模块级 `CLEAR_CARD_STATE_SINK`，换卡时统一清。
 
-实测：比例从不被 LoRA 锁定 —— 同 seed 下 `chibi` 出三头身，不写比例词出三点五头身，
-写 `tall adult, mature proportions, long legs` 出八头身。卡层默认值挡不住提示词覆盖。
+### 8. 历史卡片按钮组
 
-### 已安装用户注意
+历史缩略图悬停/键盘聚焦时出现「打开文件位置」「删除」，删除复用详情页的 `manageOutput`，不再另写一套。
 
-覆盖插件目录后重启。**已打开的页面要 Ctrl+Shift+R**，
-重启服务端不会让已经打开的标签页换代码。
+### 9. LLLite 身份控制开关
+
+`COND.resolve(card, canvas, force)` 加 `force` 参数，绕过卡内 `conditioning.enabled`；新增 `llliteOn` / `lllitePick` 两个 state；`llliteCards()` 只返回带 `conditioning.presets` 且在 `INSERTED.chars()` 里的卡；UI 放在 LoRA 行下方（`身份控制` + 开关 + preset 下拉）；`doGen` 里 plan 仍是 `off` 时补解析一次；`removeInserted` 里没有可挂的卡时自动关。
+
+### 10. 随机词自身去重
+
+`_freshSeen` 只负责新旧对比，不管新词自己重复——`from above` 同时命中动作槽和取景槽时会被写两遍，等于把权重抬高。补一遍批内去重。
+
+### 11. 角度族互斥
+
+`rndFrameAngle` 按族归类（俯视族含 `from above` / `high angle`），同族只保留先出现的那个。两套透视同时存在会让角色俯视、背景平视，画面直接崩。
+
+### 12. 历史刷新按钮窄窗不可见
+
+原有一个 31px 纯图标刷新按钮（L7180），但工具栏是 `flex-wrap:nowrap` + `overflow-x:auto`，窗口一窄就被推出可视区。补一个带文字的 `.cc-output-refresh-text` 版本。
+
+### 13. 输出图缓存版本号
+
+`outputPreviewSrc` / `savedOutputUrl(path, version)` 都拼 `&v=<mtime>`；`onError` 的回退防重入从 `dataset.fallback` 改为比对 `src`——React 复用节点时 `dataset` 标记会残留到下一张图，导致后续加载失败不再回退。
+
+### 附：0.7.152 / 0.7.153 两条已确认修复
+
+- **0.7.152 · 装完侧边栏没有「绘图台」**：`install/install-ai.ps1` 的 `-LinkJunction` 分支只建 junction，没把插件名写进 profile 的 `dsh.profile.bundles`；而 `@deepseek-ai/dsh-app-boot` 遍历的正是那个数组，`dependencies` 不参与判断，解析失败只进 `skippedBundles`、不抛也不打印。新增 `EnsureBundle($profileDir, $name)`（读写 profile `package.json`，`UTF8Encoding($false)` 无 BOM），四条路径全接上，幂等；`install/verify.ps1` 增 `bundle:registered` 检查。
+- **0.7.153 · 包内顶层目录写死**：`tools/make_release_zip.py` 的顶层目录名写死 `0.7.151`，改为从 `VERSION.json` 读 `version`，单一来源。
+
+### 验证
+
+- `node --check lib/app.js` → 0；`node --check lib/client.js` → 0
+- `tools/verify_client.js` → 模块 id=`dsh-comfyui-console`，工厂执行成功
+- `client.js` 重建时间与 `app.js` 同批（本次 956,822 B / 1,239,340 B）
+- 发布校验顺序（**坑**）：`check_all.py` 会重新生成 `__pycache__` 并触发 `check_spec.py` S14 假失败，顺序必须是「最后一次 `check_all` → 清 `__pycache__` → 跑 `check_spec`」，且设 `PYTHONIOENCODING=utf-8` / `PYTHONUTF8=1`，否则 gbk 编码错误会伪装成校验失败
+- 结果：`check_all` 全通过 · `check_spec` 26 条（17 通过 / 0 失败 / 9 跳过）· `sync_version.py --check` 三处一致
 ## 0.7.151 · 2026-10-27 · 二级页顶到面板底边：清掉 S.wrap 的 48px 底部内边距
 
 ### 那 48px 是什么
@@ -1268,7 +1285,7 @@ Python 版保留作备选，不再是必需路径。
 
 把 0.7.126 放弃的那两块做完：引入真实 AST 解析器，摆脱正则/括号配对在混合缩进文件上的误判。
 
-- **工具**：`acorn@8.19.0` 装在 `D:\dsh\日志\comfyui-console-对比\tools\`（工作区，不进插件包，`npm i -D` 也不写进插件依赖）。
+- **工具**：`acorn@8.19.0` 装在 `<工作区>\日志\comfyui-console-对比\tools\`（工作区，不进插件包，`npm i -D` 也不写进插件依赖）。
 - **`preview_console.js` 断链 + 迭代清扫**：先移除 `tab === "gen" ? genTab() : null`（`props.page` 只可能是 `output`/`online`），再用「嵌套函数出现次数 ≤ 1 即删、每轮只删最大的一个」迭代到不动点，45 轮删 **45 个 / 45,139 B**：`renderImageSettings`(8,401) `renderPromptSection`(7,440) `doGen`(4,069) `renderExDialog`(3,015) `chooseModelProfile` `renderModelDock` `saveWfAsPreset` `loadPreset` `doParseWf` `savePreset` `pickWfFile` `switchView` `genTab` 等。**顶层 `PreviewConsole` / `renderOutputPage` / `renderOutputFilters` / `renderOutputDetailInfo` / `PBG` 全部保留并逐一验证存在。**
 - **其余源顶层死函数（边界用「下一个顶层声明行」）**：`presets.js` 删 `applyView`+`detectView`（1,437 B）、`online_models.js` 删 `onlinePageItems`+`onlineBaseOptions`（936 B）、`app.js` 删 `PromptPreviewChip`(3,115) `modelSetupErrors`(2,090) `validateModelGraph`(1,781) `PromptResultViewer` `normalizePromptPunctuation` `effectiveModelSetup` `editPreviewPart`（共 10,638 B）。这些删后逐个 grep 复核，引用数均为 **0**。
 - **两处误删已恢复**：`DictCardEditor`（`scan_components` 抓到「36 引用 / 35 定义」，从 `client.js.bak` 提取并去 `\t\t` 缩进还原）；`workflow.js` 的 `parseWorkflow`/`parseUi`/`parseApi`（`app.js:6299` 的 `doParseWf` 在调用，跨文件判据漏算，从更早的 `client.js.bak-20261027-162319` 还原，并用 Node `vm` 跑通 `parseWorkflow` 返回 `ok=true`）。
@@ -1311,7 +1328,7 @@ A 线的「工作台」整页移除，`PreviewConsole` 只保留「历史」和�
 
 - **新增 `sidecar_aline.py`**：从 `preview/expander.py` 搬入 100+ 个函数与 `class ExpansionJobs`、`class ModelTaskCancelled`，按 models / 历史 / 输出 / 设置 / 翻译 / 生成后控制 / 在线模型 分五批落地。`_load_aline_mod()` 从 `aline_mods/` 按文件名加载兄弟模块（`launch_modes` `comfy_paths` `cross_paths` `model_assets` `online_models` `tag_dictionary` `post_processing` `offline_translation` `comfy_install` `compatibility` `runtime_bridge` `face_models` `install_post_controls` `install_translation`）。
 - **`aline_mods/` 兄弟模块**：A 线原本从 `HERE` 直接 import，搬到子目录后所有 `os.path.join(HERE, 'x.py')` 改写为 `os.path.join(HERE, 'aline_mods', 'x.py')`；`post_processing.py` 走的是 `api.HERE`（指向 plugin 根），故 `install_post_controls.py` / `install_translation.py` / `face_models.py` 同时保留在 plugin 根。
-- **配置翻译层**：本地 `comfyRoot` 是父目录（`D:\paint`），A 线是 ComfyUI 本体（`D:\paint\ComfyUI`）；`outputDir` ↔ `outputDirectory`、`pythonExe` ↔ `comfyPythonExe`/`comfyPy`。`sidecar_aline.CFG` 做双向映射，并对 A 线读而本地无的 12 个键（`startScript` `comfyLayout` `launchers` `configErrors` …）给安全默认值。
+- **配置翻译层**：本地 `comfyRoot` 是父目录（`<ComfyUI父目录>`），A 线是 ComfyUI 本体（`<ComfyUI父目录>`）；`outputDir` ↔ `outputDirectory`、`pythonExe` ↔ `comfyPythonExe`/`comfyPy`。`sidecar_aline.CFG` 做双向映射，并对 A 线读而本地无的 12 个键（`startScript` `comfyLayout` `launchers` `configErrors` …）给安全默认值。
 - **本地新增路由（GET）**：`/outputs` `/outputs/detail` `/outputs/thumb` `/outputs/view` `/models/roots` `/models/catalog` `/models/browser` `/models/library` `/models/preview` `/models/detail` `/settings` `/comfy/online` `/comfy/update` `/diagnostics/compatibility` `/translation/status` `/post/workflows` `/post/dependencies` `/dictionary/*` `/online/*`。
 - **本地新增路由（POST）**：`/outputs/manage` `/outputs/save-temp` `/outputs/preview-targets` `/outputs/add-preview` `/models/previews/manage` `/models/manage` `/models/tasks/cancel` `/outputs/tasks/cancel` `/models/preview` `/filesystem/pick-folder` `/settings` `/expand/cancel` `/expand` `/weight-language` `/refine` `/preview/translate` `/translation/install` `/comfy/open-browser` `/comfy/update` `/post/*` `/online/*` `/dictionary/*`。
 - **新增 handler 方法**：`_dictionary_request` `_dictionary_mutation` `do_PATCH` `do_DELETE` `_online_request`。`_origin_ok()` 统一换成本地的 `_auth_ok(self, path)`。
@@ -1362,7 +1379,7 @@ A 线的「工作台」整页移除，`PreviewConsole` 只保留「历史」和�
 - **词库卡**：`lib/dictcard.js` 并入 `client.js`，词库支持正/负/自词性、分类拖拽、JSON 导入导出
 - **目录即真相**：卡片网格一卡一文件镜像磁盘；清空/删除走 `_清空备份-<时间戳>`，不硬删
 - **控制台**：绘图台只修 bug，不做功能迭代（0.7.53 起约定）
-- **脱敏**：干净分发件新增两处替换（画师名 `もちづきけい` → `画师A`、文档示例路径 `D:\dsh\` → `D:\你的工作区\`）
+- **脱敏**：干净分发件新增两处替换（画师名 `もちづきけい` → `画师A`、文档示例路径 `<工作区>\` → `D:\你的工作区\`）
 
 ## 0.7.52 · 2026-10-22
 
@@ -1444,8 +1461,8 @@ A 线的「工作台」整页移除，`PreviewConsole` 只保留「历史」和�
 
 ### 测试
 
-- 新增 `<工作区>/日志/<工作区>\日志\<冒烟脚本>.js`：假 loader + 假 React 真渲染三条路径——编辑已有卡 / 新建卡 / 带词性的输入行（外加 `PolKeys` 单测），全部 `渲染 OK`。
-- `日志/<工作区>\日志\<探针脚本>.js` 仍全绿（`capNoteOf`/`PolKeys`/`DictCardEditor`/`CapPairInput` 皆 `function`）。
+- 新增 `D:/dsh/日志/smoke-dictcard.js`：假 loader + 假 React 真渲染三条路径——编辑已有卡 / 新建卡 / 带词性的输入行（外加 `PolKeys` 单测），全部 `渲染 OK`。
+- `日志/probe-client-scope.js` 仍全绿（`capNoteOf`/`PolKeys`/`DictCardEditor`/`CapPairInput` 皆 `function`）。
 
 ## 0.7.45 · 2026-10-22
 
@@ -1455,7 +1472,7 @@ A 线的「工作台」整页移除，`PreviewConsole` 只保留「历史」和�
 
 **修法**：把这五个助手整段搬到 `allLib()` 之后（真正的模块级，行首深度 0）。现在模块级与 `genTab` 内部都能看到同一份实现，无重定义。
 - 顺带确认 `dictcard.js` 依赖的 `h` / `S` / `capNoteOf` / `setCapNote` / `capPolOf` / `setCapPol` 全在模块级可见。
-- 新增回归探针 `<工作区>/日志/<工作区>\日志\<探针脚本>.js`：用假 loader 跑一遍 `client.js`，在模块级打印这些标识符的 `typeof`，全为 `function`/`object` 才算过（这次就是靠它定位的）。
+- 新增回归探针 `D:/dsh/日志/probe-client-scope.js`：用假 loader 跑一遍 `client.js`，在模块级打印这些标识符的 `typeof`，全为 `function`/`object` 才算过（这次就是靠它定位的）。
 
 ### 说明
 
@@ -1910,7 +1927,7 @@ A 线的「工作台」整页移除，`PreviewConsole` 只保留「历史」和�
    原来写死 `<comfyRoot>\input` 与 `<comfyRoot>\models\model_patches`，而真实位置是
    `<comfyRoot>\ComfyUI\input` 与 `<comfyRoot>\ComfyUI\models\model_patches` —— 便携版和自建目录都这样。
    后果：`os.makedirs` 把空壳目录建出来，LLLite 身份控制图与 model_patches 写进 ComfyUI 根本看不见的地方
-   （本机实测：`D:\paint\input`、`D:\paint\models\model_patches` 是空壳，真货在 `D:\paint\ComfyUI\` 下）。
+   （本机实测：`<ComfyUI父目录>`、`<ComfyUI父目录>` 是空壳，真货在 `<ComfyUI父目录>` 下）。
    → 新增 `_comfy_sub(root, *cands)`：先探 `ComfyUI/...`，再退回 `...`，都不存在才按后者建。
 
 ## 0.7.2 · 2026-10-21
@@ -1975,7 +1992,7 @@ A 线的「工作台」整页移除，`PreviewConsole` 只保留「历史」和�
    ⚠️ 复现有陷阱：`zhFillParts` 对**字符串**值直接透传，只有 `parts: {k: [{t,n}]}`
    的**数组**分支才走 `zhOf` —— 随便塞数据测不出来。
 
-5. **`comfyRoot` 默认值硬编码 `D:\paint\ComfyUI`**（上游作者的开发机路径）。
+5. **`comfyRoot` 默认值硬编码 `<ComfyUI父目录>`**（上游作者的开发机路径）。
    别的机器上它永远"看起来配了但实际无效"，报错全落在下游。→ 默认置空，改为模式判定。
 
 6. **`running()` 永远探 `127.0.0.1`**。remote 模式下 `comfyUrl` 指向别处，
@@ -2275,7 +2292,7 @@ for _s in (sys.stdout, sys.stderr):
 |---|---|
 | 无 LLLite 基线出图（512×768 / 8 步 / euler / cfg 4.5） | 6 s 出图，画面正常 |
 | 同 seed 两次（换 prefix 强制真重算） | **像素差 0** —— 本机出图是确定性的 |
-| 带 LLLite（`<身份LLLite-v2>` + 控制图） | 平均差 21.7/255、99.985% 像素变化，角色明显向控制图靠拢 |
+| 带 LLLite（`dshc-lllite-v2-400` + 控制图） | 平均差 21.7/255、99.985% 像素变化，角色明显向控制图靠拢 |
 | 带 LLLite 重复一次 | 像素差 0 |
 
 **结论**：`buildGraph` 的 UNETLoader + CLIPLoader(qwen_image) + AnimaLLLiteApply 20/21/22 链在真机上完全正确。
@@ -2305,7 +2322,7 @@ for _s in (sys.stdout, sys.stderr):
 
 **拆的过程里挖出三个真 bug**（都是原代码就有的，不是拆坏的）：
 
-1. **`COMFY_ROOT` 被赋值两次**：原文件 L188 定义一次，L1037 又定义一次（带回退 `or r'D:\paint\ComfyUI'`）。于是 L1037 之前的函数看到空字符串、之后的看到真实路径 —— `/stylecards/packed` 之所以返回绝对 root，靠的正是这个"后半段才生效"的副作用。统一进 `sidecar_state` 后全模块一致。
+1. **`COMFY_ROOT` 被赋值两次**：原文件 L188 定义一次，L1037 又定义一次（带回退 `or r'<ComfyUI父目录>'`）。于是 L1037 之前的函数看到空字符串、之后的看到真实路径 —— `/stylecards/packed` 之所以返回绝对 root，靠的正是这个"后半段才生效"的副作用。统一进 `sidecar_state` 后全模块一致。
 2. **`asset_errs` 从未初始化**：`_stylecards_unpack` 里只有 `asset_errs.append(...)`、没有定义，asset 写入失败时抛 NameError，把真实错误盖掉。已补初始化并让它进返回值（`assetErrors`）。
 3. **`global _PROBE_DIAG` 重新绑定**：拆开后 `expander.py` 导入的是旧 list 快照，`/routes` 的 `probed` 直接变空。改成原地 `[:] = diag`。
 
@@ -2472,8 +2489,6 @@ for _s in (sys.stdout, sys.stderr):
 - 处理：把 A 线 BG 完整保留为 `PBG`（166 行，原样），在移植块尾部把本地缺的 15 个成员 `bind` 到 `BG`。本地卡系统继续用本地 BG 的任务表，两张表互不干扰。
 - 验证：`BG` 21 个成员全部为 function（`tasksSnapshot` `adopt` `run` `retrySave` `cancel` `progress` `shutdown` `setJob` `startWatch` `stopWatch` `emit` `subscribe` `snapshot` `clear` `isFinished`）；`node --check` 通过；求值零错误；`client.js` 重建 1,007,510 B（`PBG`×5、`tasksSnapshot`×5）。
 - 顺带核过 194 个同名全局的成员访问，只有 BG 一个真缺；`S` 样式 17 个键本地齐全（`btn2` 定义 1 处、引用 147 次）；`USER.seedVer` 是 A 线 presets 种子版本号，其代码自己处理 `undefined`，不需要补。## 0.7.95 · 2026-10-27 · 正式合并（拆掉「扩展」套娃）
-
-## 0.7.95 · 2026-10-27 · A 线拆平：顶层 7 个 tab，PreviewConsole 受控常挂载
 
 0.7.94 里 A 线功能是塞在一个「扩展」tab 里的嵌套界面（里面还有一层它自己的 tab 条）。这次把它拆平。
 
@@ -2933,7 +2948,7 @@ function instanceHeaders() {
 **验证**
 
 ```
-/dictionary/status            200  {"ok": true, "schema_version": 1, "db_path": "<ComfyUI父目录>\\com…"}
+/dictionary/status            200  {"ok": true, "schema_version": 1, "db_path": "<ComfyUI父目录>"}
 /dictionary/browse?limit=1    200  {"items": [{"id": 279, "source_key": "mandar…
 /dictionary/categories?tags=1 200  {"items": [{"name": "水果", "count": 2}…
 不带 client 头                401  仍需 client 头 ✓
@@ -3501,9 +3516,9 @@ LOCAL_ONLY = frozenset(('/version', '/routes', '/log', '/local/status',
 ### 验证
 
 ```
-GET  /loras                  → count=20  dir=D:\paint\ComfyUI\models\loras
+GET  /loras                  → count=20  dir=<ComfyUI父目录>
 GET  /loras/file?name=xunlian1.safetensors → 91,853,952 B（与磁盘完全一致）
-GET  /loras/file?name=<LoRA>.safetensors      → Content-Disposition: attachment; filename*=UTF-8''%E8%BD%AF%E8%90%8C.safetensors
+GET  /loras/file?name=软萌.safetensors      → Content-Disposition: attachment; filename*=UTF-8''%E8%BD%AF%E8%90%8C.safetensors
 POST /loras/scan             → 200  count=20
 POST /loras/del {不存在}      → 200  {"ok": false, "error": "文件不存在: ..."}
 POST /loras/del {真实文件}     → 200  left=20  trash=_trash-20261027-152106  （源文件消失、trash 内可见、测试残留已清）

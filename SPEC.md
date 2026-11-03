@@ -1,4 +1,4 @@
-# dsh-comfyui-console 开发规范
+# Comfy Cards Next（dsh-comfy-cards-next）开发规范
 
 > 这份文档管的不是"功能怎么实现"，而是**"为什么装了哪一份都能用"**。
 >
