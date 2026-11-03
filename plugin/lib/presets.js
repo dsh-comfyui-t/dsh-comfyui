@@ -116,6 +116,16 @@ export const VIEWS = [
  * @param {'high'|'eye'|'low'} key 视角
  * @returns {{pos: string, neg: string, changed: boolean, moved: number}}
  */
+/**
+ * 从一条正向提示词**反推**它属于哪个视角。
+ *
+ * 用途：套用一个（可能是很久以前存的）预设之后，让「视角」按钮的高亮跟实际一致 ——
+ * 避免"看着是平视、实际发出去的还是俯视构图"。
+ *
+ * @param {string} pos
+ * @returns {'high'|'eye'|'low'}
+ */
+
 export function applyView(pos, neg, key) {	const v = VIEWS.filter((x) => x.key === key)[0]
 	if (!v) return { pos: pos, neg: neg, changed: false, moved: 0 }
 
@@ -157,6 +167,11 @@ export function applyView(pos, neg, key) {	const v = VIEWS.filter((x) => x.key =
  *
  * @param {string} pos
  * @returns {'high'|'eye'|'low'}
+ */
+
+/**
+ * 从机位描述里认出「低机位 / 平视 / 高机位」—— 视角胶囊与取景标签的判据。
+ * 认不出就按高机位处理（原来两边都这么兜底）。
  */
 export function detectView(pos) {
 	const s = String(pos || '');

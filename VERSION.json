@@ -1,11 +1,11 @@
 {
-  "bundle": "dsh-comfyui-console + comfyui-cards",
-  "bundleVersion": "0.6.1",
-  "builtAt": "2026-10-21T19:21:16+0800",
+  "bundle": "dsh-comfy-cards-next + comfyui-cards",
+  "version": "0.8.0",
+  "builtAt": "2026-11-04T00:13:13+0800",
   "components": {
     "plugin": {
-      "name": "dsh-comfyui-console",
-      "version": "0.6.1",
+      "name": "dsh-comfy-cards-next",
+      "version": "0.8.0",
       "configVersion": 2,
       "minHost": "0.2.0-rc.2",
       "entry": "plugin/lib/index.js",
@@ -41,6 +41,8 @@
     "角色卡 / 风格卡 JSON（.dslcard 等）",
     "LoRA 权重（.safetensors / .ckpt / .pt）",
     "本机 config.json（私人路径）",
-    "lora来源.json 真件（只发 lora来源.example.json 占位版）"
-  ]
+    "lora来源.json 真件（只发 lora来源.example.json 占位版）",
+    "构建备份与历史快照（*.bak-* / .build-backup / .bak-old）"
+  ],
+  "bundleVersion": "0.8.0"
 }

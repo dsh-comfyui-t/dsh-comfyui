@@ -1,4 +1,4 @@
-# dsh-comfyui-console 开发规范
+# Comfy Cards Next（dsh-comfy-cards-next）开发规范
 
 > 这份文档管的不是"功能怎么实现"，而是**"为什么装了哪一份都能用"**。
 >
@@ -84,7 +84,7 @@
 {
   "id": "lqh",                                  // 必填，文件名一致
   "name": "@local/dsh-comfyui-console-lqh",     // 必填，互不相同，且是最终 package.json.name
-  "label": "涟崎桦版",                           // 必填，面板显示
+  "label": "<角色卡-2>版",                           // 必填，面板显示
   "design": "lqh",                              // 必填，对应 lib/designs/<design>.js
   "default": true,                              // 可选，至多一份为 true
   "differs": "一句话说清和别的差在哪",             // 必填，人读

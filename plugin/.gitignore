@@ -1,0 +1,36 @@
+# ============ 构建 / 缓存 ============
+.build-backup/
+__pycache__/
+**/__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+
+# ============ 本地备份快照 ============
+# lib/ 里有 26 个 .bak-*，单个 app.js.bak-* 就 900 KB，全部排除
+**/*.bak
+**/*.bak-*
+.bak-old/
+
+# ============ 本机配置（含绝对路径与本机 credentials 路径）============
+config.json
+config.json.bak-*
+# LoRA 归属真件：记录本人合成链，只发 lora来源.example.json
+lora来源.json
+.local/
+
+# ============ 运行时产物 ============
+work/
+*.log
+tmp/
+_temp/
+
+# ============ 依赖 ============
+node_modules/
+
+# ============ 编辑器 / 系统 ============
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini

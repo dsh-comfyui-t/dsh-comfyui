@@ -1,4 +1,4 @@
-# install.ps1 -- bootstrap for dsh-comfyui-console
+# install.ps1 -- bootstrap for Comfy Cards Next (dsh-comfy-cards-next)
 #
 # Pure ASCII on purpose: Windows PowerShell 5.1 decodes a BOM-less .ps1 as GBK,
 # so any non-ASCII literal in this file would break on some machines.
@@ -56,7 +56,6 @@ Say ('ComfyUI: ' + $ComfyRoot)
 if (-not $PythonExe) {
   $try = @(
     (Join-Path $ComfyRoot 'python_embeded\python.exe'),
-    'D:\paint\venv312\Scripts\python.exe',
     (Join-Path $env:LOCALAPPDATA 'Programs\Python\Python312\python.exe'),
     (Join-Path $env:LOCALAPPDATA 'Programs\Python\Python311\python.exe')
   )
@@ -73,7 +72,9 @@ Say ('Python: ' + $PythonExe)
 
 # ---- 3. defaults for dirs ----
 if (-not $WorkDir)   { $WorkDir = Join-Path $here 'work' }
-if (-not $CardsDir)  { $CardsDir = Join-Path $WorkDir 'cards' }
+# Default cardsDir lives under the user Documents folder, never inside the plugin dir
+# (plugin upgrade replaces the whole directory and would take the cards with it).
+if (-not $CardsDir)  { $CardsDir = Join-Path ([Environment]::GetFolderPath('MyDocuments')) 'dsh-comfyui\cards' }
 if (-not $OutputDir) { $OutputDir = Join-Path $ComfyRoot 'output' }
 foreach ($d in @($WorkDir, $CardsDir)) {
   if (-not (Test-Path -LiteralPath $d)) { New-Item -ItemType Directory -Force -Path $d | Out-Null }
@@ -82,12 +83,12 @@ Say ('workDir: ' + $WorkDir)
 Say ('cardsDir: ' + $CardsDir)
 
 # ---- 4. sanity checks on the package itself ----
-foreach ($f in @('expander.py', 'sidecar_auth.py', 'sidecar_cards.py', 'sidecar_comfy.py', 'sidecar_config.py', 'sidecar_llm.py', 'sidecar_pack.py', 'sidecar_routes.py', 'sidecar_state.py', 'sidecar_util.py', 'lib\index.js', 'lib\client.js', 'cordis.patch.yml')) {
+foreach ($f in @('py\expander.py', 'py\sidecar_auth.py', 'py\sidecar_cards.py', 'py\sidecar_comfy.py', 'py\sidecar_config.py', 'py\sidecar_llm.py', 'py\sidecar_pack.py', 'py\sidecar_routes.py', 'py\sidecar_state.py', 'py\sidecar_util.py', 'lib\index.js', 'lib\client.js', 'cordis.patch.yml')) {
   $p = Join-Path $here $f
   if (-not (Test-Path -LiteralPath $p)) { Fail ('package file missing: ' + $p) }
 }
-& $PythonExe -c "import py_compile,sys; py_compile.compile(sys.argv[1], doraise=True)" (Join-Path $here 'expander.py')
-if ($LASTEXITCODE -ne 0) { Fail 'expander.py does not compile -- package is corrupt' }
+& $PythonExe -c "import py_compile,sys; py_compile.compile(sys.argv[1], doraise=True)" (Join-Path $here 'py\expander.py')
+if ($LASTEXITCODE -ne 0) { Fail 'py/expander.py does not compile -- package is corrupt' }
 Say 'expander.py compiles OK'
 
 # ---- 5. write config.json (UTF-8, no BOM) ----
@@ -119,8 +120,8 @@ Write-Host ''
 Say 'done. Next:'
 Write-Host '  1) register the plugin in YOUR profile (layout differs per install; examples below)'
 Write-Host '     an insert line pointing at it, or use: dsh plugin add <this folder>)'
-Write-Host '     - npm layout : <DSH_HOME>\profiles\node_modules\@local\dsh-comfyui-console\'
-Write-Host '     - cordis     : <profile>\cordis.patch.yml  insert { id: comfyui-console, name: "@local/dsh-comfyui-console" }'
+Write-Host '     - npm layout : <DSH_HOME>\profiles\node_modules\@local\dsh-comfy-cards-nexte\'
+Write-Host '     - cordis     : <profile>\cordis.patch.yml  insert { id: comfy-cards-next, name: "@local/dsh-comfy-cards-next" }'
 Write-Host '     - legacy     : <DSH_HOME>\plugins\ (older builds only)'
 Write-Host '  2) restart the DSH web process (plugin code is cached per process)'
 Write-Host '  3) open the drawing console, then check the sidecar:'

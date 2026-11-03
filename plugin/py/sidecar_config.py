@@ -31,7 +31,7 @@ from sidecar_util import (
 def _output_dirs():
     r"""所有可能的出图目录（config.json 的 comfyRoot 下）。
 
-    本机 ComfyUI 由 D:\paint\start-comfy.ps1 启动，带 --output-directory <root>\out，
+    本机 ComfyUI 由 <ComfyUI父目录>\start-comfy.ps1 启动，带 --output-directory <root>\out，
     所以真图在 <root>\out；只有面板自己拉起的实例才用 ComfyUI\output 默认目录。
     两个都要认，否则「打开文件所在位置」会报文件不存在。
     """
@@ -90,8 +90,12 @@ def _cfg_set(**kw):
     try:
         cfg = {}
         if os.path.exists(CONFIG):
-            with open(CONFIG, encoding='utf-8') as f:
-                cfg = json.load(f)
+            try:
+                with open(CONFIG, encoding='utf-8') as f:
+                    cfg = json.load(f)
+            except Exception:
+                with open(CONFIG, encoding='utf-8-sig') as f:   # 记事本 / PS 5.1 写过 BOM
+                    cfg = json.load(f)
         cfg.update(kw)
         try:
             if int(cfg.get('configVersion') or 0) < CONFIG_VERSION:

@@ -25,7 +25,7 @@
 
 | 组件 | 标识 | 版本 | 说明 |
 |---|---|---|---|
-| 绘图台插件 | 包名 `dsh-comfyui-console` | **0.5.7**（`dsh.configVersion` 2） | Host 插件 `lib/index.js` + 侧车 `expander.py`（127.0.0.1:8199）+ 面板 `lib/client.js` |
+| 绘图台插件 | 包名 `dsh-comfyui-console` | **0.8.0**（`dsh.configVersion` 2） | Host 插件 `lib/index.js` + 侧车 `expander.py`（127.0.0.1:8199）+ 面板 `lib/client.js` |
 | 双卡技能 | 技能名 `comfyui-cards` | 随套件 | `skills/comfyui-cards/SKILL.md`，讲卡结构与 LoRA/LLLite 自训流程 |
 | 安装脚本 | `install/install-ai.ps1` | — | 装文件 + 写 `config.json` + 可选挂载 profile，支持 `-Json` |
 | 验证脚本 | `install/verify.ps1` | — | 只读体检，支持 `-Json`，有 FAIL 就退出码 1 |
@@ -37,7 +37,7 @@
 | 条件 | 如何判定 | 不满足怎么办 |
 |---|---|---|
 | DSH 已装且能起 Web | `$env:DSH_HOME` 有值；`dsh --help` 可用 | 先装 DSH，本套件不代装 |
-| DSH ≥ 0.5.7-rc.2 | `dsh --version` | 升级 DSH；插件写的是 `minHost` |
+| DSH ≥ 0.2.0-rc.2 | `dsh --version` | 升级 DSH；插件写的是 `minHost` |
 | **`$DSH_HOME` 可写** | `Test-Path $env:DSH_HOME` | 需要提权（写 profile / 插件目录都在这里） |
 | Node ≥ 18 | `node --version` | 装 Node；只用于语法校验与 Host 插件 |
 | Python ≥ 3.10（侧车用） | `python --version` | 侧车 `expander.py` 只用标准库，任意 3.10+ 即可 |
@@ -56,7 +56,7 @@ cd <解压后的套件目录>
 powershell -ExecutionPolicy Bypass -File install\install-ai.ps1 `
   -ComfyRoot "D:\ComfyUI\ComfyUI_windows_portable" `
   -CardsDir  "D:\cards" `
-  -LinkJunction -Profile 0.5.7-rc.2
+  -LinkJunction -Profile 0.2.0-rc.2
 ```
 
 参数取值：
@@ -76,10 +76,10 @@ powershell -ExecutionPolicy Bypass -File install\install-ai.ps1 `
 ```powershell
 # 1) 先写一份 UTF-8 无 BOM 的 seed.json（只写你要改的键）
 $seed = 'seed.json'
-$body = '{"comfyRoot":"D:\\paint","cardsDir":"D:\\dsh\\本地绘画\\角色卡","outputDir":"D:\\paint\\out"}'
+$body = '{"comfyRoot":"<ComfyUI父目录>","cardsDir":"<工作区>\本地绘画\角色卡","outputDir":"<ComfyUI父目录>\\out"}'
 [IO.File]::WriteAllText($seed, $body, (New-Object System.Text.UTF8Encoding($false)))
 # 2) 安装时指过去
-powershell -ExecutionPolicy Bypass -File install\install-ai.ps1 -ConfigFile $seed -LinkJunction -Profile 0.5.7-rc.2
+powershell -ExecutionPolicy Bypass -File install\install-ai.ps1 -ConfigFile $seed -LinkJunction -Profile 0.2.0-rc.2
 ```
 
 安装脚本写完 `config.json` 会**立刻回读校验**：解析失败或 `cardsDir` 出现 `?` → 直接报 `[failed]`/`[warn]` 提示改用 `-ConfigFile`。
@@ -89,7 +89,7 @@ powershell -ExecutionPolicy Bypass -File install\install-ai.ps1 -ConfigFile $see
 ### 3.2 手工（脚本跑不了时）
 
 ```powershell
-$h  = $env:DSH_HOME                       # 例 D:\dshl\.dsh
+$h  = $env:DSH_HOME                       # 例 <DSH目录>\.dsh
 $pd = Join-Path $h 'plugins\dsh-comfyui-console\plugin'
 
 # 1) 插件代码
@@ -169,13 +169,13 @@ powershell -ExecutionPolicy Bypass -File install\verify.ps1 -DshHome <DSH_HOME> 
 **A. 官方通道（首选）**
 
 ```powershell
-dsh plugin --profile 0.5.7-rc.2 add "$pd"
+dsh plugin --profile 0.2.0-rc.2 add "$pd"
 ```
 
 **B. junction（没有 CLI 时）** — profile 依赖写成 `link:`，指向插件目录：
 
 ```powershell
-$nm = Join-Path $h 'profiles\0.5.7-rc.2\node_modules'
+$nm = Join-Path $h 'profiles\0.2.0-rc.2\node_modules'
 New-Item -ItemType Directory -Path $nm -Force | Out-Null
 cmd /c mklink /J "$nm\dsh-comfyui-console" "$pd"
 ```
@@ -203,10 +203,10 @@ powershell -ExecutionPolicy Bypass -File install\verify.ps1 -Json     # 退出�
 | 文件齐 | `Test-Path "$pd\lib\index.js"` 等 5 个 | 全 `True` |
 | 配置能解析 | `[IO.File]::ReadAllText("$pd\config.json") \| ConvertFrom-Json` | 不报错 |
 | 侧车活着 | `Invoke-RestMethod http://127.0.0.1:8199/health` | `{ok:true, routes:[…]}` |
-| 版本对齐 | `Invoke-RestMethod http://127.0.0.1:8199/version` | `loaded=0.5.7`、`stale=false`、`configVersion=2` |
+| 版本对齐 | `Invoke-RestMethod http://127.0.0.1:8199/version` | `loaded=0.8.0`、`stale=false`、`configVersion=2` |
 | 卡目录可读 | 看 `cardsDir` 下 `*.json` / `*.dslcard` 数量 | ≥ 你预期的卡数 |
 | ComfyUI | `Invoke-RestMethod http://127.0.0.1:8188/system_stats` | 有 `system` 字段（没起就 8188 不通，属正常） |
-| 面板 | 浏览器开 `http://127.0.0.1:10722` | 出现「ComfyUI 绘图台」，顶栏有 `v0.5.7` |
+| 面板 | 浏览器开 `http://127.0.0.1:10722` | 出现「ComfyUI 绘图台」，顶栏有 `v0.8.0` |
 
 `stale=true` 的含义：磁盘已换新代码、进程还是旧的 → **重启 dsh web**，刷新页面无效（ESM 缓存按进程）。
 
@@ -256,7 +256,7 @@ powershell -ExecutionPolicy Bypass -File install\verify.ps1 -Json     # 退出�
 ├─ install\
 │   ├─ install-ai.ps1        安装（-Json 可解析）
 │   └─ verify.ps1            只读体检（有 FAIL 退出码 1）
-├─ plugin\                   插件 0.5.7（可直接被 update.ps1 当作升级源）
+├─ plugin\                   插件 0.8.0（可直接被 update.ps1 当作升级源）
 │   ├─ lib\index.js          Host 插件：起侧车、配置迁移、版本常量
 │   ├─ lib\client.js         面板（由 tools\build_client.py 从 app.js 生成）
 │   ├─ lib\app.js            面板源文件

@@ -1,0 +1,23 @@
+# dsh-comfyui-console 侧车（expander.py + sidecar_*.py）的 Python 依赖
+#
+# 核心路径只用标准库；下面两项都在 try/except 里按需降级 —— 缺了不会崩，
+# 但对应功能会不可用或变慢。
+#
+#   pip install -r requirements.txt
+
+# ---- 强烈建议：缩略图 / 卡包封面 ----
+# 缺它会直接报「缩略图需要 Pillow」，出图列表没有预览、导出卡包封面内联失败
+Pillow>=10.0
+
+# ---- 可选：进程探测 ----
+# sidecar_comfy.py 按端口找 PID；缺了退回 netstat（Windows 上慢一些，结果一致）
+# psutil>=5.9
+
+# ---- 可选：YAML 配置 ----
+# aline_mods/comfy_paths.py 解析 ComfyUI 的 extra_model_paths.yaml
+# PyYAML>=6.0
+
+# ---- 可选：离线翻译 ----
+# 只在跑 install_translation.py 装本地翻译模型时需要
+# ctranslate2>=4.0
+# sentencepiece>=0.2

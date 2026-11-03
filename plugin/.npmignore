@@ -1,0 +1,12 @@
+# 构建/缓存/备份，绝不进分发包
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+.build-backup/
+**/*.bak-*
+**/*.bak
+__pycache__/
+.pytest_cache/
+*.log
+tmp/
+_temp/

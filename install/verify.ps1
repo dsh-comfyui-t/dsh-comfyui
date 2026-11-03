@@ -1,7 +1,7 @@
 # bundle verify (ASCII only, PowerShell 5.1). Read-only: never writes or starts anything.
 #
 #   powershell -ExecutionPolicy Bypass -File verify.ps1
-#   powershell -ExecutionPolicy Bypass -File verify.ps1 -DshHome D:\dshl\.dsh -Json
+#   powershell -ExecutionPolicy Bypass -File verify.ps1 -DshHome <DSH目录>\.dsh -Json
 #
 # Exit code 0 = all required checks passed; 1 = something is wrong (see rows with FAIL).
 
@@ -24,7 +24,7 @@ function Add-Check([string]$name, [string]$status, [string]$detail) {
 if (-not $DshHome) {
     if ($env:DSH_HOME) { $DshHome = $env:DSH_HOME }
     elseif ($env:DSH_PROFILE_DIR) { $DshHome = Split-Path -Parent (Split-Path -Parent $env:DSH_PROFILE_DIR) }
-    else { $DshHome = 'D:\dshl\.dsh' }
+    else { $DshHome = '<DSH目录>\.dsh' }
 }
 if (-not $Profile) { $Profile = $env:DSH_PROFILE }
 
@@ -238,6 +238,31 @@ if ((Test-Path $syncScript) -and (Test-Path (Join-Path $suiteRoot 'VERSION.json'
 } else {
     Add-Check 'version:consistent' 'skipped' 'no VERSION.json beside install\ (installed copy)'
 }
+
+# ---- bundle registration ----
+# The one check whose absence makes every other check meaningless: a plugin whose
+# name is missing from dsh.profile.bundles loads nowhere, produces no error, and
+# shows no sidebar entry. Files on disk and a working junction are not enough.
+if ($Profile) {
+    $pj = Join-Path $DshHome ('profiles\' + $Profile + '\package.json')
+    if (Test-Path $pj) {
+        try {
+            $j = [IO.File]::ReadAllText($pj, [Text.Encoding]::UTF8) | ConvertFrom-Json
+            $bl = @()
+            if ($j.dsh -and $j.dsh.profile -and $j.dsh.profile.bundles) { $bl = @($j.dsh.profile.bundles) }
+            $hit = @($bl | Where-Object { $_ -eq 'dsh-comfyui-console' }).Count
+            if ($hit -eq 1) {
+                Add-Check 'bundle:registered' 'ok' 'dsh.profile.bundles lists dsh-comfyui-console'
+            } elseif ($hit -gt 1) {
+                Add-Check 'bundle:registered' 'WARN' ('listed ' + $hit + ' times; duplicates can break boot')
+            } else {
+                Add-Check 'bundle:registered' 'FAIL' ('missing from dsh.profile.bundles -> no sidebar entry and no error; re-run install-ai.ps1 with -LinkJunction or -ApplyProfile')
+            }
+        } catch {
+            Add-Check 'bundle:registered' 'FAIL' ('profile package.json unreadable: ' + $_.Exception.Message)
+        }
+    } else { Add-Check 'bundle:registered' 'skipped' ('no ' + $pj) }
+} else { Add-Check 'bundle:registered' 'skipped' 'no -Profile given' }
 
 # ---- report ----
 $fails = @($rows | Where-Object { $_.status -eq 'FAIL' }).Count

@@ -10,6 +10,10 @@
   "saveDir": "",
   "comfyPort": 8188,
   "sidecarPort": 8199,
+  "_noteUpdate": "updateRepo 填 GitHub 仓库 owner/repo（如 someone/dsh-comfy-cards-next），配了才能查新版本；updateProxy 走代理时填 http://127.0.0.1:7890；updateCheck=false 关掉启动时的自动检查",
+  "updateRepo": "",
+  "updateProxy": "",
+  "updateCheck": true,
   "extraComfyArgs": [
     "--disable-pinned-memory",
     "--disable-async-offload",

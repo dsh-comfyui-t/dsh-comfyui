@@ -1,0 +1,14 @@
+[general]
+resolution = [1024, 1024]
+caption_extension = ".txt"
+enable_bucket = true
+bucket_no_upscale = true
+
+[[datasets]]
+batch_size = 1
+
+  [[datasets.subsets]]
+  # 原图与条件线稿成对放好：image/ 是目标图，control/ 是 LLLite 条件图
+  image_dir = "D:/datasets/lllite-NAME/image"
+  conditioning_data_dir = "D:/datasets/lllite-NAME/control"
+  num_repeats = 6

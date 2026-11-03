@@ -21,9 +21,18 @@ from sidecar_state import (
 # ⚠️ 2026-10-21：DSH **桌面版**的渲染进程 origin 是 `dsh-app://app`，不是 localhost。
 #    只认 localhost 会让桌面版面板的每个请求都 403 + ACAO null（表现是"连不上侧车"）。
 #    dsh-app:// 只由本应用注册，等价于"自己的 UI"，不比 localhost 宽。
+#
+# ⚠️ 2026-10-31：桌面版在不同打包方式下会换 origin —— Electron 以 `app://` 注册自定义
+#    协议时报 app://<name>，以本地文件加载页面时报 file://… 甚至字面量 null（沙箱 iframe、
+#    无 scheme 的 about:blank 派生页）。这三种都要认，否则表现就是面板全灰、Failed to fetch。
+#    注意 file:// 与 null 不与应用绑定，任何本机页面都能伪造 —— 真正的第二道闸是
+#    _auth_ok() 里的 X-Console-Client 头 + token，不要把这里当唯一防线。
 _LOCAL_ORIGIN_RE = re.compile(
     r'^(?:https?://(?:127\.0\.0\.1|localhost|\[::1\])(?::\d+)?'
-    r'|dsh-app://[A-Za-z0-9._-]+)$')
+    r'|dsh-app://[A-Za-z0-9._-]+'
+    r'|app://[A-Za-z0-9._-]+'
+    r'|file://.*'
+    r'|null)$')
 _LAN_ORIGIN_RE = re.compile(
     r'^https?://(10\.\d+\.\d+\.\d+|192\.168\.\d+\.\d+|172\.(?:1[6-9]|2\d|3[01])\.\d+\.\d+)(:\d+)?$')
 
@@ -51,6 +60,13 @@ import secrets  # noqa: E402  （放在常量区之后，避免改动文件头�
 
 _TOKEN_CACHE = {'token': ''}
 _OPEN_PATHS = ('/health', '/version')
+# <img src> 是浏览器直接发的图片请求：既不能加 X-Console-Client，也不带 Origin，
+# 落进 token 分支必然 401 —— 表现就是"图全裂"。这些前缀只返回图片字节
+# （输出图 / 输出缩略图 / 模型预览图 / 在线模型图），不涉及写操作与本机任意路径读取，
+# 所以按只读放行。写操作和其余 GET 仍然走原鉴权。
+# /loras/file 单独一个理由：导出走浏览器 <a download>，拿不到自定义头；它只返回
+# models/loras 里的文件（_abs_of 已挡掉 .. 之类），仍然是只读。
+_OPEN_GET_PREFIXES = ('/outputs/view', '/outputs/thumb', '/models/preview', '/online/images/', '/loras/file')
 
 
 def _token_file():
@@ -105,6 +121,8 @@ def _auth_ok(handler, path):
     if handler.command == 'OPTIONS':
         return True
     if path in _OPEN_PATHS:
+        return True
+    if handler.command == 'GET' and path.startswith(_OPEN_GET_PREFIXES):
         return True
     # ⚠️ Origin 是**客户端可控的请求头**，单看它挡不住本机恶意进程（见 docs/生成经验.md #8）。
     #    所以这里做两道叠闸：

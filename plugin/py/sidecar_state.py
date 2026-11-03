@@ -28,7 +28,9 @@ for _s in (sys.stdout, sys.stderr):
 import time
 
 
-HERE = os.path.dirname(os.path.abspath(__file__))
+_HERE_PARENT = os.path.dirname(os.path.abspath(__file__))
+HERE = os.path.dirname(_HERE_PARENT)   # 存储整理：模块已下沉到 py\，包根资源在上层
+
 CONFIG = os.path.join(HERE, 'config.json')
 PKG_JSON = os.path.join(HERE, 'package.json')
 STARTED_AT = time.strftime('%Y-%m-%dT%H:%M:%S')
@@ -38,6 +40,7 @@ KNOWN_CFG_KEYS = {
     'configVersion', 'comfyRoot', 'pythonExe', 'workDir', 'credsFile', 'comfyPort',
     'sidecarPort', 'extraComfyArgs', 'outputDir', 'saveDir', 'cardsDir', 'allowLan', '_note',
     'sidecarToken', 'requireToken',
+    'updateRepo', 'updateProxy', 'updateCheck',
 }
 
 
@@ -61,6 +64,68 @@ VERSION_LOADED = _PKG['version']
 CONFIG_VERSION = _PKG['configVersion']
 
 
+def _default_cards_dir():
+    """cardsDir 没配时的兜底：<用户文档>/dsh-comfyui/角色卡（同级派生 画风 / 词库）。"""
+    try:
+        home = os.path.expanduser('~')
+        docs = os.path.join(home, 'Documents')
+        if not os.path.isdir(docs):
+            docs = home
+        d = os.path.join(docs, 'dsh-comfyui', '角色卡')
+        os.makedirs(d, exist_ok=True)
+        print('[config] cardsDir 没配，用兜底目录:', d)
+        return d
+    except Exception as e:
+        print('[config] 兜底 cardsDir 建不出来:', e)
+        return ''
+
+
+_SKIP_DIRS = {'windows', 'program files', 'program files (x86)', 'programdata',
+              '$recycle.bin', 'system volume information', 'perflogs', 'recovery',
+              'msocache', 'node_modules', 'appdata', 'windows.old'}
+
+
+def _scan_drives(max_per_drive=600):
+    """扫各盘一级子目录，找「本目录下有 ComfyUI\\main.py 或 python_embeded\\python.exe」的根。
+
+    固定候选表盖不住用户自选布局（如 F:\\AI-WORK\\ComfyUI\\main.py +
+    F:\\AI-WORK\\python_embeded\\python.exe，根就是 F:\\AI-WORK）——
+    2026-10-22 报告 ⑥。只扫一级，命中即返回，找不到就交给后续报错提示。
+    """
+    def ok(c):
+        return (os.path.isfile(os.path.join(c, 'python_embeded', 'python.exe'))
+                or os.path.isfile(os.path.join(c, 'ComfyUI', 'main.py'))
+                or os.path.isfile(os.path.join(c, 'main.py')))
+
+    out = []
+    for letter in 'CDEFGHIJK':
+        base = letter + ':\\'
+        if not os.path.isdir(base):
+            continue
+        if ok(base.rstrip('\\')):
+            out.append(base.rstrip('\\'))
+        try:
+            names = os.listdir(base)
+        except Exception:
+            continue
+        n = 0
+        for name in names:
+            if name.lower() in _SKIP_DIRS:
+                continue
+            p = os.path.join(base, name)
+            try:
+                if not os.path.isdir(p):
+                    continue
+            except Exception:
+                continue
+            n += 1
+            if n > max_per_drive:
+                break
+            if ok(p):
+                out.append(p)
+    return out
+
+
 def _load_cfg():
     """读 config.json；没有就自动探测。
 
@@ -70,8 +135,14 @@ def _load_cfg():
     if os.path.exists(CONFIG):
         try:
             cfg = json.load(open(CONFIG, encoding='utf-8'))
-        except Exception as e:
-            print('[config] config.json 读取失败，改用自动探测:', e)
+        except Exception:
+            # 记事本 / PowerShell 5.1 的 -Encoding utf8 会写 BOM，utf-8 直接解析失败。
+            # 先用 utf-8-sig 重试一次，仍失败才降级成自动探测（2026-10-22 报告 ⑤）。
+            try:
+                cfg = json.load(open(CONFIG, encoding='utf-8-sig'))
+                print('[config] config.json 带 BOM，已用 utf-8-sig 读取')
+            except Exception as e:
+                print('[config] config.json 读取失败，改用自动探测:', e)
 
     def ok(c):
         if not c:
@@ -93,6 +164,12 @@ def _load_cfg():
             if ok(c):
                 root = c
                 print('[config] 自动探测到 ComfyUI:', root)
+                break
+    if not ok(root):
+        for c in _scan_drives():
+            if ok(c):
+                root = c
+                print('[config] 扫盘自动找到 ComfyUI:', root)
                 break
     if not ok(root):
         print('=' * 72)
@@ -128,7 +205,9 @@ def _load_cfg():
         'workDir': work,
         'outputDir': cfg.get('outputDir') or '',
         'saveDir': cfg.get('saveDir') or '',
-        'cardsDir': cfg.get('cardsDir') or '',
+        # 换机器兜底：config.json 里 cardsDir 空着时，按「文档\dsh-comfyui\角色卡」给一个
+        # 真实可写目录（画风/词库由 dirname 派生），否则 /cards 与 /dir/* 全部只能报错。
+        'cardsDir': cfg.get('cardsDir') or _default_cards_dir(),
         'credsFile': cfg.get('credsFile') or '',
         'allowLan': bool(cfg.get('allowLan')),
         'sidecarToken': (cfg.get('sidecarToken') or ''),
@@ -146,7 +225,7 @@ def _load_cfg():
 CFG = _load_cfg()
 # 回退顺序与原 expander.py 中部那处重算一致：配置 -> 环境变量 -> 本机默认
 # ---- ComfyUI 后端（去依赖化）------------------------------------------------
-# 原来这里写死 r'D:\paint\ComfyUI'（上游作者的开发机路径），别的机器上根本不存在，
+# 原来这里写死 r'<ComfyUI父目录>\ComfyUI'（上游作者的开发机路径），别的机器上根本不存在，
 # 于是 comfyRoot 永远"看起来配了但实际无效"，报错全落在下游。
 # 现在：
 #   comfyUrl      完整地址，可指向局域网/远程（http://192.168.1.10:8188）
@@ -222,5 +301,25 @@ _CREDS_CACHE = {'v': None}
 
 # ComfyUI 下的两个固定子目录（原在 expander.py 中部，被 cards 与 pack 两组共用）
 # 这两个是本地磁盘路径，remote 模式下没有意义，置空（下游都已判空）
-COMFY_INPUT = os.path.join(COMFY_ROOT, 'input') if MANAGED else ''
-COMFY_PATCHES = os.path.join(COMFY_ROOT, 'models', 'model_patches') if MANAGED else ''
+def _comfy_sub(root, *cands):
+    r"""在 root 下找第一个存在的候选子路径。
+
+    为什么需要：`comfyRoot` 的两种真实布局都对得上 ——
+      ComfyUI_windows_portable  ->  ComfyUI/input、ComfyUI/models/model_patches
+      自建目录（本机 D:/paint） ->  同样是 ComfyUI/input、ComfyUI/models/model_patches
+    原来写死 <root>/input，在便携版与自建目录下**都不存在**：
+    `os.makedirs` 把目录凭空建出来，LLLite 图与 model_patches 于是写进了 ComfyUI 看不见的地方
+    （本机实测：D:/paint/input 与 D:/paint/models/model_patches 是空壳，真货在 D:/paint/ComfyUI/ 下）。
+    """
+    if not root:
+        return ''
+    for c in cands:
+        p = os.path.join(root, *c)
+        if os.path.isdir(p):
+            return p
+    return os.path.join(root, *cands[0])
+
+
+COMFY_INPUT = _comfy_sub(COMFY_ROOT, ('ComfyUI', 'input'), ('input',)) if MANAGED else ''
+COMFY_PATCHES = _comfy_sub(COMFY_ROOT, ('ComfyUI', 'models', 'model_patches'),
+                           ('models', 'model_patches')) if MANAGED else ''

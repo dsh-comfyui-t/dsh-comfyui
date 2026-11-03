@@ -15,7 +15,7 @@
  */
 import { spawn } from 'node:child_process'
 import { createConnection } from 'node:net'
-import { appendFileSync, closeSync, existsSync, openSync, readFileSync, mkdirSync, writeFileSync } from 'node:fs'
+import { appendFileSync, closeSync, existsSync, openSync, readFileSync, mkdirSync, renameSync, statSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -128,7 +128,7 @@ function loadConfig() {
     workDir: work,
     sidecarPort: Number(c.sidecarPort) || 8199,
     comfyPort: Number(c.comfyPort) || 8188,
-    expander: join(PKG_DIR, 'expander.py'),
+    expander: join(PKG_DIR, 'py', 'expander.py'),
     cfgFound,
     configVersion: Number(c.configVersion || CONFIG_VERSION),
     migration,
@@ -185,14 +185,42 @@ function openLogFd(name) {
  * pythonw 没有控制台可弹；它的 stdout/stderr 仍按句柄继承，所以照旧接进
  * `sidecar.out.log` / `sidecar.err.log`，expander.py 的 print 与 traceback 不丢。
  */
+/**
+ * 日志轮转：err.log 超过 2 MB 就滚成 .1。
+ *
+ * err.log 是追加写的，之前失败的 traceback 会一直躺在文件里，用户补完文件重启后
+ * 看到旧 traceback 会以为还没修好（2026-10-22 报告 ②）。轮转 + 启动分隔线一起解决。
+ */
+function rotateLog(name, maxBytes) {
+  try {
+    const p = join(CFG.workDir, name)
+    if (statSync(p).size > (maxBytes || 2 * 1024 * 1024)) renameSync(p, p + '.1')
+  } catch (e) { /* 文件不存在或正被占用，忽略 */ }
+}
+
+/**
+ * 拉起抑制窗口：一次拉起后 20 秒内不再重复拉起。
+ * 踩过（2026-11-03）：手动起侧车与保活同时发生，端口还没 listen 时探测判"不在线"，
+ * 保活又 spawn 了一个 —— 两个 pythonw 并存，谁抢到端口谁活，另一个白跑，
+ * config.json 与 work/ 日志出现双写。侧车侧虽有 _port_already_serving，
+ * 但那个检查与 bind 之间有竞态，挡不住这种情况。
+ */
+const LAUNCH_GRACE_MS = 20000
+let lastLaunchAt = 0
+
 function launch(exe, args, cwd, tag) {
   const lowered = /(^|[\\/])python\.exe$/i.test(exe)
   const wantExe = lowered ? exe.replace(/python\.exe$/i, 'pythonw.exe') : exe
   const useExe = lowered && existsSync(wantExe) ? wantExe : exe
   if (lowered && useExe !== wantExe) log('⚠ 找不到 pythonw.exe，退回 python.exe（可能弹控制台）: ' + wantExe)
   log('launch ' + tag + ' -> ' + useExe + '  cwd=' + cwd)
+  rotateLog('sidecar.err.log')
   const outFd = openLogFd('sidecar.out.log')
   const errFd = openLogFd('sidecar.err.log')
+  try {
+    appendFileSync(join(CFG.workDir, 'sidecar.err.log'),
+      '\n---------- sidecar start ' + new Date().toISOString() + ' (' + tag + ') ----------\n')
+  } catch (e) { /* 忽略 */ }
   const child = spawn(useExe, args, {
     cwd,
     detached: true,
@@ -224,6 +252,9 @@ async function ensureServices(opts) {
     }
     if (already) {
       if (!quiet) log('sidecar 已在运行 (:' + CFG.sidecarPort + ')，跳过')
+    } else if (Date.now() - lastLaunchAt < LAUNCH_GRACE_MS) {
+      log('sidecar 刚拉过 ' + Math.round((Date.now() - lastLaunchAt) / 1000)
+        + 's，仍在启动窗口内，本次不重复拉起')
     } else if (!CFG.pythonExe || !existsSync(CFG.pythonExe)) {
       log('✗ 找不到 Python：' + (CFG.pythonExe || '(空)')
         + '  → 请在 ' + join(PKG_DIR, 'config.json') + ' 里填 comfyRoot 或 pythonExe')
@@ -232,13 +263,20 @@ async function ensureServices(opts) {
     } else {
       log('sidecar 未运行，准备拉起')
       try {
+        lastLaunchAt = Date.now()
         launch(CFG.pythonExe, [CFG.expander, '--port', String(CFG.sidecarPort)], CFG.workDir, 'sidecar')
       } catch (e) {
         log('sidecar 拉起异常: ' + (e && e.message))
       }
     }
-    // 只有真要拉起时才等它起来；已在线就直接返回，不再白等 3 秒
-    if (!already) await new Promise((r) => setTimeout(r, 3000))
+    // 只有真要拉起时才等它起来；已在线直接返回。轮询代替死等 3 秒：
+    // 侧车冷启动 1-3 秒，8 秒封顶，一探到就往下走，避免"还没 listen 就判失败"再拉一个。
+    if (!already) {
+      for (let i = 0; i < 16; i++) {
+        await new Promise((r) => setTimeout(r, 500))
+        if (await portOpen(CFG.sidecarPort)) break
+      }
+    }
     const ok = await portOpen(CFG.sidecarPort)
     if (!quiet || !ok) {
       log('ensureServices 结束：:' + CFG.sidecarPort + ' ' + (ok ? '在线 ✓' : '仍不在线 ✗'))
@@ -250,7 +288,7 @@ async function ensureServices(opts) {
   }
 }
 
-export const name = '@local/dsh-comfyui-console'
+export const name = 'dsh-comfy-cards-next'
 export const version = PLUGIN_VERSION
 export const configVersion = CONFIG_VERSION
 

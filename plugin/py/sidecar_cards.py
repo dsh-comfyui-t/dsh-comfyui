@@ -34,6 +34,7 @@ def _cards_scan(d):
         return {'ok': False, 'error': '目录不存在: %s' % d, 'cards': []}
     out = []
     files = []
+    skipped = []
     for fn in os.listdir(d):
         if not fn.lower().endswith('.json'):
             continue
@@ -54,8 +55,14 @@ def _cards_scan(d):
         elif isinstance(raw, list):
             lst = raw
         elif isinstance(raw, dict):
+            # 非卡 JSON（如 lllite-index.json）：顶层既没有 cards 数组，也没有 name+tags/parts
+            if not (str(raw.get('name') or '').strip()
+                    and (str(raw.get('tags') or '').strip() or raw.get('parts'))):
+                skipped.append(os.path.basename(fp))
+                continue
             lst = [raw]
         else:
+            skipped.append(os.path.basename(fp))
             continue
         for c in lst:
             if not isinstance(c, dict):
@@ -67,7 +74,7 @@ def _cards_scan(d):
             c = dict(c)
             c['__file'] = fp
             out.append(c)
-    return {'ok': True, 'dir': d, 'count': len(out), 'cards': out}
+    return {'ok': True, 'dir': d, 'count': len(out), 'cards': out, 'skipped': skipped}
 
 
 def _cards_write(body):
@@ -309,7 +316,7 @@ def _stage_control_image(root, asset):
 
 
 def _stage_lllite_weights(root, key, rec):
-    """LLLite 权重 → ComfyUI models/model_patches/julin-lllite-<key>.safetensors。"""
+    """LLLite 权重 → ComfyUI models/model_patches/dshc-lllite-<key>.safetensors。"""
     src = rec.get('file') or ''
     if not os.path.isabs(src):
         src = os.path.join(root, src)
@@ -317,7 +324,7 @@ def _stage_lllite_weights(root, key, rec):
         raise RuntimeError('权重不存在: %s' % src)
     os.makedirs(COMFY_PATCHES, exist_ok=True)
     safe = re.sub(r'[^A-Za-z0-9._-]', '_', key)
-    name = 'julin-lllite-%s.safetensors' % safe
+    name = 'dshc-lllite-%s.safetensors' % safe
     dst = os.path.join(COMFY_PATCHES, name)
     if not os.path.exists(dst) or os.path.getsize(dst) != os.path.getsize(src):
         shutil.copyfile(src, dst)

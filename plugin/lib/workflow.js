@@ -1,3 +1,23 @@
+function parseWorkflow(jsonText) {
+	let d
+	try {
+		d = typeof jsonText === 'string' ? JSON.parse(jsonText) : jsonText
+	} catch (e) {
+		return { ok: false, error: 'JSON 解析失败：' + (e && e.message) }
+	}
+	if (!d || typeof d !== 'object') return { ok: false, error: '不是有效的 JSON 对象' }
+	try {
+		if (Array.isArray(d.nodes)) return parseUi(d)
+		return parseApi(d)
+	} catch (e) {
+		return { ok: false, error: '解析出错：' + (e && e.message) }
+	}
+}
+// 词库小卡片的两个组件：一对输入框（中文备注 + 英文标签 + 词性）和整张卡片的编辑弹层。
+// 独立成段是为了把 app.js 里 9k 字符的 JSX 挪走；拼接后仍在同一个工厂作用域里。
+
+/** 词性三键：正 / 负 / 自（自＝没标，插入时按正向算） */
+
 /**
  * ComfyUI 工作流 JSON → 本插件的预设格式。
  *
@@ -424,18 +444,3 @@ function parseApi(wf) {
 }
 
 /** 主入口 */
-export function parseWorkflow(jsonText) {
-	let d
-	try {
-		d = typeof jsonText === 'string' ? JSON.parse(jsonText) : jsonText
-	} catch (e) {
-		return { ok: false, error: 'JSON 解析失败：' + (e && e.message) }
-	}
-	if (!d || typeof d !== 'object') return { ok: false, error: '不是有效的 JSON 对象' }
-	try {
-		if (Array.isArray(d.nodes)) return parseUi(d)
-		return parseApi(d)
-	} catch (e) {
-		return { ok: false, error: '解析出错：' + (e && e.message) }
-	}
-}

@@ -15,6 +15,7 @@
     python tools/check_tdz.py <app.js>
 """
 import io
+import os
 import re
 import sys
 
@@ -32,15 +33,47 @@ def check(path):
         re.compile(r'^\s*function\s+([A-Za-z_$][\w$]*)\s*\('),                     # function a(
         re.compile(r'^\s*import\s+\{?[^}]*\b([A-Za-z_$][\w$]*)\b'),                # import a
         re.compile(r'^\s*export\s+(?:const|let|var|function)\s+([A-Za-z_$][\w$]*)'),
+        # 行中间的声明（带 ^ 锚定的正则一行只能匹配一次，靠这两条补）
+        # 注意：只在含 const/let/var 的行生效，否则 }  , [guide, step 这种依赖数组会被误收
     ]
     decl_at = {}
+
+
+
+    _mid_decl = [
+        re.compile(r'\[\s*([A-Za-z_$][\w$]*)\s*,'),      # ...[a, setA]
+        re.compile(r'(?<![\w$.:\-])([A-Za-z_$][\w$]*)\s*='),  # ...a = ...（排除 a-b= 与 key: a= 这类非声明）
+    ]
     for i, ln in enumerate(lines, 1):
+        # 一行可能有多个声明，逐个正则 finditer 全量收，不能 break
         for rx in decl_re:
-            m = rx.match(ln)
-            if m:
-                name = m.group(1)
-                decl_at.setdefault(name, i)
-                break
+            for m in rx.finditer(ln):
+                decl_at.setdefault(m.group(1), i)
+        # 行中间的第二、第三个声明（锚定正则一行只能匹配一次）
+        # 只在含 const/let/var 的行生效，否则依赖数组 } , [guide, step 会被误收
+        if re.search(r'\b(?:const|let|var)\b', ln) and not ln.lstrip().startswith('//'):
+            for rx in _mid_decl:
+                for m in rx.finditer(ln):
+                    decl_at.setdefault(m.group(1), i)
+
+    # 形参解构：只认 `function X({a, b})` / `({a, b}) =>` 这种，不再匹配任意 {...}
+    # 必须放在 decl_re 循环之后：否则对象的 {key: v} 会被当成声明，覆盖真正的行号
+    _param_re = re.compile(r'\(\s*\{([^}]*)\}\s*\)\s*(?:=>|\{|$)')
+    for _ln, _line in enumerate(lines, 1):
+        _t = _line.strip()
+        if not _t or _t.startswith('//'):
+            continue
+        if 'function' not in _line and '=>' not in _line:
+            continue
+        _m = _param_re.search(_line)
+        if not _m:
+            continue
+        for _part in _m.group(1).split(','):
+            _nm = _part.split(':')[-1].split('=')[0].strip()
+            if re.fullmatch(r'[A-Za-z_$][\w$]*', _nm):
+                # 取最小行号：decl_re 循环可能已把同名变量记到更晚的行（如 ...,guide=xxx）
+                if _nm not in decl_at or decl_at[_nm] > _ln:
+                    decl_at[_nm] = _ln
 
     # 找 useEffect / useMemo / useCallback 的依赖数组
     #   形如  }, [a, b, c]);
@@ -87,9 +120,10 @@ def check(path):
 
 
 if __name__ == '__main__':
+    # 默认查仓库里的 app.js；不要把某人机器的绝对路径写进来
+    _root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     targets = sys.argv[1:] or [
-        r'E:\aqca\profiles\node_modules\@local\dsh-comfyui-console\lib\app.js',
-        r'E:\aqca\work\comfyui\build\0.6.0\plugin\lib\app.js',
+        os.path.join(_root, 'plugin', 'lib', 'app.js'),
     ]
     bad = 0
     for t in targets:
