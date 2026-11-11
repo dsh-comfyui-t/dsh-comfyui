@@ -1,7 +1,7 @@
 {
   "name": "dsh-comfy-cards-next",
   "displayName": "Comfy Cards Next",
-  "version": "0.8.0",
+  "version": "0.8.1",
   "description": "Comfy Cards Next — ComfyUI drawing console for DSH (Anima / LLLite / role & style cards)",
   "type": "module",
   "main": "lib/index.js",

@@ -1,5 +1,5 @@
 /**
- * 独立验证 resolveTheme：从 app.js 里把主题那一段抠出来，在 Node 里真跑。
+ * 独立验证 resolveTheme：从 app 系列源码里把主题那一段抠出来，在 Node 里真跑。
  *
  * 这样做是因为面板本身离不开 React + DSH 上下文，
  * 但调色板逻辑是纯函数，可以单独验。
@@ -7,8 +7,15 @@
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 
-const APP = fileURLToPath(new URL('../plugin/lib/app.js', import.meta.url))
-const src = readFileSync(APP, 'utf8')
+// 源码已按模块拆开（app / app-util / app-css …），主题代码不在单个文件里，
+// 所以按构建同样的顺序把它们拼起来再抠。
+const LIB = fileURLToPath(new URL('../plugin/lib/', import.meta.url))
+const ORDER = ['app', 'app-util', 'app-branch', 'app-registry', 'app-css', 'app-ui',
+               'app-tutorial', 'app-preview', 'app-console', 'app-library']
+const src = ORDER
+  .filter((n) => { try { readFileSync(LIB + n + '.js'); return true } catch { return false } })
+  .map((n) => readFileSync(LIB + n + '.js', 'utf8'))
+  .join('\n')
 
 // 抠出：THEME_DEFAULTS ... 到 resolveTheme 结束
 const start = src.indexOf('const THEME_DEFAULTS')

@@ -1,4 +1,4 @@
-# train.ps1 -- julst2 style LoRA retrain driver.
+# train.ps1 -- <画风LoRA> style LoRA retrain driver.
 #
 # Host rule (AGENTS.md sec.1 + handover 7.1): Windows PowerShell 5.1 decodes a
 # BOM-less .ps1 as GBK, so this file is PURE ASCII. Every path that may contain
@@ -9,19 +9,19 @@
 #   powershell -ExecutionPolicy Bypass -File train.ps1 -Steps 1200 -SaveEvery 100
 #   powershell -ExecutionPolicy Bypass -File train.ps1 -Card '<card name>'   # annotate card baseModels on success
 #   powershell -ExecutionPolicy Bypass -File train.ps1 -Steps 2000 `
-#       -ResumeFrom <OUTDIR>\julst2-001200.safetensors   (OUTDIR must be passed in; see -OutDir)
+#       -ResumeFrom <OUTDIR>\<画风LoRA>-001200.safetensors   (OUTDIR must be passed in; see -OutDir)
 #
 # The script never writes to existing weight files: the output name is derived
 # from -Name and a clobber assert runs before training starts.
 
 param(
-  [string]$Ckpt        = '<ComfyUI父目录>\ComfyUI\models\diffusion_models\anima-aesthetic-v1.1.safetensors',
-  [string]$Vae         = '<ComfyUI父目录>\ComfyUI\models\vae\qwen_image_vae.safetensors',
-  [string]$Qwen3       = '<ComfyUI父目录>\ComfyUI\models\text_encoders\qwen_3_06b_base.safetensors',
+  [string]$Ckpt        = (Join-Path $env:COMFY_ROOT 'models\\diffusion_models\\anima-aesthetic-v1.1.safetensors'),
+  [string]$Vae         = (Join-Path $env:COMFY_ROOT 'models\\vae\\qwen_image_vae.safetensors'),
+  [string]$Qwen3       = (Join-Path $env:COMFY_ROOT 'models\\text_encoders\\qwen_3_06b_base.safetensors'),
   [string]$TrainDataDir = '',
   [string]$DatasetConfig = '',
   [string]$OutDir      = '',
-  [string]$Name        = 'julst2',
+  [string]$Name        = '<画风LoRA>',
   [string]$ResumeFrom  = '',
   [string]$NetworkModule = 'networks.lora_anima',
   [int]$Dim            = 32,
@@ -42,8 +42,8 @@ param(
   [string]$AnnotationsDir = '',
   [switch]$Smoke,
   [switch]$RefreshLatents,
-  [string]$VPy         = '<ComfyUI父目录>\venv312\Scripts\python.exe',
-  [string]$Trainer     = '<ComfyUI父目录>\sd-scripts\anima_train_network.py'
+  [string]$VPy         = (Join-Path $env:COMFY_ROOT 'venv312\\Scripts\\python.exe'),
+  [string]$Trainer     = (Join-Path $env:COMFY_ROOT 'sd-scripts\\anima_train_network.py')
 )
 
 $ErrorActionPreference = 'Continue'
@@ -51,7 +51,7 @@ $ErrorActionPreference = 'Continue'
 # Default card root built from code points so this file stays pure ASCII
 # (AGENTS.md sec.1: PS 5.1 decodes a BOM-less .ps1 as GBK).
 if ($CardRoot -eq '') {
-  $CardRoot = '<工作区>\' + [char]0x672C + [char]0x5730 + [char]0x7ED8 + [char]0x753B + '\' + [char]0x89D2 + [char]0x8272 + [char]0x5361
+  $CardRoot = $env:DSH_HOME + '\' + [char]0x672C + [char]0x5730 + [char]0x7ED8 + [char]0x753B + '\' + [char]0x89D2 + [char]0x8272 + [char]0x5361
 }
 # 8GB card at 768 fragments and spills: enable expandable_segments
 if (-not $env:PYTORCH_CUDA_ALLOC_CONF) { $env:PYTORCH_CUDA_ALLOC_CONF = 'expandable_segments:True' }
@@ -124,7 +124,7 @@ $argList.Add('--save_model_as=safetensors')
 $argList.Add('--gradient_checkpointing')
 $argList.Add('--cache_latents')
 if (-not $RefreshLatents) { $argList.Add('--cache_latents_to_disk')
-# 8GB: freeze TE + cache TE outputs (DiT-only, same shape as julinst)
+# 8GB: freeze TE + cache TE outputs (DiT-only, same shape as <角色LoRA>)
 $argList.Add('--network_train_unet_only')
 $argList.Add('--cache_text_encoder_outputs')
 $argList.Add('--cache_text_encoder_outputs_to_disk') }
@@ -142,7 +142,7 @@ $argList.Add('--persistent_data_loader_workers')
 $argList.Add('--sdpa')
 $argList.Add('--log_with=tensorboard')
 
-Write-Host '=== julst2 retrain pre-flight ==='
+Write-Host '=== <画风LoRA> retrain pre-flight ==='
 $argList | ForEach-Object { Write-Host ('  ' + $_) }
 Write-Host ''
 Write-Host ("stdout log: " + $stdout)
@@ -172,7 +172,7 @@ if ($Card -ne '') {
   $annot = Join-Path $PSScriptRoot 'annotate_card.py'
   if (-not (Test-Path $annot)) {
     # fall back to the plugin copy (train.ps1 also lives under skills\)
-    $alt = '<DSH目录>\.dsh\plugins\dsh-comfyui-console\plugin\tools\annotate_card.py'
+    $alt = Join-Path $env:DSH_HOME '.dsh\\plugins\\dsh-comfy-cards-next\\plugin\\tools\\annotate_card.py'
     if (Test-Path $alt) { $annot = $alt }
   }
   if (-not (Test-Path $annot)) {

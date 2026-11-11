@@ -1,7 +1,39 @@
 ---
 name: "comfyui-cards"
-description: "Comfy Cards Next（dsh-comfy-cards-next，旧名 dsh-comfyui-console）插件里角色卡与风格卡的完整机制与自训流程：两种卡存哪、字段（含 conditioning 身份控制）、特征锁与 scope、完整/换装插入、全量卡包导出与三档 API 语义、导入与 dest 路由、缺件下载、分发口径；以及从零训练角色 LoRA / 画风 LoRA / LLLite 身份控制的数据配比、打标口径、超参、评测取件、坑表与画风剥离。风格卡制作流水线（画风 LoRA 为工序的一环）、**角色卡硬规定：不得混入画风**（四条禁止 / 互斥表 / E1–E3 验收 / 配套超参）；出图侧生成参数与采样（底模、剂量、分辨率、种子对照、症状对照）；工作流与节点链（三份工作流、节点顺序、三种导入、改完必重建）；侧车 74 条 HTTP 接口（鉴权、分组、常用调用）；**角色卡可迁移三件套**（`baseModels` 必须存 ComfyUI 清单全名带扩展名、`training` 训练记录、`regression` 回归锚）与训练收尾自动标注（`train.ps1 -Card` + `annotate_card.py`）。另有词库小卡片（胶囊词条）：卡片网格、分类与「全部」、胶囊中文备注、胶囊词性（正/负/自）与按词性插入、拖拽排序与换分类、`dsh-dict-cards` JSON 导入导出。用户提到角色卡、风格卡、特征锁、插入、导出卡、导入卡、.dslcard、.dslrecipe、卡包、LoRA 内嵌、LLLite 身份控制、训练 LoRA、数据集打标、caption、重训、画风剥离、facetraining、不得混入画风、画风串味、生成参数、剂量、同 seed 对照、工作流 JSON、节点顺序、侧车接口、8199、词库、词条、小卡片、胶囊、正负词性、拖拽排序、词库导出时才加载。**机器上还没装 ComfyUI 或没有任何底模时**，先按 §0.2 给「装 ComfyUI + 装 Anima 三件套」的下载与自检流程，再进制卡流程。"
+description: "Comfy Cards Next（dsh-comfy-cards-next，旧名 dsh-comfyui-console）插件里角色卡与风格卡的完整机制与自训流程：两种卡存哪、字段（含 conditioning 身份控制）、特征锁与 scope、完整/换装插入、全量卡包导出与三档 API 语义、导入与 dest 路由、缺件下载、分发口径；以及从零训练角色 LoRA / 画风 LoRA / LLLite 身份控制的数据配比、打标口径、超参、评测取件、坑表与画风剥离。风格卡制作流水线（画风 LoRA 为工序的一环）、**角色卡硬规定：不得混入画风**（四条禁止 / 互斥表 / E1–E3 验收 / 配套超参）；出图侧生成参数与采样（底模、剂量、分辨率、种子对照、症状对照）；工作流与节点链（三份工作流、节点顺序、三种导入、改完必重建）；侧车 74 条 HTTP 接口（鉴权、分组、常用调用）；**角色卡可迁移三件套**（`baseModels` 必须存 ComfyUI 清单全名带扩展名、`training` 训练记录、`regression` 回归锚）与训练收尾自动标注（`train.ps1 -Card` + `annotate_card.py`）。另有词库小卡片（胶囊词条）：卡片网格、分类与「全部」、胶囊中文备注、胶囊词性（正/负/自）与按词性插入、拖拽排序与换分类、`dsh-dict-cards` JSON 导入导出。用户提到角色卡、风格卡、特征锁、插入、导出卡、导入卡、.dslcard、.dslrecipe、卡包、LoRA 内嵌、LLLite 身份控制、训练 LoRA、数据集打标、caption、重训、画风剥离、facetraining、不得混入画风、画风串味、生成参数、剂量、同 seed 对照、工作流 JSON、节点顺序、侧车接口、8199、词库、词条、小卡片、胶囊、正负词性、拖拽排序、**风格卡空间层（背景假 / 人物像贴图 / 粗糙 / 和角色不统一时查 §11A.6：`detailed background` `contact shadow` `detailed background` `contact shadow` 2 词必进卡、另 4 词按需，场景词也进卡）**、词库导出时才加载。**机器上还没装 ComfyUI 或没有任何底模时**，先按 §0.2 给「装 ComfyUI + 装 Anima 三件套」的下载与自检流程，再进制卡流程。"
 whenToUse: "要新建/修改/导入/导出/分发角色卡或风格卡——**此时第一动作是贴 §0.0 的三档表（A 提示词卡 / B + 角色 LoRA / C + 身份控制）与预计时间，等用户选档后才能动手；未选档前不建卡、不生成数据集、不开训**；**若这台机器还没装 ComfyUI（8188 不通）或没有任何底模（diffusion_models 与 checkpoints 都空），先按 §0.2 装 ComfyUI + Anima 三件套并自检，不要跳到制卡**；要调特征锁与 scope；要配或排查 LLLite 身份控制；要从零训练或重训角色 LoRA、画风 LoRA、LLLite，要准备数据集与打标、定超参、评测挑选存档、做画风剥离；要给风格卡加画风 LoRA 或按两档完整度推进；要落实「角色卡不得混入画风」这条硬规定（打标禁词、素材口径、E1 换画风 LoRA / E2 删画风词 / E3 秩检查验收、16/8 与 1e-5 配套超参）；要定出图参数（底模、剂量 0.45–0.55、分辨率桶、同 seed 对照）或按症状反查原因；要改工作流 JSON、调节点顺序、用拖拽导入、判断要不要重建 client.js；要调侧车 8199 的接口（鉴权三件套、/version 自检、/lllite/resolve、/loras/import、/dir/write）；要判断一张角色卡/风格卡做完了没有（LoRA / cond 图 / LLLite 权重 / 三把锁齐不齐，A·B·C 哪一档）、按流水线顺序推进制作、或判断某次改动是否需要重建 client.js 或重启侧车；要核对卡包往返与验收命令时；要改词库小卡片（胶囊词性、拖拽、导入导出）或排查 `xxx is not defined` 时。"
+---
+
+## 0. 维护本文件的规约：不写私人资产（2026-11-10 起，硬规定）
+
+本文件随插件包分发，任何人打开都能读到。**私人资产名一律不写进正文、示例、实测记录、表头。**
+
+| 不许写 | 写成 |
+|---|---|
+| 角色卡名、卡 `id`、特征锁名 | `ROLE` / `CARD_A` / `CARD_B` |
+| 风格卡名、触发词 | `STYLE` / `STYLE_trigger` |
+| LoRA / LLLite / patch 的真实文件名 | `ROLE_full` / `ROLE_cross_self` / `ROLE_cross_attn` / `STYLE_v1` / `ROLE-lllite-v2-400` |
+| 私人素材来源站点、作者代号 | `srcA` / `srcB` |
+| 具体日期目录、`<角色>-比例版-<YYYY-MM-DD>` 这类 | 一律写 `-<日期>` |
+| 只属于某张卡的服饰与配饰细节 | `长外套` / `配饰` / `袜鞋` / `裙` |
+
+**可以留的**：张量数、rank、文件体积、剂量、步数、CFG、分辨率、seed、症状描述、机制结论、路径结构（`models/loras`、`素材区/`）——这些是技术数据，不是资产。
+
+**改写时不许伤含义**：资产名可以换成占位，**症状不能抽象化**——「长外套缩成短款、配饰从一片变两片」才是实测价值所在，写成「服装变了」这条记录就废了。
+
+**改完必须自检**（残留必须为 0）：
+
+```bash
+# 资产词表放工作区外（<工作区>\日志\资产词表.txt），每行一个：角色名 / 卡 id / LoRA 名 / 来源代号。
+# 词本身不要写进本文件 —— 否则自检会命中规则自己。
+grep -nEf <资产词表> SKILL.md          # 命中数必须为 0
+
+# LoRA 文件名只允许占位前缀
+grep -nE '\.safetensors' SKILL.md | grep -vE '(ROLE|STYLE|src)[_A-Za-z0-9-]*\.safetensors'   # 必须为空
+```
+
+发布前按技能 `dsh-comfyui-release` 的清单再过一遍。
+
 ---
 
 ## 0.0 角色卡请求的第一动作（硬规定，2026-10-28 起）
@@ -221,15 +253,15 @@ Invoke-RestMethod http://127.0.0.1:8188/object_info/UNETLoader | ConvertTo-Json 
 
 ```jsonc
 {
-  "id": "<身份LLLite>-v3", "name": "絉林", "schemaVersion": 3,
-  "tags": "julin, 1girl, solo, long black hair, …, small breasts, slim",
+  "id": "ROLE-lllite-v3", "name": "ROLE", "schemaVersion": 3,
+  "tags": "ROLE, 1girl, solo, long black hair, …, small breasts, slim",
   "parts": { "trigger":[], "base":[], "hair":[], "eyes":[], "glasses":[], "outfit":[], "extra":[] },
   "neg": [ { "t": "adult, tall, dark skin" } ],       // 对象数组，n 是手写中文备注
-  "lora": "<角色LoRA>.safetensors", "loraW": 0.9, "loraAlt": "",
+  "lora": "ROLE_full.safetensors", "loraW": 0.9, "loraAlt": "",
   "cover": "", "note": "",
   "locks": [ { "name": "服饰特征锁", "tags": ["…"], "scope": "full" } ],
   "conditioning": { /* 见第 5 节 */ },
-  "packMode": "baked", "embeddedLoras": ["<角色LoRA>"],
+  "packMode": "baked", "embeddedLoras": ["ROLE_full"],
 
   "baseModels": ["anima-aesthetic-v1.1.safetensors"],   // 全名，带扩展名，见 §2.1
   "training": { /* 训练记录，见 §2.1 */ },
@@ -260,7 +292,7 @@ Invoke-RestMethod http://127.0.0.1:8188/object_info/UNETLoader | ConvertTo-Json 
 
 ```jsonc
 "training": {
-  "dataset": "角色-<角色>-2026-11-01", "images": 21, "repeats": 8,
+  "dataset": "角色-霜见-2026-11-01", "images": 21, "repeats": 8,
   "resolution": 1024, "steps": 600,
   "networkDim": 32, "networkAlpha": 16,
   "learningRate": "4e-5", "textEncoderLr": "2e-5",
@@ -291,7 +323,7 @@ Invoke-RestMethod http://127.0.0.1:8188/object_info/UNETLoader | ConvertTo-Json 
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts\train.ps1 `
-  -DatasetConfig ... -OutDir ... -Name svan -Steps 600 -Card <角色>
+  -DatasetConfig ... -OutDir ... -Name svan -Steps 600 -Card CARD_B
 ```
 
 - 不传 `-Card` 完全跳过，现有调用不受影响。
@@ -302,9 +334,9 @@ powershell -ExecutionPolicy Bypass -File scripts\train.ps1 `
 单独补标（不训练）：
 
 ```powershell
-& $PYTHON scripts\annotate_card.py --card <角色> --base anima-aesthetic-v1.1.safetensors
-& $PYTHON scripts\annotate_card.py --card <角色> --base X.safetensors --replace   # 覆盖而非追加
-& $PYTHON scripts\annotate_card.py --card <角色> --base X.safetensors --dry-run   # 只看不写
+& $PYTHON scripts\annotate_card.py --card CARD_B --base anima-aesthetic-v1.1.safetensors
+& $PYTHON scripts\annotate_card.py --card CARD_B --base X.safetensors --replace   # 覆盖而非追加
+& $PYTHON scripts\annotate_card.py --card CARD_B --base X.safetensors --dry-run   # 只看不写
 ```
 
 写盘 UTF-8 无 BOM，先写 `.tmp-annotate` 再 `os.replace`；重复跑报「已存在，未改动」。
@@ -316,13 +348,13 @@ powershell -ExecutionPolicy Bypass -File scripts\train.ps1 `
   - `full`：只在**完整插入**时生效；
   - `swap`：只在**换装插入**那一刻生效；
   - `both`：两者都生效。
-- **现役三锁**：絉林特征锁（23 词，both）、服饰特征锁（97 词，full）、体型特征锁（18 词，both）。
-- **裙长闸**（在服饰锁内，7 词）：`knee-length skirt, midi skirt, ankle length skirt, floor-length skirt, low hem, microskirt, micro mini skirt`。基准 = 短黑百褶裙、裙摆大腿中段；正向只写 `black skirt`；验收与基准图 `捏Ta-成稿-絉林-站姿全身-1024x1496.png` 并排比。
+- **现役三锁**：ROLE 特征锁（23 词，both）、服饰特征锁（97 词，full）、体型特征锁（18 词，both）。
+- **裙长闸**（在服饰锁内，7 词）：`knee-length skirt, midi skirt, ankle length skirt, floor-length skirt, low hem, microskirt, micro mini skirt`。基准 = 短黑裙裙、裙摆大腿中段；正向只写 `black skirt`；验收与基准图 `参考图-成稿-ROLE-站姿全身-1024x1496.png` 并排比。
 - 113 词表是盯着用的既有资产：**只追加、不重写、不删原词**。
 
 ## 4. 两种插入
 
-- **完整插入**：卡的正向 `tags` + `parts` 全上，服装按卡来，`full`/`both` 锁生效 → 标准絉林。
+- **完整插入**：卡的正向 `tags` + `parts` 全上，服装按卡来，`full`/`both` 锁生效 → 标准ROLE。
 - **换装插入**：只上角色部分，服装词自己写，`swap`/`both` 锁生效 → 换装不被服饰锁抢词（裙长闸此时不拦）。
 - 两张卡的统计信息（条数/锁数/负向数/LoRA/LLLite）在**编辑器**里看，卡面不再显示。
 
@@ -331,7 +363,7 @@ powershell -ExecutionPolicy Bypass -File scripts\train.ps1 `
 角色卡的 `conditioning` 与 `lora` 同构：选中卡即自动解析出「控制图 + 权重档 + 强度」，由图上的三个原生节点消费：
 
 ```
-UNETLoader(anima-aesthetic-v1.1) → LoraLoader(角色 LoRA) → ModelPatchLoader(<身份LLLite>-v2/v3-400)
+UNETLoader(anima-aesthetic-v1.1) → LoraLoader(角色 LoRA) → ModelPatchLoader(ROLE-lllite-v2/v3-400)
    → AnimaLLLiteApply(LoadImage 控制图) → LoraLoader(风格 LoRA) → KSampler
 CLIPLoader(qwen_3_06b_base, type=qwen_image) + VAELoader(qwen_image_vae)
 ```
@@ -346,7 +378,7 @@ CLIPLoader(qwen_3_06b_base, type=qwen_image) + VAELoader(qwen_image_vae)
                  "promptAdd": "close-up, upper body", "negAdd": "",
                  "image": { "name": "face.png", "b64": "…", "sha256": "…", "w": 1024, "h": 1408 } }
   },
-  "weights": { "v2-400": { "name": "<身份LLLite>-v2-400.safetensors", "sha256": "b2eb…", "bytes": 31457280 } }
+  "weights": { "v2-400": { "name": "ROLE-lllite-v2-400.safetensors", "sha256": "b2eb…", "bytes": 31457280 } }
 }
 ```
 
@@ -367,7 +399,7 @@ CLIPLoader(qwen_3_06b_base, type=qwen_image) + VAELoader(qwen_image_vae)
 - header `files[]` 每项：`name` / `size` / `sha256` / `role`(`embed`|`ref`) / `dest`(`lora`|`patch`|`asset`) / `offset`（相对 header 之后第一字节）/（asset 还带 `asset` id 与 `preset`）。
 - **三档只剩 API 语义**（`PACK_MODE_CN` 仍用于提示文案）：`baked` 全嵌、`hybrid` 只嵌 `local-derived`、`recipe` 纯名字+sha。要用这三档只能直接打 `/stylecards/pack`（`{card, cardType, mode, embed}`），元数据在响应头 `X-Card-Meta`。
 - 导出件**不带 `__file`**（不外泄本机绝对路径）；内嵌键按「文件名去扩展名」规范化，带路径或 `.safetensors` 也能命中。
-- `lora来源.json` 决定谁是 `local-derived`：`<角色LoRA>`、`<画风LoRA>`、`artphoto_crossattn_only` 是本地派生；`nieta*`/`wclio*` 多为 `unknown`。
+- `lora来源.json` 决定谁是 `local-derived`：`ROLE_full`、`STYLE_v1`、`STYLE_cross_only` 是本地派生；`srcA*` / `srcB*` 多为 `unknown`。
 
 ## 7. 导入
 
@@ -439,7 +471,7 @@ Invoke-RestMethod http://127.0.0.1:8199/cards | ConvertTo-Json -Depth 4 -Compres
 
 # 训练结束后补标底模（只想看不写就加 --dry-run）
 & <ComfyUI父目录>\venv312\Scripts\python.exe <DSH目录>\.dsh\skills\comfyui-cards\scripts\annotate_card.py `
-  --card <角色> --base anima-aesthetic-v1.1.safetensors
+  --card CARD_B --base anima-aesthetic-v1.1.safetensors
 # 重启侧车
 Get-NetTCPConnection -LocalPort 8199 -State Listen | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force }
 Start-Process <ComfyUI父目录>\runtime\python312\pythonw.exe -ArgumentList 'expander.py','--port','8199' `
@@ -472,7 +504,7 @@ Start-Process <ComfyUI父目录>\runtime\python312\pythonw.exe -ArgumentList 'ex
 | **B + LoRA** | A + `lora` 非空（`conditioning.enabled` 仍可 false） | 身份稳住，姿态/比例自由 | 大多数日常出图停在这档 |
 | **C + 身份控制** | B + cond 图 + LLLite 权重 + `presets`≥3 档（`enabled=true`） | 姿态/角度/构图被硬约束 | 需要固定动作或角度时才做 |
 
-**注意**：`conditioning.enabled` 可以是 `false` 而卡仍算完整——现役絉林卡就是 `enabled=false`、
+**注意**：`conditioning.enabled` 可以是 `false` 而卡仍算完整——现役ROLE卡就是 `enabled=false`、
 presets 6 档待命。**判据是"文件与登记齐不齐"，不是"开关开不开"**。
 
 ### 11.1 工序顺序与依赖（不能乱）
@@ -521,11 +553,11 @@ $c = (Get-Content "$CARD_DIR\<名>.json" -Raw | ConvertFrom-Json).cards[0]
 
 | 件 | 训什么 | 现役产物 | 体积 | 挂载强度 |
 |---|---|---|---|---|
-| 角色 LoRA | 身份（脸/发/饰物）+ **比例** | `<角色LoRA-v2>.safetensors`（比例版 v2） | 87.6 MB | 0.7–0.8 |
-| 画风 LoRA | 笔触/媒介/上色 | `<画风LoRA>.safetensors` | 175.1 MB | 0.45–0.55 |
-| LLLite | 构图/姿态/角度硬约束 | `<身份LLLite>-v2-400` / `v3-400.safetensors` | 29.6 MB | 条件乘数 1.0 |
+| 角色 LoRA | 身份（脸/发/饰物）+ **比例** | `ROLE_v2.safetensors`（比例版 v2） | 87.6 MB | 0.7–0.8 |
+| 画风 LoRA | 笔触/媒介/上色 | `STYLE_v1.safetensors` | 175.1 MB | 0.45–0.55 |
+| LLLite | 构图/姿态/角度硬约束 | `ROLE-lllite-v2-400` / `v3-400.safetensors` | 29.6 MB | 条件乘数 1.0 |
 
-旧件保留可回滚：`<角色LoRA>`（角色 v1，dim32）/ `<画风LoRA>`（画风）/ `<角色LoRA-v2>`（角色 v2）。
+旧件保留可回滚：`ROLE_full`（角色 v1，dim32）/ `STYLE_v1`（画风）/ `ROLE_v2`（角色 v2）。
 
 **工具链**
 
@@ -605,7 +637,7 @@ max_bucket_reso = 1024
 resolution = 1024
 batch_size = 1
   [[datasets.subsets]]
-  image_dir = "D:/dsh/素材区/角色-絉林-比例版-2026-10-19"
+  image_dir = "<工作区>/素材区/角色-ROLE-比例版-<日期>"
   num_repeats = 4
   caption_dropout_rate = 0.05
 ```
@@ -621,7 +653,7 @@ toml 会静默指向空目录，所以开训前先 `Test-Path` 一下（`训练�
 
 | 档 | 具备 | 表现 | 何时停在这档 |
 |---|---|---|---|
-| **A 提示词卡** | `parts`（媒介轴 + 质感词）+ `neg` + `cover` | 能插词、能出图；笔触 / 纸纹 / 配色随底模漂移，同一段提示词两次生成不像同一画风 | 只有参考图、还没训件 |
+| **A 提示词卡** | `parts`（媒介轴 + 质感词 + **空间层 2–6 词**，见 §11A.6）+ `neg` + `cover` | 能插词、能出图；笔触 / 纸纹 / 配色随底模漂移，同一段提示词两次生成不像同一画风 | 只有参考图、还没训件 |
 | **B + 画风 LoRA** | A + `lora` 非空 | 画风稳定、剂量可调；换底模仍保得住笔触与配色 | 正式卡基本都在这档 |
 
 风格卡**没有** `locks`（特征锁是角色卡专属），**没有** `conditioning`（无 LLLite 身份控制）。
@@ -645,7 +677,7 @@ toml 会静默指向空目录，所以开训前先 `Test-Path` 一下（`训练�
 | 字段 | 必填 | 说明 |
 |---|---|---|
 | `name` | ✓ | 卡名，也是导出包内文件名 |
-| `parts` | ✓ | 正向片段；风格卡这里放**媒介轴 + 质感词**，不放角色词 |
+| `parts` | ✓ | 正向片段；风格卡这里放**媒介轴 + 质感词 + 空间层 2–6 词 + 默认场景**（§11A.6），不放角色词 |
 | `neg` | 建议 | 负向；可放抑制性画风词（`photo / 3d render / cgi`）把画风钉死 |
 | `cover` | 建议 | 封面图 |
 | `lora` | B 档必填 | 画风 LoRA 权重文件名 |
@@ -674,17 +706,205 @@ Test-Path "$COMFY_ROOT\models\loras\<卡里的 lora 值>"
 
 反过来同样成立，只是一般不会踩：`parts` 里出现 `1girl / solo / <角色名>` 会把角色身份写进画风件，换个角色出图就串脸。**`parts` 只写媒介与质感。**
 
+### 11A.6 空间层：背景词必须进卡（2026-11-10 实测）
+
+**症状**：出图「背景假、和角色不统一、粗糙」—— 背景是一片纯色或糊成色块，人物像贴上去的。
+
+**根因不是架构，是提示词缺口。** 卡的 `parts.style` 若只写「表面质感」（赛璐璐 / 金属 / 布料 / 高光 / 线稿 / 边缘光），模型只会把质感用在它确定有质感的东西上 —— 人物。背景没有任何描述，就退化成画布。
+
+**实测**（同 seed 20261014 / 1024×1408 / 28 步 / euler·simple / 画风 LoRA 0.45）：
+
+| 组 | 卡里有什么 | 结果 |
+|---|---|---|
+| A | 只写 `simple background` | 纯白背景，人物占 90%，背景零结构 |
+| B | 加 10 个具体场景词 | 背景完整（霓虹 / 湿地反光 / 路灯 / 景深），但人物缩到 30%、脸糊 |
+| C | B + cfg 4.8 | 与 B 几乎一致，只是更硬 —— **调 cfg 不解决统一性** |
+| **D** | B + `(1girl:1.3)(solo:1.2)` + 构图 `cowboy shot` | **最佳**：人物 65%、脸清晰，人物被环境光染成冷蓝、地面有投影 |
+| E | D + cfg 4.8 | 更硬更有海报感，略失真 |
+| F | 换室内（窗光 / 木家具 / 台灯） | 统一 ✓，暖光与冷色人物自然过渡 |
+| G | 换海边白天 | 统一 ✓，海面反光把人物染冷、浪花与衣褶高光呼应 |
+
+结论：**一次采样就够，不需要「先画背景再画角色」的两段式**。分段绘制是在解决一个不存在的问题。
+
+#### 核心空间词：2 个必进，另 4 个按需（2026-11-10 修正）
+
+不绑定任何具体场景，描述的是「怎么渲染」而不是「画什么」。
+
+**必进（2 个）**
+
+| `t` | `n`（卡里显示） | 治什么 |
+|---|---|---|
+| `detailed background` | 背景有细节 | 结构——没有它背景塌成纯色 |
+| `contact shadow` | 接触阴影（人物落地） | 落地——让角色站进画面而不是贴上去 |
+
+**可选（4 个，加多会变浓）**
+
+| `t` | 治什么 | 代价 |
+|---|---|---|
+| `atmospheric perspective` | 远近分离 | 抬对比 |
+| `ambient occlusion` | 暗部遮蔽 | 抬对比、压暗 |
+| `unified lighting` | 光照一致 | 抬对比 |
+| `cohesive color grading` | 统一调色 | 抬饱和度 |
+
+**实测（同 seed 20261025 / 同 LoRA / CFG 3.8 / 只改提示词）**
+
+| 提示词 | 结果 |
+|---|---|
+| 无空间词 | 背景塌、调子柔和、瞳色灰蓝、高光收敛 —— **最接近角色设定稿** |
+| 只留 2 词 | 背景立住，调子仍柔和 ✓ |
+| 6 词全上 | 背景更厚，但瞳色转亮青、睫毛变粗黑、高光变多点 —— **明显偏离设定稿** |
+
+所以「6 词必进」是错的：那 4 个可选词是**拿画面调子换结构**。还原角色设定稿 / 立绘原始调子时只留 2 词；要厚重插画感再全上。
+
+**`contact shadow` 是唯一不能省的** —— 缺了它，人物永远像抠图。
+
+#### 场景词也要进卡
+
+画风往往绑定特定场景语汇（赛博城市 / 日常室内 / 幻想森林）。这类词**同样进 `parts.style`**，排在空间词之后、`parts` 末尾，便于替换。
+
+正确顺序：
+
+```
+[媒介轴 3–5 词] → [质感词 5–8 词] → [空间层 2–6 词] → [默认场景 3–8 词]
+```
+
+口径：
+
+- **默认场景写一组，不写多组**。提示词是线性拼接，多个场景会互相打架（`night city` + `cozy room` = 乱炖）。
+- 要换场景就**编辑卡**或临时删掉末尾那组，不要指望模型「挑一个」。
+- 场景词只写**环境与光源**，不写角色动作（动作归角色卡 / 用户的 `SUBJECT` 段）。
+- 场景词是**背景的唯一来源**，这一点和空间词的作用完全不同：
+
+- **没有场景词，背景就是纯白** —— 实测：角色 tags + `detailed background` + `contact shadow`、不带任何场景词，仍出纯白立绘（2026-11-10，同 seed 20261025 / CFG 3.8 / 1024×1496）。`detailed background` 不是召唤背景的咒语，它只负责「已经有背景时画多细」。
+- 删场景词 → 丢背景（纯白）；删 `detailed background` → 背景还在，只是细节糊。
+- 所以要做带场景的图，**场景词一组是硬需求**，哪怕只写 `sunlit classroom, window light`。
+
+#### 构图配套（写不进卡，写进习惯）
+
+`cowboy shot`（七分身）是兼顾主体与背景的最优点。`full body + wide shot` 会让背景暴涨、人物缩到 30%（实测 B / C 组）。构图是每张图变的，不进卡。
+
+#### 建卡验收判据
+
+卡建完后数一遍 `parts.style`：
+
+| 项 | 判据 | 不达标 |
+|---|---|---|
+| 空间层 | ≥ 6 词 | 背景必退化 |
+| 质感层 | ≥ 5 词 | 画风不稳 |
+| 默认场景 | ≤ 8 词 | 绑死构图 |
+| 角色词 | = 0（§11A.5） | 换角色串脸 |
+
+**只写质感的卡是不完整的卡**，和 `neg` 空着同级 —— 出图当场看不出来，一换构图就暴露。
+
+#### 组合结果不是标准，是诊断信号（2026-11-10 修正）
+
+**风格卡 + 角色卡组合出来的形态不能拿来定标准。** 两张卡单独用都正常、一组合就变「两不像」（例：STYLE纯厚涂 + ROLE纯动画 → 组合出半厚涂），正确判断是**两个件的权重都不纯**，不是「半厚涂就是要的样子」。
+
+纠缠的典型来源：
+
+| 现象 | 说明什么 | 去哪修 |
+|---|---|---|
+| 角色件单独用就带明显渲染风格 | 画风进了 `self_attn` | §12A 事前防 / §17 事后剥到 `cross_attn` |
+| 风格件单独用会带出角色先验（脸型、发长倾向） | 内容进了 `cross_attn` | §17 切 `self_attn` + `mlp` |
+| 风格件加到 0.75 以上，渲染几乎不变 | 角色件的 `self_attn` 在对抗 | 剥角色件的 `self_attn` |
+
+**判据**：干净的角色件只给身份，干净的风格件只给渲染。加风格剂量能明显改变渲染、且脸不变，才算两个件解耦了。
+
+**别用「组合出半厚涂」给纠缠找理由。** 拆法见下。
+
+##### 实测：纠缠在哪一段（2026-11-10）
+
+ROLE（rank32 / 840 张量）与 STYLE r96（rank96 / 840 张量）四种拆法，同 seed 20261014 / 1024×1408 / 28 步 / cfg 4 / `cowboy shot`：
+
+| 配置 | 渲染 | 身份 | 结论 |
+|---|---|---|---|
+| 完整两件 0.9 / 0.45 | 半厚涂 | ✓ | 两件都在出力，纠缠 |
+| 角色剥到 `cross_attn`(336) + 完整风格件 | **退回干净动画** | ✓ | 剥过头 —— ROLE的 `self_attn` 也在贡献画风 |
+| 完整角色件 + 风格剥到 `self_attn`+`mlp` | 半厚涂最强 | ✓ | 风格件的 `cross_attn` 是干扰项 |
+| 纯身份角色件 + r96 + ROLE `self_attn` | 半厚涂 | ✓ | 可行，但要挂三层 |
+
+**结论：画风是两件的 `self_attn` 叠加出来的，不是某一方「被压制」。** 所以「角色件纯身份」不能只靠剥，得把剥下来的渲染**搬进风格件**。
+
+##### 拆件的代价：纯身份件会丢结构细节（2026-11-10 实测）
+
+把角色件剥到只剩 `cross_attn` 之后，出图会出现这些退化（同 seed、同提示词、同参数，只换角色件）：
+
+| 项 | 完整件 `ROLE_full` 1.0 | 纯身份件 `ROLE_cross_attn` 0.9 |
+|---|---|---|
+| 长外套长度 | 长款，过膝 ✓ | **缩成短款** |
+| 配饰发夹 | 单片 ✓ | **变两片** |
+| 脸 / 瞳色 / 眼镜 | ✓ | ✓ 仍然对 |
+
+原因：`cross_attn` 绑的是「文本 → 图像」的身份对应，**服装结构、配饰数量这类空间细节靠 `self_attn` 维持**。**结论：角色卡的正确形态是 `cross_attn` + `self_attn`（`*_cross_self`，672 张量 / ~105 MB），不是纯 `cross_attn`。**
+
+实测三档单挂（不带风格卡，同 seed 20261025 / CFG 3.8 / 1024×1496）：
+
+| 角色件 | 张量 | 长外套 | 配饰 | 渲染 | 判定 |
+|---|---|---|---|---|---|
+| `ROLE_cross_attn` | 336 | **缩成短款** | **两片** | 最素 | ✗ 丢结构 |
+| `ROLE_cross_self` | 672 | 过膝 ✓ | 单片 ✓ | 素、平涂 | ✓ **角色卡该用这个** |
+| `ROLE_full` | 840 | 过膝 ✓ | 单片 ✓ | 有反光、褶皱重 | 完整但带渲染 |
+
+`self_attn` 管结构（衣长、配饰数量、比例），`mlp` 管颜色与纹理渲染。所以剥 `mlp`、留 `cross_attn`+`self_attn` 正好等于「角色完整、不带画风」。
+
+**注意**：早先观察到「纯身份件构图会崩（双人、俯视压缩、比例错）」是**参数造成的假象**，不是固有问题。CFG 4 / 1024×1408 下会崩，CFG 3.8 / 1024×1496 下构图正常。别把参数问题记成拆件缺陷。
+
+##### 风格件脱离角色件也成立（2026-11-10 实测）
+
+`STYLE_plus_ROLE_render`（r96 + ROLE渲染段）挂在**完全无关的角色**上，不会带出ROLE。
+
+测试：正向写「银长发、绿眼、黑哥特裙、无眼镜」，负向显式排除黑发 / 蓝眼 / 圆框眼镜 / 配饰发夹 / 长外套，同 seed 20261025 / CFG 3.8 / 1024×1496：
+
+| 剂量 | 画风 | ROLE特征泄漏 | 构图 |
+|---|---|---|---|
+| 0（无风格卡） | 平涂、白底 | — | **崩**（半身截断、比例夸张） |
+| 0.5 | 半厚涂、金色暖光、油画质感 ✓ | **零** | 完整 ✓ |
+| 0.7 | 更厚、背景更丰富 ✓ | **零** | 完整 ✓ |
+
+逐项核对五件标识（黑发 / 蓝眼 / 圆框眼镜 / 配饰 / 米色长外套）——一项都没出现。
+
+原理：`cross_attn` 才是身份，`self_attn` + `mlp` 只贡献渲染。所以「ROLE渲染段」这个名字容易误导——它带的是**画法**，不是**人**。任何角色剥下来的 self+mlp 放进风格件都是安全的。
+
+副产品：风格卡顺带修了构图。无风格卡那张比例崩坏，挂上之后构图完整——`parts` 里的构图语汇和渲染段一起在起作用，这也侧面印证了「构图靠 mlp」的观察。
+
+##### 正确做法：三段拆分 + 搬渲染（可复现）
+
+目标形态 = **角色件只留 `cross_attn`（身份）+ 风格件 = 原风格件 ∪ 角色件的 `self_attn`/`mlp`**。
+
+| 步 | 动作 | 产物（实测值） |
+|---|---|---|
+| 1 | 角色件只留 `cross_attn` | `xxx_crossattn.safetensors` — 112 模块 / 336 张量 / 49 MB |
+| 2 | 角色件只留 `self_attn`+`mlp` | `xxx_selfmlp.safetensors` — 168 模块 / 504 张量 / 126 MB |
+| 3 | 风格件 + 第 2 步，按秩拼接 | `style-plus-render.safetensors` — 840 张量 / 577.6 MB |
+
+**键名先归一化再拼**：`diffusion_model.blocks.N.<path>.lora_A|B.weight` → `lora_unet_blocks_N_<path>.lora_down|up.weight`（`.` 换 `_`）。两种格式 ComfyUI 都能加载，但拼接要求同键。
+
+**拼接数学**（§17）：`down = cat([d_style, d_char], dim=0)`、`up = cat([u_style, u_char], dim=1)`、`alpha = alpha_style + alpha_char`（96+32=128，等价强度不变）。无对应模块的原样保留。
+
+**等价性实测**：单件 0.45 与三层串联（0.9 / 0.45 / 0.45）视觉一致；单件 0.70 更厚、身份仍稳。
+
+##### 判据
+
+- 角色件挂上去，脸对、渲染**完全由风格件剂量控制** → 解耦成功
+- 剥掉角色 `self_attn` 后画风消失，或风格件加到 0.7 以上才变 → 仍纠缠
+
+##### 坑
+
+- **新件必须先重启 ComfyUI**：`models\loras` 启动时才扫，不重启就是 `value_not_in_list`
+- 角色卡原件的 `lora` 改指纯身份件时，把原文件名留在 `loraAlt` 便于回滚
+- 拼接产物体积接近两者之和（577 MB），8 GB 显存仍可跑，但加载更慢
+
 ## 12. 从零训练角色 LoRA（照这个顺序做）
 
 > 前置：训练脚本与依赖按 §11.9「获取方式」备好（全部来自 kohya-ss/sd-scripts 上游，无需私有件）；下面命令里的路径按 §0 换成你的。
 
-**1) 定一个比例基准图**。只能有一张，manual 的（`捏Ta-成稿-絉林-站姿全身-1024x1496.png`：八头身、长腿、小头、细五官）。所有"比例对不对"的争论都回到它与它的并排图。
+**1) 定一个比例基准图**。只能有一张，manual 的（`参考图-成稿-ROLE-站姿全身-1024x1496.png`：八头身、长腿、小头、细五官）。所有"比例对不对"的争论都回到它与它的并排图。
 
 **2) 凑数据（23 张就够）**
 
 | 来源 | 张数 | 作用 |
 |---|---|---|
-| 原角色集 | 12 | 身份基准（脸/黑长直/蓝眼/眼镜/枫叶发饰） |
+| 原角色集 | 12 | 身份基准（脸/黑长直/蓝眼/眼镜/配饰发饰） |
 | 生成的多机位全身 | 10 | 正/正开襟/三视图/侧/背/行走/叉手/侧持书/上半身 —— **纯白背景、无场景词**，只教比例与视角 |
 | 人工标准图 | 1 | 比例唯一基准 |
 
@@ -694,7 +914,7 @@ Test-Path "$COMFY_ROOT\models\loras\<卡里的 lora 值>"
 
 ```
 # 身份 + 服装（逐字固定）
-julin, 1girl, solo, long black hair, blue eyes, glasses, maple leaf hair ornament,
+ROLE, 1girl, solo, long black hair, blue eyes, glasses, maple leaf hair ornament,
 beige trench coat, white shirt, blue necktie, black pleated skirt, above knee, white socks, black mary janes,
 # 取景（逐图不同）
 full body, feet visible
@@ -721,17 +941,35 @@ delicate facial features, elongated silhouette, detailed face
 ```powershell
 $env:PYTHONPATH='<ComfyUI父目录>\sd-scripts'
 & <ComfyUI父目录>\venv312\Scripts\python.exe <ComfyUI父目录>\sd-scripts\networks\convert_anima_lora_to_comfy.py `
-    <out>\<比例LoRA>-v2-000006.safetensors <ComfyUI父目录>\ComfyUI\models\loras\<角色LoRA-v2>.safetensors
+    <out>\ROLE-proportion-v2-000006.safetensors <ComfyUI父目录>\ComfyUI\models\loras\ROLE_v2.safetensors
 ```
 
 转完**重启 ComfyUI**（启动时扫 loras 并缓存），卡里 `lora` 字段写文件名**带 `.safetensors`**。
 
-**7) 已知边界**（写进卡的备注，别当 bug）：白袜+玛丽珍被绑进身份（要换鞋得正向写替代或在服饰锁追加）；
+**7) 已知边界**（写进卡的备注，别当 bug）：白袜+袜鞋被绑进身份（要换鞋得正向写替代或在服饰锁追加）；
 领带夹、袜子褶边这类 1/23 占比的小饰物学不到；极端角度（仰拍/侧转/遮挡）脸会漂——23 张里侧脸只有 3 张。
 
 ## 12A. 硬规定：角色卡不得混入画风（事前禁止，不靠 §17 事后补救）
 
 §17 的秩拼接能做剥离，但代价明确 —— 只用 `cross_attn` 纯绑定时布纹、金属反光一起丢。**角色件从一开始就不该学画风**，所以这条定为硬规定，不是建议。
+
+### 12A.0 定位：跨画风优先，角色件不带画法
+
+角色卡的目标是**跨画风稳定**，不是固定某种渲染。同一张角色卡挂不同风格卡，出图应该是「同一个人 + 不同画法」，不是「换个人」。
+
+这来自三段拆分的实测（2026-11-10，同 seed / CFG 3.8 / 1024×1496，见 §11A.6）：
+
+| 段 | 管什么 | 角色件怎么办 |
+|---|---|---|
+| `cross_attn` | 身份（脸 / 发 / 瞳色 / 眼镜） | **必须保留** |
+| `self_attn` | 结构（衣长 / 配饰数量 / 比例） | **必须保留**——剥掉后长外套缩成短款、配饰变两片 |
+| `mlp` | 颜色与纹理渲染 | **应剥掉**——留着会和风格件的渲染段叠两层，剂量失控 |
+
+所以角色卡的正确形态是 `cross_attn` + `self_attn`（`*_cross_self`，672 张量 / ~105 MB）。完整件（840 张量）单挂角色完整，但自带 `mlp` 渲染，与跨画风定位冲突 —— **只作回滚备份，不作正式出图**。
+
+反向佐证：`STYLE_plus_ROLE_render`（r96 + ROLE self/mlp）挂在完全无关的角色上（银长发绿眼黑裙），0.5 与 0.7 两档**零身份泄漏** —— 因为它的 `cross_attn` 已被剥掉，剩下的带的是画法，不是人。
+
+配套：`regression.seeds` 记回归锚，验收时逐项对照基准图的八项特征锚点（发型 / 瞳色 / 眼镜 / 发夹 / 长外套 / 衬衫领带 / 裙 / 袜鞋）。
 
 ### 12A.1 四条禁止
 
@@ -777,7 +1015,7 @@ $env:PYTHONPATH='<ComfyUI父目录>\sd-scripts'
 
 ### 12A.6 同义词过载：同一属性超过三个词必然走极端
 
-**实测（2026-10-29，anima-aesthetic-v1.1 + 絉彩绘 styleA 0.38）**。目标发色取自参考图实测值 `#6C90C8`（低饱和灰蓝，明度 65%）：
+**实测（2026-10-29，anima-aesthetic-v1.1 + STYLE styleA 0.38）**。目标发色取自参考图实测值 `#6C90C8`（低饱和灰蓝，明度 65%）：
 
 | 正向发色词 | 实测出图色 | 明度 | 判定 |
 |---|---|---|---|
@@ -849,8 +1087,8 @@ paper texture, colored shadows, transparent glazes, luminous colors
 | wcoil768 (v1) | 19×3 | 570 | ✗ 近景劫持、发丝玻璃感 |
 | wcoil3 | 22×3（人眼剪枝） | 660（实际 594） | ✗ 强于 v1，但纸纹/干笔仍零 |
 | wcoil4 | 22×3（裸审美底模自生成） | ~600 | ✓ 剂量 0.7 平衡 / 1.0 拉满 |
-| nieta768 | 19×3 | 570 | ✓ 但底模是 base-v1.0，与现役 ckpt 不同线，≤0.3 |
-| <画风LoRA>（现役） | 12×3 | 360（34 min，峰值 7.75 GB，avr_loss 0.131） | ✓ 挂 0.5 |
+| `srcA` 768 | 19×3 | 570 | ✓ 但底模是 base-v1.0，与现役 ckpt 不同线，≤0.3 |
+| `STYLE_v1`（现役） | 12×3 | 360（34 min，峰值 7.75 GB，avr_loss 0.131） | ✓ 挂 0.5 |
 
 **4) 剂量**：0.45–0.55 是甜区；0.7 开始吃掉构图与身材；1.0 过驱动（RMS 偏离单调上升）。**1.0 不是"更强"，是"失真"。**
 
@@ -889,7 +1127,7 @@ num_repeats = 14          # 特写是崩得最厉害的一档，重复给足
 ## 15. 评测与取件（三件套共用）
 
 - **口径固定**：同 seed（20261014 / 20261018）、同提示词、同分辨率、同步数 CFG，**带与不带触发词各一组**，
-  **必须有一组"零 LoRA 底图"对照**——没有零对照的结论一律不成立（曾因此误判"julinst 自带角色身份"，后作废）。
+  **必须有一组"零 LoRA 底图"对照**——没有零对照的结论一律不成立（曾因此误判"ROLEst 自带角色身份"，后作废）。
 - **强度扫描**：0.3 / 0.5 / 0.7 + 目标档；epoch 取 2–3 个候选（e2/e5/e10）同场比。
 - **拼图看完整画幅**（`$DSH_HOME\skills\comfyui-cards\scripts\make-lora-sheet-full.py`；裁切版是同一个目录下的 `make-lora-sheet.py`），不要裁切后再比——裁切会掩盖取景漂移。
   用法：`python make-lora-sheet-full.py out.png "e2=a.png" "e10=b.png"`
@@ -1169,7 +1407,7 @@ Invoke-RestMethod ('http://127.0.0.1:' + $cfg.sidecarPort + '/dir/list?kind=dict
 侧车每次解包都往 `plugin/work/unpack.log` 追加一行（同时打 stdout）：
 
 ```
-[unpack 2026-10-22 21:20:11] 87.6 MB 0.16s auto=0 ok=True card=絉彩绘 v2 · 纯新件 err=
+[unpack 2026-10-22 21:20:11] 87.6 MB 0.16s auto=0 ok=True card=STYLE v2 · 纯新件 err=
 ```
 
 排查顺序：① 看这行有没有出现 —— 没出现＝请求没到侧车（前端/端口/侧车没起）；出现了且 `ok=False`，看 `err=`；② `127.0.0.1:8199` 是否在听；③ 面板消息里的 `已传 x%` 卡在一位数＝上传通道问题（防火墙/代理拦了 localhost POST）；④ `ok=True` 但面板不回＝前端异常，看 DevTools Console 与 `client-err.log`。
@@ -1196,7 +1434,9 @@ Invoke-RestMethod ('http://127.0.0.1:' + $cfg.sidecarPort + '/dir/list?kind=dict
 | 0.7 | 开始吃掉构图与身材 |
 | 1.0 | 过驱动，RMS 偏离单调上升 —— **1.0 不是"更强"，是"失真"** |
 
-角色件挂 0.5（现役 <画风LoRA> 口径）。画风件参考 §13 第 4 条。
+角色件挂 0.5（现役 `STYLE_v1` 口径）。画风件参考 §13 第 4 条。
+
+**剂量不能替代拆件**：如果风格件加到 0.75 以上渲染几乎不变，说明角色件的 `self_attn` 在对抗，先按 §17 剥角色件再谈剂量。别用「组合出半厚涂」给纠缠找理由。判据见 §11A.6。
 
 ### 20.3 分辨率
 
@@ -1217,6 +1457,8 @@ Invoke-RestMethod ('http://127.0.0.1:' + $cfg.sidecarPort + '/dir/list?kind=dict
 | 比例词删掉后头大腿短 | 比例没进权重 | §12 第 5 条 E5 |
 | 布纹 / 金属反光丢失 | 用了 §17 纯绑定剥离 | §17 末条 |
 | 画风在两个底模间漂移 | 剂量未按底模重扫 | 20.1 / 20.2 |
+| 背景假、一片纯色或糊成色块，粗糙 | 卡的 `parts` 只写表面质感，缺空间层 | §11A.6 |
+| 人物像贴上去的、不落地、和背景两种光 | 缺 `contact shadow` + `unified lighting` | §11A.6 |
 
 ### 20.6 待实测清单
 
@@ -1237,7 +1479,7 @@ Invoke-RestMethod ('http://127.0.0.1:' + $cfg.sidecarPort + '/dir/list?kind=dict
 ```
 UNETLoader(anima-aesthetic-v1.1)
   → LoraLoader(角色 LoRA)
-  → ModelPatchLoader(<身份LLLite>-v2 / v3-400)
+  → ModelPatchLoader(ROLE-lllite-v2 / v3-400)
   → AnimaLLLiteApply(LoadImage 控制图)
   → LoraLoader(风格 LoRA)
   → KSampler

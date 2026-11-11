@@ -306,10 +306,10 @@ def _comfy_sub(root, *cands):
 
     为什么需要：`comfyRoot` 的两种真实布局都对得上 ——
       ComfyUI_windows_portable  ->  ComfyUI/input、ComfyUI/models/model_patches
-      自建目录（本机 D:/paint） ->  同样是 ComfyUI/input、ComfyUI/models/model_patches
+      自建目录（本机 <ComfyUI父目录>） ->  同样是 ComfyUI/input、ComfyUI/models/model_patches
     原来写死 <root>/input，在便携版与自建目录下**都不存在**：
     `os.makedirs` 把目录凭空建出来，LLLite 图与 model_patches 于是写进了 ComfyUI 看不见的地方
-    （本机实测：D:/paint/input 与 D:/paint/models/model_patches 是空壳，真货在 D:/paint/ComfyUI/ 下）。
+    （本机实测：<ComfyUI父目录>/input 与 <ComfyUI父目录>/models/model_patches 是空壳，真货在 <ComfyUI父目录>/ComfyUI/ 下）。
     """
     if not root:
         return ''

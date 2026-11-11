@@ -39,7 +39,7 @@ KEEP_WORK_LOGS = 2    # plugin\work 下每类日志最多留几个轮转文件
 
 # 过程产物目录：绘画侧的过程图（对照/候选/失败/草稿），不属于交付物
 PROCESS_DIRS = [
-    r"<工作区>\训练区\过程",
+    os.path.join(os.environ.get('DSH_HOME', ''), '训练区', '过程'),
 ]
 
 # 无论过期多久都不删的东西（命中即跳过）

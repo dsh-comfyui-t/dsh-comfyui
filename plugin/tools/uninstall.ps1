@@ -27,7 +27,7 @@
     只打印将要做什么，一个字节都不删。
 
 .PARAMETER BackupDir
-    词库备份的落点，默认 <工作区>\日志。
+    词库备份的落点，默认 $env:DSH_HOME\日志。
 
 .EXAMPLE
     powershell -NoProfile -ExecutionPolicy Bypass -File tools\uninstall.ps1 -DryRun
@@ -40,7 +40,7 @@ param(
     [switch]$Auto,
     [switch]$KeepData,
     [switch]$DryRun,
-    [string]$BackupDir = '<工作区>\日志',
+    [string]$BackupDir = (Join-Path $env:DSH_HOME '日志'),
     [string]$TestRoot = '',
     [switch]$FailOnError
 )
@@ -96,7 +96,7 @@ $PkgDir = Split-Path -Parent $PSScriptRoot          # plugin\
 $PkgName = 'dsh-comfy-cards-next'
 $LegacyPkgName = 'dsh-comfyui-console'
 $ComfyRoot = Read-Cfg 'comfyRoot'
-if (-not $ComfyRoot) { $ComfyRoot = '<ComfyUI父目录>' }
+if (-not $ComfyRoot) { $ComfyRoot = 'D:\paint' }
 $ComfyMain = Read-Cfg 'comfyMainDir'
 if (-not $ComfyMain) { $ComfyMain = Join-Path $ComfyRoot 'ComfyUI' }
 

@@ -108,13 +108,13 @@ bad = {k: v for k, v in places.items() if v != name}
 rec('S5', not bad, '四处=%s' % (bad if bad else '全一致'), )
 
 # ---- S5a build_client --check ----
-bc = os.path.join(PLUG, 'tools', 'build_client.py')
+bc = os.path.join(PLUG, 'tools', 'build_client.mjs')
 if exists(bc):
-    r = subprocess.run([sys.executable, bc, '--check'], cwd=PLUG, capture_output=True,
+    r = subprocess.run(['node', bc, '--check'], cwd=PLUG, capture_output=True,
                        text=True, encoding='utf-8', errors='replace')
     rec('S5a', r.returncode == 0, (r.stdout or '').strip().splitlines()[-1] if r.stdout else '')
 else:
-    rec('S5a', False, 'tools/build_client.py 不存在')
+    rec('S5a', False, 'tools/build_client.mjs 不存在')
 
 # ================= 官方契约 =================
 rec('S6', pkg.get('type') == 'module', 'type=%r' % pkg.get('type'))

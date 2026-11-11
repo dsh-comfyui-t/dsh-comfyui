@@ -7,9 +7,9 @@
 直接读 -Ckpt 的文件名写回磁盘，省掉手工一步，也避免手打错文件名。
 
 用法：
-    python annotate_card.py --card <角色> --base anima-aesthetic-v1.1.safetensors
-    python annotate_card.py --card <角色> --base <完整路径> --replace
-    python annotate_card.py --card <角色> --base X.safetensors --dry-run
+    python annotate_card.py --card 霜见 --base anima-aesthetic-v1.1.safetensors
+    python annotate_card.py --card 霜见 --base <完整路径> --replace
+    python annotate_card.py --card 霜见 --base X.safetensors --dry-run
 
 约定：
   * 写盘一律 UTF-8 无 BOM（AGENTS.md 第 1 条）。
@@ -24,7 +24,7 @@ import json
 import os
 import sys
 
-DEFAULT_ROOT = r"<工作区>\本地绘画\角色卡"
+DEFAULT_ROOT = os.path.join(os.environ.get('DSH_HOME', os.path.expanduser('~')), '本地绘画', '角色卡')
 EXTS = (".safetensors", ".ckpt", ".pt", ".pth", ".bin", ".gguf", ".onnx")
 
 

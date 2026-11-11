@@ -557,33 +557,6 @@ window.__ModuleLoader__.load({
 					"OF-73 泳装连体": "one-piece swimsuit, high cut, wet, bare shoulders, pool"
 				},
 				"prop": {
-					"PR-01 分腿器": "spreader bar, spread legs, metal bar between ankles, bondage, straps on thighs",
-					"PR-02 拘束衣": "straitjacket, white straitjacket, bound arms, buckles, leather straps",
-					"PR-03 悬吊横杆": "suspension bar, suspended, hanging, rope, straps, bound",
-					"PR-04 束腰": "black corset, tight lacing, waist cincher, garter belt",
-					"PR-05 宠物 play": "pet play, collar, chain leash, tail plug, butt plug, animal tail, food bowl",
-					"PR-06 滴蜡": "hot wax, candle wax, wax on body, candle, dripping wax",
-					"PR-07 冰块": "ice cubes, ice on belly, ice on nipples, melting water, shivering",
-					"PR-08 羽毛": "feather, holding feather, feather in hand, tickle",
-					"PR-09 散鞭": "flogger, riding crop, whip, welts on back, red marks",
-					"PR-10 晾衣夹": "clothespins, clothespins on body, clothespins on nipples, clamps",
-					"PR-11 口环": "ring gag, open mouth, saliva, drooling, teeth, tongue out",
-					"PR-12 束缚 harness": "bondage harness, leather harness, straps, chest harness, buckles, chains",
-					"PR-13 贞操带": "chastity belt, metal belt, lock, keys",
-					"PR-14 电击贴片": "electro stimulation, tens unit, electrode pads, wires, cables",
-					"PR-15 真空乳胶床": "latex sheet, vacuum bed, encased in latex, sealed, transparent latex, body outline visible",
-					"PR-16 足枷": "foot stocks, stocks, wooden stocks, feet locked, toe rings",
-					"PR-17 振动棒": "holding vibrator, sex toy",
-					"PR-18 电动棒": "holding vibrator, wand vibrator, magic wand, sex toy",
-					"PR-19 假阳具": "holding dildo, licking dildo, sex toy",
-					"PR-20 肛珠": "anal beads, sex toy",
-					"PR-21 肛塞": "butt plug, anal plug, sex toy",
-					"PR-22 遥控振动蛋": "vibrating egg, remote control, vibrator under clothes",
-					"PR-23 乳头夹": "nipple clamps, clamps on nipples, chain",
-					"PR-24 手铐": "handcuffs, bound wrists",
-					"PR-25 绳缚": "rope, shibari, bound arms, bound torso, knots",
-					"PR-26 项圈牵引": "collar, leash, leash pull, chain",
-					"PR-27 眼罩口球": "blindfold, ball gag, saliva",
 					"PR-28 狙击枪": "bolt action sniper rifle, sniper scope, suppressor, bipod, long barrel, cheek rest, magazine, sling",
 					"PR-29 反器材步枪": "anti-materiel rifle, muzzle brake, big scope, bipod, box magazine, long barrel",
 					"PR-30 突击步枪": "assault rifle, holographic sight, suppressor, foregrip, magazine, sling",
@@ -611,7 +584,37 @@ window.__ModuleLoader__.load({
 					"PR-52 面具（骷髅）": "skeleton mask, painted skull mask, balaclava",
 					"PR-53 焊工面具": "welding mask, glowing eyes through mask slit",
 					"PR-54 防毒面具": "gas mask, respirator, gas mask filter, cracked mask",
-					"PR-55 教派红布": "red cloth, red mask, religious symbols, bandages on arms"
+					"PR-55 教派红布": "red cloth, red mask, religious symbols, bandages on arms",
+					"PR-56 马克杯": "ceramic mug, holding mug, steam rising, warm drink",
+					"PR-57 保温杯": "thermos bottle, stainless steel, holding with one hand",
+					"PR-58 玻璃水杯": "glass of water, clear glass, ice cubes, held",
+					"PR-59 茶壶": "teapot, ceramic, pouring tea, steam",
+					"PR-60 便当盒": "bento box, chopsticks, open lid, homemade meal",
+					"PR-61 零食袋": "snack bag, potato chips, held open, casual",
+					"PR-62 苹果": "apple, held, bite taken, red skin, shiny",
+					"PR-63 笔记本": "notebook, holding, writing, open pages, pen in hand",
+					"PR-64 一摞书": "stack of books, carried in arms, spines, bookmarks",
+					"PR-65 钢笔": "fountain pen, writing, ink, held between fingers",
+					"PR-66 剪刀": "scissors, cutting paper, craft table",
+					"PR-67 便利贴": "sticky notes, colorful, pinned, desk",
+					"PR-68 抱枕": "cushion, hugging pillow, soft, on lap",
+					"PR-69 毛毯": "blanket, wrapped in blanket, cozy, draped over shoulders",
+					"PR-70 台灯": "desk lamp, warm light, switched on, bedside table",
+					"PR-71 闹钟": "alarm clock, bedside, ringing, morning",
+					"PR-72 相框": "photo frame, held, glass front, wooden frame",
+					"PR-73 花瓶": "vase, ceramic, fresh flowers, table centerpiece",
+					"PR-74 盆栽": "potted plant, succulent, terracotta pot, held",
+					"PR-75 香薰蜡烛": "scented candle, glass jar, small flame, relaxing",
+					"PR-76 化妆镜": "makeup mirror, compact mirror, checking reflection, vanity",
+					"PR-77 口红": "lipstick, applying, tube held, vanity table",
+					"PR-78 梳子": "hairbrush, comb, brushing hair, morning routine",
+					"PR-79 香水瓶": "perfume bottle, glass, spray, fragrance, held",
+					"PR-80 钱包": "wallet, leather, held open, cards, coins",
+					"PR-81 钥匙串": "keychain, keys, held, jingling, door",
+					"PR-82 耳机": "headphones, over ears, worn, cord, listening to music",
+					"PR-83 游戏手柄": "game controller, both hands, gaming, screen glow",
+					"PR-84 折叠伞": "folding umbrella, compact, held, rain, wet street",
+					"PR-85 自行车": "bicycle, standing beside, holding handlebar, city street"
 				},
 				"pose": {
 					"PO-01 站立正面": "standing, facing viewer, straight-on, arms at sides, legs together, feet together, upright posture",
@@ -3456,6 +3459,9 @@ window.__ModuleLoader__.load({
 		 *  套用了新提示词却留着上一张角色卡的禁词锁，出图时 stabilizePrompt 会拿旧锁把新词剔掉，
 		 *  表现就是「同样的提示词，换一张卡再出图构图就不对」。 */
 		let CLEAR_CARD_STATE_SINK = null;
+
+		/** 画布出图点击放大：Console 经此钩子打开 PreviewConsole 的 OutputInspector（2026-11-10） */
+		let OUTPUT_VIEW_SINK = null;
 		let MODEL_PICKED_SINK = null;
 		function MSG(text) { try { if (MSG_SINK) MSG_SINK(String(text)); } catch (e) { /* ignore */ } }
 		/** 自动适配的取证通道。
@@ -4417,8 +4423,18 @@ window.__ModuleLoader__.load({
 		 * DSH 的 main slot 一次只渲染一个面板，切到对话框时本页面会被卸载；
 		 * 若把轮询放在组件里，切走就断了、回来也拿不到结果。
 		 */
+		/** 最后一次出图存在 localStorage，刷新 / 切页都不丢；只有「生成下一张」或手动「清空」会替换它 */
+		const LAST_IMG_KEY = "dsh.comfy.lastImage";
+		function readLastImage() {
+			try {
+				const raw = window.localStorage.getItem(LAST_IMG_KEY);
+				if (!raw) return null;
+				const o = JSON.parse(raw);
+				return (o && o.image) ? o : null;
+			} catch (e) { return null; }
+		}
 		const BG = {
-			job: null,          // {pid, startedAt, status, message, image, error, params}
+			job: readLastImage(),   // {pid, startedAt, status, message, image, error, params} —— 启动时先接上次那张
 			listeners: new Set(),
 			timer: null,
 			emit() {
@@ -4426,11 +4442,29 @@ window.__ModuleLoader__.load({
 			},
 			set(patch) {
 				this.job = Object.assign({}, this.job || {}, patch);
+				this.persistLastImage();
 				this.emit();
+			},
+			/** 出图完成才落盘；跑着的任务不进 localStorage，刷新后不会显示半张空图 */
+			persistLastImage() {
+				try {
+					const j = this.job;
+					if (j && j.image && j.status === "done") {
+						window.localStorage.setItem(LAST_IMG_KEY, JSON.stringify({
+							pid: j.pid, status: "done", message: j.message || "完成 ✓",
+							image: j.image, imageInfo: j.imageInfo, output: j.output,
+							completedAt: j.completedAt, generationMs: j.generationMs,
+						}));
+					}
+				} catch (e) { /* 隐私模式写不了就算了，不影响本次会话 */ }
 			},
 			snapshot() { return this.job ? Object.assign({}, this.job) : null; },
 			subscribe(f) { this.listeners.add(f); return () => this.listeners.delete(f); },
-			clear() { this.job = null; this.emit(); },
+			clear() {
+				this.job = null;
+				try { window.localStorage.removeItem(LAST_IMG_KEY); } catch (e) { }
+				this.emit();
+			},
 			/** 已经收尾（出图完成 / 报错）——切走生成页时只清这种，跑着的任务不清 */
 			isFinished() {
 				const s = this.job && this.job.status;
@@ -4460,6 +4494,29 @@ window.__ModuleLoader__.load({
 							+ " 字符），超出部分会被静默截掉 —— 出图可能和后半段描述无关。"
 							+ "换大编码器底模，或把后半段挪到前面。");
 					}
+					/* 同配方重跑（2026-11-11）
+					 *
+					 * ComfyUI 按节点输入的哈希做执行缓存：配方 + 种子完全一致时整条链命中
+					 * execution_cached，SaveImage 不重新执行，/history 里回的仍是上一次的
+					 * 文件名（实测连续五次都是 dsh_comfy_00098_.png）。画布 URL 不变，
+					 * 用户看到的就是「点了生成但什么都没发生」。
+					 *
+					 * 这里只给 SaveImage 换一个本次唯一的 filename_prefix：下游节点输入变了，
+					 * 缓存必然失效、一定会落新文件，画布也就跟着刷新。种子语义不动 ——
+					 * 画面仍然是同种子同配方的那一张，只把「为什么一样」说清楚。
+					 */
+					try {
+						const _sig = JSON.stringify(graph);
+						if (this.lastSig === _sig) {
+							const _k = Object.keys(graph).find((k) => graph[k] && graph[k].class_type === "SaveImage");
+							if (_k) {
+								const _base = String((graph[_k].inputs || {}).filename_prefix || "dsh_comfy");
+								graph[_k].inputs.filename_prefix = _base + "_r" + Date.now().toString(36);
+								MSG("同配方同种子重跑：上次那张是 ComfyUI 复用缓存的结果。这次已单独命名并重新落盘，画面与上一张相同；想换画面把种子改成随机，或点「随机」再生成");
+							}
+						}
+						this.lastSig = _sig;
+					} catch (e) { }
 					const body = { prompt: graph, client_id: "dsh-comfyui-console" };
 					if (extra) body.extra_data = Object.assign({}, extra);
 					res = await jpost(COMFY + "/prompt", body, 30000);
@@ -4914,9 +4971,67 @@ window.__ModuleLoader__.load({
 				};
 				modelSrc = [id, 0]; clipSrc = [id, 1];
 			});
-			g["4"] = { class_type: "CLIPTextEncode", inputs: { text: o.pos, clip: clipSrc } };
-			g["5"] = { class_type: "CLIPTextEncode", inputs: { text: o.neg, clip: clipSrc } };
-			g["6"] = { class_type: latentNodeFor(o.clipType, o.latent), inputs: { width: o.w, height: o.h, batch_size: 1 } };
+			/**
+			 * 提示词编码。
+			 *
+			 * 不分段（默认）：一个 CLIPTextEncode，跟原来一样。
+			 * 分段（o.splitEncoding）：按空行切开，每段独立编码再用 ConditioningCombine 串起来。
+			 *
+			 * 为什么值得分段：超预算时 ComfyUI **静默截断**，单节点塞整条会把后半截全吃掉
+			 * （`COMPOSITION:` 段一没了构图就全乱）；分段之后截断只影响最后一段。
+			 * 六段式预设本来就是按 `\n\n` 写的，天然适配。
+			 *
+			 * 节点号：正段 41..48 / 负段 51..58，combine 正 61..67 / 负 71..77。
+			 * 段数上限 8 —— 再多就把剩下的并进最后一段，别把节点号挤到 LoRA 的 10+n 上。
+			 */
+			const splitSegments = (text) => String(text || "")
+				.split(/\n\s*\n/)
+				.map((s) => s.trim())
+				.filter(Boolean);
+			const encodeCond = (text, base) => {
+				const segs = o.splitEncoding ? splitSegments(text) : [];
+				if (segs.length < 2) {
+					g[base] = { class_type: "CLIPTextEncode", inputs: { text: text, clip: clipSrc } };
+					// 节点 id 必须是字符串：ComfyUI 的 [node_id, output_index] 里 node_id 按字符串查表，
+					// 传数字 4 会被当成无效引用（这里 base 是数字，必须 String 一次）
+					return [String(base), 0];
+				}
+				const MAXSEG = 8;
+				const list = segs.length > MAXSEG
+					? segs.slice(0, MAXSEG - 1).concat([segs.slice(MAXSEG - 1).join("\n\n")])
+					: segs;
+				const cbase = base === 4 ? 41 : 51;
+				const kbase = base === 4 ? 61 : 71;
+				let acc = null;
+				list.forEach((s, i) => {
+					const id = String(cbase + i);
+					g[id] = { class_type: "CLIPTextEncode", inputs: { text: s, clip: clipSrc } };
+					if (!acc) { acc = [id, 0]; return; }
+					const kid = String(kbase + i - 1);
+					g[kid] = { class_type: "ConditioningCombine", inputs: { conditioning_1: acc, conditioning_2: [id, 0] } };
+					acc = [kid, 0];
+				});
+				return acc;
+			};
+			const posSrc = encodeCond(o.pos, 4);
+			const negSrc = encodeCond(o.neg, 5);
+			/**
+			 * 主 latent：空 latent（文生图），或从一张图编码（图生图）。
+			 *
+			 * 图生图这条支路是补能力缺口 —— 原来 denoise 写死 1.0，整条链只有 txt2img，
+			 * 改图 / 局部重绘 / 风格迁移都没法做。
+			 * LoadImage 读的是 ComfyUI 的 input 目录；面板侧车 /comfy/upload 会把本地图 staging 进去。
+			 */
+			let latentSrc = null, mainDenoise = 1.0;
+			if (o.initImage && o.initImage.image) {
+				g["36"] = { class_type: "LoadImage", inputs: { image: o.initImage.image } };
+				g["37"] = { class_type: "VAEEncode", inputs: { pixels: ["36", 0], vae: vaeSrc } };
+				latentSrc = ["37", 0];
+				mainDenoise = Math.min(1, Math.max(0.01, Number(o.initImage.denoise) || 0.6));
+			} else {
+				g["6"] = { class_type: latentNodeFor(o.clipType, o.latent), inputs: { width: o.w, height: o.h, batch_size: 1 } };
+				latentSrc = ["6", 0];
+			}
 			// 身份控制：ComfyUI 原生 ModelPatchLoader + AnimaLLLiteApply（控制图与权重已由 sidecar staging 到它能读的目录）
 			let modelForSampler = modelSrc;
 			if (o.lllite && o.lllite.image && o.lllite.patch) {
@@ -4934,18 +5049,21 @@ window.__ModuleLoader__.load({
 			g["7"] = {
 				class_type: "KSampler",
 				inputs: {
-					model: modelForSampler, positive: ["4", 0], negative: ["5", 0], latent_image: ["6", 0],
+					model: modelForSampler, positive: posSrc, negative: negSrc, latent_image: latentSrc,
 					seed: o.seed, steps: o.steps, cfg: o.cfg,
-					sampler_name: o.sampler, scheduler: o.scheduler, denoise: 1.0,
+					sampler_name: o.sampler, scheduler: o.scheduler, denoise: mainDenoise,
 				},
 			};
 			g["8"] = { class_type: "VAEDecode", inputs: { samples: ["7", 0], vae: vaeSrc } };
+			// ↑ 主采样解码。注意：开了二次采样时这一支**仍然要建** ——
+			//   #33 只吃 latent（["7",0]），不需要像素；但 #8 留着会被判悬空节点，
+			//   ComfyUI 照样执行一次完整 decode（1024×1408 大约多花 3~5 秒），纯浪费。
+			//   所以下面 hires 分支里会把 #8 摘掉，由 #35 承担解码。
 
 			/**
 			 * 生成后放大。
 			 *
-			 * ⚠️ 为什么不直接生成高分辨率：模型在约 1 MP 上训练，直接出 8.29 MP（4K）
-			 *    属分布外崩坏。实测 3840x2160 花 19 分 34 秒、出 4 个脑袋；
+			 * ⚠️ 为什么不直接生成高分辨率：模型在约 1 MP 上训练，直接出 8.29 MP（4K）	 *    属分布外崩坏。实测 3840x2160 花 19 分 34 秒、出 4 个脑袋；
 			 *    而 960x544 出图 + 4x 放大只要 39~54 秒，解剖正确。
 			 *
 			 * ⚠️ 节点号用 30/31/32 —— 20/21/22 已被 LLLite 占用（LoadImage /
@@ -4955,9 +5073,121 @@ window.__ModuleLoader__.load({
 			 * 这样任务轮询拿到的是成品，不会误拿底图。
 			 */
 			let finalSrc = ["8", 0];
+			/**
+			 * 二次采样（hires fix）。
+			 *
+			 * 和下面那个 ESRGAN 放大的区别：ESRGAN 是**插值**，细节是猜的；
+			 * 这里是 latent 放大后**再采一遍**，纹理（皮肤、发丝、织物）是重新生成的。
+			 * 代价是慢一倍左右，收益比换采样器大得多。
+			 *
+			 * 三条硬约束：
+			 *   1) 必须接同一条 model 链（modelForSampler），换链 = 画风断层
+			 *   2) positive/negative 用同一组条件，否则构图会漂
+			 *   3) denoise 高了改构图、低了没效果，0.35~0.55 是可用区间，默认 0.45
+			 * 步数砍半：二次采样从 mid-noise 起步，不需要跑满。
+			 * 节点号 33/34/35 避开 LLLite(20-22) 与放大(30-32)。
+			 */
+			if (o.hires && o.hires.enabled) {
+				const hs = Math.min(2.5, Math.max(1.05, Number(o.hires.scale) || 1.5));
+				g["33"] = {
+					class_type: "LatentUpscaleBy",
+					inputs: { samples: ["7", 0], upscale_method: "nearest-exact", scale_by: hs },
+				};
+				g["34"] = {
+					class_type: "KSampler",
+					inputs: {
+						model: modelForSampler, positive: posSrc, negative: negSrc, latent_image: ["33", 0],
+						seed: o.seed,
+						steps: Math.max(6, Math.round(Number(o.steps) * 0.5)),
+						cfg: o.cfg, sampler_name: o.sampler, scheduler: o.scheduler,
+						denoise: Math.min(0.9, Math.max(0.05, Number(o.hires.denoise) || 0.45)),
+					},
+				};
+				g["35"] = { class_type: "VAEDecode", inputs: { samples: ["34", 0], vae: vaeSrc } };
+				finalSrc = ["35", 0];
+				// 摘掉 #8：二次采样后它没人引用，留着就是一次白跑的整幅 decode
+				delete g["8"];
+			}
+			/**
+			 * 【实验性】手 / 脚局部重绘。
+			 *
+			 * 位置：二次采样之后、超分之前 —— 先别放大，放大模型不在时这条路也能跑。
+			 * 做法：按画面比例框出目标区域 → 裁切 → 放大到引导尺寸 → 只对这块 latent 重采 →
+			 *       缩回原尺寸 → 用羽化矩形蒙版贴回。**全程只用 ComfyUI 内置节点**，
+			 *       不依赖 Impact Pack / 检测器 / 任何外部权重。
+			 *
+			 * 已知局限（这就是它标"实验性"的原因）：
+			 *   区域是**按比例猜的**，不是检测出来的。全身竖图默认值可用；
+			 *   半身、坐姿、举手过头、趴姿会框偏。框偏不会崩，只是那块被无意义地重画一遍。
+			 *   真要按姿态自动定位，得接 YOLO 检测器（hand_yolov8s 等），那是第二阶段。
+			 *
+			 * 节点号 200 起，每区域 9 个：Crop / ScaleBy(上) / VAEEncode / KSampler /
+			 *   VAEDecode / ImageScale(回原尺寸) / SolidMask / FeatherMask / CompositeMasked。
+			 *
+			 * ⚠️ 号段别改回 40+：分段编码占 41–48（正段）、51–58（负段）、
+			 *    61–67 / 71–77（ConditioningCombine）。40+ 会静默覆盖那些节点，
+			 *    表现是「开了分段编码之后局部重绘消失」或「提示词后半段丢了」。
+			 *
+			 * 三处刻意选择（每处都对应一次实测或一条已有结论）：
+			 *   1) model 用 modelSrc（LoRA 链末端），**不接** AnimaLLLiteApply 之后的 modelForSampler。
+			 *      控制图是全身构图，套在手上/脚上的裁切里毫无对应关系，会以浅灰描边渗进画面
+			 *      （与 §14「乘数别拉高」同一个机制）；顺带省一次 patch 应用。
+			 *   2) 步数取主链 45%（8–16）：denoise ≤0.5 的局部重采不需要跑满，多出来的步数只改细节噪点。
+			 *   3) 种子沿用主种子：同一张图重复跑，重绘结果一样，才能做 A/B。
+			 */
+			let detailSrc = finalSrc;
+			if (o.detail && o.detail.mode && o.detail.mode !== "off") {
+				const _dm = String(o.detail.mode);
+				const _wantHands = _dm === "hands" || _dm === "both";
+				const _wantFeet = _dm === "feet" || _dm === "both";
+				const _hsF = (o.hires && o.hires.enabled) ? Math.min(2.5, Math.max(1.05, Number(o.hires.scale) || 1.5)) : 1;
+				const _DW = Math.max(128, Math.round(Number(o.w) * _hsF));
+				const _DH = Math.max(128, Math.round(Number(o.h) * _hsF));
+				const _den = Math.min(0.85, Math.max(0.1, Number(o.detail.denoise) || 0.42));
+				const _guide = Math.min(1024, Math.max(320, Math.round(Number(o.detail.guide) || 768)));
+				const _boxes = [];
+				if (_wantHands) {
+					const _s = Math.round(Math.min(_DW * 0.36, _DH * 0.28));
+					_boxes.push({ key: "handL", x: Math.round(_DW * 0.20 - _s / 2), y: Math.round(_DH * 0.58 - _s / 2), w: _s, h: _s });
+					_boxes.push({ key: "handR", x: Math.round(_DW * 0.80 - _s / 2), y: Math.round(_DH * 0.58 - _s / 2), w: _s, h: _s });
+				}
+				if (_wantFeet) {
+					const _fw = Math.round(_DW * 0.60), _fh = Math.round(_DH * 0.22);
+					_boxes.push({ key: "feet", x: Math.round(_DW * 0.20), y: Math.round(_DH * 0.98 - _fh), w: _fw, h: _fh });
+				}
+				_boxes.forEach(function (b, i) {
+					const cx = Math.max(0, Math.min(Math.max(0, _DW - b.w), b.x));
+					const cy = Math.max(0, Math.min(Math.max(0, _DH - b.h), b.y));
+					const cw = Math.min(b.w, _DW - cx), ch = Math.min(b.h, _DH - cy);
+					if (cw < 32 || ch < 32) return;
+					const n = 200 + i * 9;
+					const k = Math.max(1, Math.min(4, _guide / Math.min(cw, ch)));
+					const fw = Math.round(cw * 0.12), fh = Math.round(ch * 0.12);
+					g[String(n)] = { class_type: "ImageCrop", inputs: { image: detailSrc, width: cw, height: ch, x: cx, y: cy } };
+					g[String(n + 1)] = { class_type: "ImageScaleBy", inputs: { image: [String(n), 0], upscale_method: "lanczos", scale_by: k } };
+					g[String(n + 2)] = { class_type: "VAEEncode", inputs: { pixels: [String(n + 1), 0], vae: vaeSrc } };
+					g[String(n + 3)] = {
+						class_type: "KSampler",
+						inputs: {
+							model: modelSrc, positive: posSrc, negative: negSrc, latent_image: [String(n + 2), 0],
+							seed: o.seed,
+							steps: Math.max(8, Math.min(16, Math.round(Number(o.steps) * 0.45))),
+							cfg: o.cfg, sampler_name: o.sampler, scheduler: o.scheduler,
+							denoise: _den,
+						},
+					};
+					g[String(n + 4)] = { class_type: "VAEDecode", inputs: { samples: [String(n + 3), 0], vae: vaeSrc } };
+					g[String(n + 5)] = { class_type: "ImageScale", inputs: { image: [String(n + 4), 0], upscale_method: "lanczos", width: cw, height: ch, crop: "disabled" } };
+					g[String(n + 6)] = { class_type: "SolidMask", inputs: { value: 1, width: cw, height: ch } };
+					g[String(n + 7)] = { class_type: "FeatherMask", inputs: { mask: [String(n + 6), 0], left: fw, top: fh, right: fw, bottom: fh } };
+					g[String(n + 8)] = { class_type: "ImageCompositeMasked", inputs: { destination: detailSrc, source: [String(n + 5), 0], x: cx, y: cy, resize_source: false, mask: [String(n + 7), 0] } };
+					detailSrc = [String(n + 8), 0];
+				});
+				if (detailSrc !== finalSrc) finalSrc = detailSrc;
+			}
 			if (o.upscale && o.upscaleModel) {
 				g["30"] = { class_type: "UpscaleModelLoader", inputs: { model_name: o.upscaleModel } };
-				g["31"] = { class_type: "ImageUpscaleWithModel", inputs: { upscale_model: ["30", 0], image: ["8", 0] } };
+				g["31"] = { class_type: "ImageUpscaleWithModel", inputs: { upscale_model: ["30", 0], image: finalSrc } };
 				finalSrc = ["31", 0];
 				// 放大模型是固定的 4x；要 2x/3x 就再等比缩回去
 				const f = Number(o.upscaleFactor) || 4;
@@ -5031,6 +5261,73 @@ window.__ModuleLoader__.load({
 			const n = s.length === 3 ? s.split('').map(function (c) { return c + c; }).join('') : s;
 			if (!/^[0-9a-fA-F]{6}$/.test(n)) return '127,127,127';
 			return parseInt(n.slice(0, 2), 16) + ',' + parseInt(n.slice(2, 4), 16) + ',' + parseInt(n.slice(4, 6), 16);
+		}
+
+
+		/**
+		 * --cc-*（hostPalette 探测宿主的产物）反向映射成 --c-*（插件主题令牌）。
+		 * 绘图台 .dsh-comfy-ui 根上原来只注入了 --cc-*，于是 400+ 处
+		 * var(--c-card) / var(--c-fg2) / var(--c-line) / rgba(var(--c-ink-rgb),…) 全部未定义：
+		 * 弹出菜单背景透明、边框消失、次要文字颜色继承宿主。这里把两套令牌接成同源。
+		 */
+		function cVarsFromCC(v) {
+			if (!v) return {};
+			const text = v['--cc-text'] || '#202630';
+			const bg = v['--cc-bg'] || '#f8f9fb';
+			const muted = v['--cc-muted'] || text;
+			return {
+				'--c-fg': text,
+				'--c-fg2': text,
+				'--c-fg3': muted,
+				'--c-fg4': muted,
+				'--c-fg5': muted,
+				'--c-card': bg,
+				'--c-panel': v['--cc-surface'] || bg,
+				'--c-panel2': v['--cc-control'] || bg,
+				'--c-line': v['--cc-border'] || bg,
+				'--c-ink-rgb': hexToRgbTriplet(text),
+				'--c-accent': v['--cc-accent'] || '#2568bd',
+				'--c-accent-bg': v['--cc-accent-bg'] || '#e2edfc',
+				'--c-accent-bg2': v['--cc-accent-bg'] || '#e2edfc',
+				'--c-accent-fg': v['--cc-accent-text'] || '#174b8b',
+				'--c-accent-on': bg,
+				'--c-bad': v['--cc-bad'] || '#b52f3c',
+				'--c-bad2': v['--cc-bad'] || '#b52f3c',
+				'--c-bad-bg': v['--cc-accent-bg'] || '#e2edfc',
+				'--c-warn': v['--cc-warn'] || '#895800',
+				'--c-warn2': v['--cc-warn'] || '#895800',
+				'--c-warn-bg': v['--cc-control'] || bg,
+				'--c-ok': v['--cc-ok'] || '#15754b',
+				'--c-scheme': v['--cc-scheme'] || 'light',
+			};
+		}
+
+		/**
+		 * 反向：--c-* → --cc-*。dcomfy-panel 只拿到插件主题，浮层/portal 拿不到，补一套同源令牌。
+		 */
+		function ccVarsFromC(v) {
+			if (!v) return {};
+			const text = v['--c-fg'] || '#202630';
+			const bg = v['--c-card'] || '#f8f9fb';
+			const muted = v['--c-fg4'] || text;
+			return {
+				'--cc-bg': bg,
+				'--cc-text': text,
+				'--cc-muted': muted,
+				'--cc-surface': v['--c-panel'] || bg,
+				'--cc-control': v['--c-panel2'] || bg,
+				'--cc-hover': v['--c-panel2'] || bg,
+				'--cc-border': v['--c-line'] || bg,
+				'--cc-accent': v['--c-accent'] || '#2568bd',
+				'--cc-accent-bg': v['--c-accent-bg'] || '#e2edfc',
+				'--cc-accent-text': v['--c-accent-fg'] || '#174b8b',
+				'--cc-ok': v['--c-ok'] || '#15754b',
+				'--cc-bad': v['--c-bad'] || '#b52f3c',
+				'--cc-warn': v['--c-warn'] || '#895800',
+				'--cc-preview-outline': text,
+				'--cc-scheme': v['--c-scheme'] || 'light',
+				colorScheme: v['--c-scheme'] || 'light',
+			};
 		}
 
 		/**
@@ -7160,6 +7457,12 @@ window.__ModuleLoader__.load({
 		:is(.dsh-comfy-ui,.dsh-comfy-floating) .cc-task-stop{flex:none;white-space:nowrap}
 
 		@keyframes cc-spin{to{transform:rotate(360deg)}}
+		/* 左列宽度统一（2026-11-10）：画布与它下面每一块提示词卡片必须是同一个宽度，
+		   不论哪块内部塞了什么（长文件名、固定宽输入框、绝对定位下拉、图片比例），
+		   一律由左列宽度说了算。子元素统一 100% + border-box，横向溢出由
+		   cfy-grid 的 overflow-x: clip 兜底。 */
+		.dsh-comfy-ui .cfy-left{display:flex;flex-direction:column;align-items:stretch;width:100%;max-width:100%;min-width:0;box-sizing:border-box}
+		.dsh-comfy-ui .cfy-left>*{width:100%;max-width:100%;min-width:0;box-sizing:border-box;align-self:stretch;flex-shrink:0}
 		.dsh-comfy-ui .cc-prompt-layout{display:grid;grid-template-columns:minmax(0,1fr);gap:10px;align-items:stretch}
 		.dsh-comfy-ui .cc-prompt-layout--chat{grid-template-columns:minmax(0,7fr) minmax(235px,3fr)}
 		.dsh-comfy-ui .cc-prompt-card{min-width:0}
@@ -7515,7 +7818,7 @@ window.__ModuleLoader__.load({
 		.dsh-comfy-ui .cc-output-filter-custom input{width:100%;min-width:0;height:33px;padding:0 8px;background:var(--cc-surface);border:1px solid var(--cc-border);border-radius:6px;color:var(--cc-text);font-size:10px;color-scheme:var(--cc-scheme);box-sizing:border-box}
 		.dsh-comfy-ui .cc-output-filter-range-sep{padding-bottom:9px;color:var(--cc-muted)}
 		.dsh-comfy-ui .cc-output-filter-hint{grid-column:1/-1;font-size:9px;color:var(--cc-muted)}
-		.dsh-comfy-ui .cc-output-filter-error{font-size:10px;color:var(--cc-error,#e57b7b)}
+		.dsh-comfy-ui .cc-output-filter-error{font-size:10px;color:var(--cc-bad,#e57b7b)}
 		.dsh-comfy-ui .cc-output-filter-foot{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;font-size:9px;color:var(--cc-muted);padding-top:2px}
 		.dsh-comfy-ui .cc-output-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:9px;min-width:0}
 		.dsh-comfy-ui .cc-output-masonry{position:relative;min-width:0;width:100%}
@@ -7795,7 +8098,7 @@ window.__ModuleLoader__.load({
 		            h("span", {className: "cc-select-label"}, selectedLabel),
 		            h("span", {className: "cc-select-caret", "aria-hidden": "true"}, "▾")),
 		        open && placement ? floating(h("div", { ref: popup, className: "dsh-comfy-floating cc-select-popup",
-		            style: Object.assign({}, theme || {}, { position: "fixed", zIndex: forceOpen ? 2147482600 : 2147480500, pointerEvents: forceOpen ? "none" : undefined, ...placement }),
+		            style: Object.assign({}, popupVars(theme), { position: "fixed", zIndex: forceOpen ? 2147482600 : 2147480500, pointerEvents: forceOpen ? "none" : undefined, ...placement }),
 		            onMouseDown: (e) => e.stopPropagation() },
 		            searchable ? h("input", { ref: search, type: "search", className: "cc-select-search", value: query,
 		                placeholder: "搜索选项…", "aria-label": "搜索" + label,
@@ -7839,6 +8142,26 @@ window.__ModuleLoader__.load({
 		    return node;
 		}
 
+		/**
+		 * 弹层配色统一（2026-11-10）
+		 *
+		 * 所有弹层都经 floating() portal 到 body 下 —— 那里没有 .dsh-comfy-ui 上的
+		 * --cc-* 变量，所以必须由调用方显式带进来；而调用方手里常常只有「主题设置对象」
+		 * （mode / bg / fg），它里面一个 --cc-* 都没有，传进去等于没传，CSS 里的
+		 * background: var(--cc-surface) 就整条失效 —— 表现为二级菜单背景透明。
+		 *
+		 * 这里做一次判定：真变量表就用，否则按当前面板的实际底色重新探测。
+		 */
+		function popupVars(theme) {
+		    if (theme && typeof theme === "object") {
+		        for (const k in theme) {
+		            if (typeof k === "string" && k.indexOf("--cc-") === 0) return theme;
+		        }
+		    }
+		    if (typeof document === "undefined" || !document.body) return theme || {};
+		    return hostPalette(document.querySelector(".dsh-comfy-ui") || document.body);
+		}
+
 		/** ComfyUI 启动按钮（2026-10-31）。
 		 *
 		 *  原来的「连接 ComfyUI」是一个普通按钮：点下去 setStarting(true)，然后同步等
@@ -7855,7 +8178,7 @@ window.__ModuleLoader__.load({
 		 *  `/comfy/startup/cancel`。两个端点只对带 attempt 的启动有效，
 		 *  不影响其它地方同步调用 `/comfy/start` 的老路径。
 		 */
-		function ComfyStartupButton({ starting, online, session, stopping, onConnect, onStop }) {
+		function ComfyStartupButton({ starting, online, session, stopping, onConnect, onStop, theme }) {
 		    const [open, setOpen] = React.useState(false);
 		    const [hover, setHover] = React.useState(false);
 		    const [data, setData] = React.useState(null);
@@ -7975,13 +8298,13 @@ window.__ModuleLoader__.load({
 		                const to = e.relatedTarget;
 		                if (!(anchor.current && anchor.current.contains(to)) && !(panel.current && panel.current.contains(to))) hide();
 		            },
-		            style: {
+		            style: Object.assign({}, popupVars(theme), {
 		                position: "fixed", top: position.top, left: position.left, width: position.width,
 		                zIndex: 2147482000,
-		                background: "var(--cc-bg, #1b1b1f)", color: "var(--cc-fg, #e8e8ea)",
-		                border: "1px solid var(--cc-line, #34343a)", borderRadius: 10, padding: 12,
+		                background: "var(--cc-bg, #1b1b1f)", color: "var(--cc-text, #e8e8ea)",
+		                border: "1px solid var(--cc-border, #34343a)", borderRadius: 10, padding: 12,
 		                boxShadow: "0 18px 48px rgba(0,0,0,.45)", fontSize: 12, lineHeight: 1.5,
-		            },
+		            }),
 		        },
 		            h("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 } },
 		                h("strong", null, "ComfyUI · 启动进度"),
@@ -8000,8 +8323,8 @@ window.__ModuleLoader__.load({
 		                style: {
 		                    margin: 0, marginTop: 8, padding: 10, minHeight: 100, maxHeight: 260,
 		                    overflow: "auto", whiteSpace: "pre-wrap", overflowWrap: "anywhere",
-		                    background: "var(--cc-bg2, #141417)", border: "1px solid var(--cc-line, #34343a)",
-		                    borderRadius: 8, fontSize: 11, lineHeight: 1.45, color: "var(--cc-fg2, #d0d0d4)",
+		                    background: "var(--cc-surface, #141417)", border: "1px solid var(--cc-border, #34343a)",
+		                    borderRadius: 8, fontSize: 11, lineHeight: 1.45, color: "var(--cc-muted, #d0d0d4)",
 		                },
 		            }, logText || "（暂无输出）"),
 		            h("div", { style: { display: "flex", justifyContent: "space-between", gap: 10, marginTop: 8 } },
@@ -8071,7 +8394,7 @@ window.__ModuleLoader__.load({
 		            if (old && old.focus && old.isConnected) old.focus(); };
 		    }, []);
 		    return floating(h("div", { className: "dsh-comfy-floating cc-backdrop",
-		        style: Object.assign({}, theme || {}, { position: "fixed", inset: 0, zIndex,
+		        style: Object.assign({}, popupVars(theme), { position: "fixed", inset: 0, zIndex,
 		            display: "flex", alignItems: "center", justifyContent: "center",
 		            padding: "14px", boxSizing: "border-box", background: "rgba(0,0,0,.55)" }),
 		        onMouseDown: (e) => { if (e.target === e.currentTarget) onClose(); },
@@ -8365,7 +8688,7 @@ window.__ModuleLoader__.load({
 		    if (!step) return null;
 		    const count = TUTORIALS[guide].steps.length;
 		    return floating(h("div", {className:"dsh-comfy-floating cc-tutorial-overlay", role:"presentation",
-		        style:Object.assign({}, theme || {}, {position:"fixed", inset:0, zIndex:2147482500,
+		        style:Object.assign({}, popupVars(theme), {position:"fixed", inset:0, zIndex:2147482500,
 		            background:focusBox ? "transparent" : "rgba(0,0,0,.76)", pointerEvents:"auto", touchAction:"auto"}),
 		        onPointerDown:(e)=>{e.stopPropagation();e.preventDefault();},
 		        onClick:(e)=>{if (!tipRef.current?.contains(e.target)) {e.stopPropagation();e.preventDefault();}}},
@@ -9142,6 +9465,8 @@ window.__ModuleLoader__.load({
 			OPEN_CONN_SINK = () => setShowConn(true);   // 生成页按钮经模块级钩子调这里
 			// 生成页的底模卡经同一个模式打开模型库；openModelLibrary 是函数声明，提升可见。
 			OPEN_MODEL_PICKER_SINK = (kind, name) => openModelLibrary(kind || null, name || "");
+			// 画布出图点击放大：把图交给输出查看器（缩放 / 拖拽 / 前后切换全在这套里）
+			OUTPUT_VIEW_SINK = (it) => { if (!it) return; setOutputDetailScope("recent"); setOutputDetail(it); };
 		    const connectionDraft=React.useRef({revision:0,fields:new Set()});
 		    function editConnectionDraft(...keys){connectionDraft.current.revision++;for(const key of keys)connectionDraft.current.fields.add(key);}
 		    function applyConnectionSettings(settings){
@@ -10501,7 +10826,35 @@ window.__ModuleLoader__.load({
 		            });
 		        }catch(e){setMsg("图片信息读取失败："+errText(e));}
 		    }
-		    function applyOutputParams(item){if(expandPhaseRef.current!=="idle"){setMsg("请先完成或停止 AI 操作");return;}const p=item?.params?{...item.params,...(item.params.generationInputs||{})}:null;if(!p){setMsg("这张图片缺少可读取的 ComfyUI 生成参数，当前设置未改变");return;}/* 0.7.130：套用历史参数 = 完全还原这张图的状态，先把上一张卡挂着的插入与禁词锁清掉，否则 stabilizePrompt 会拿旧锁把新提示词里的词当禁词剔掉（絉林的裙长闸 / 体型锁最明显，表现为「同样的词换个卡构图就不对」）。*/if(CLEAR_CARD_STATE_SINK){try{CLEAR_CARD_STATE_SINK();}catch(e){}}if(p.pos!==undefined)updatePrompt({pos:p.pos||"",neg:p.negativeApplied===false?promptRef.current.neg:p.neg||""});if(p.ckpt||p.modelConfig){restoreModelSetup(p);}else{if(p.clip)setClip(p.clip);if(p.vae)setVae(p.vae);}if(p.clipType)setClipType(p.clipType);if(Array.isArray(p.loras))setSelLoras(p.loras);setW(p.baseW||p.w||w);setHh(p.baseH||p.h||hh);setSizeMultiplier(preciseSizeMultiplier(p.sizeMultiplier));if(p.steps)setSteps(p.steps);if(p.cfg!==undefined)setCfg(p.cfg);if(p.sampler)setSampler(p.sampler);if(p.scheduler)setScheduler(p.scheduler);if(p.usedSeed!==undefined||p.seed!==undefined)setSeed(p.usedSeed??p.seed);setSeedMode(p.seedMode||"lock");if(p.postControls||p.upscale!==undefined)setPostControls(normalizePost(p));if(p.upscale!==undefined)setUpscale(!!p.upscale);if(p.upscaleModel)setUpscaleModel(p.upscaleModel);if(p.upscaleFactor)setUpscaleFactor(p.upscaleFactor);setOutputDetail(null);switchTab("gen");setMsg("已用该图片的生成参数替换当前设置");}
+		    function applyOutputParams(item){if(expandPhaseRef.current!=="idle"){setMsg("请先完成或停止 AI 操作");return;}const _raw=item?.params||null;const p=_raw?{..._raw,...(_raw.generationInputs||{})}:null;if(!p||!Object.keys(p).length){setMsg("这张图片缺少可读取的 ComfyUI 生成参数，当前设置未改变");return;}const _need=["pos","neg","ckpt","modelConfig","steps","cfg","sampler","scheduler","w","baseW","seed","usedSeed","loras","upscale","sizeMultiplier"];if(!_need.some(k=>p[k]!==undefined)){setMsg("读到元数据但没有可套用的生成参数，当前设置未改变");return;}/* 0.7.130：套用历史参数 = 完全还原这张图的状态，先把上一张卡挂着的插入与禁词锁清掉，否则 stabilizePrompt 会拿旧锁把新提示词里的词当禁词剔掉（<角色>的裙长闸 / 体型锁最明显，表现为「同样的词换个卡构图就不对」）。*/if(CLEAR_CARD_STATE_SINK){try{CLEAR_CARD_STATE_SINK();}catch(e){}}if(p.pos!==undefined)updatePrompt({pos:p.pos||"",neg:p.negativeApplied===false?promptRef.current.neg:p.neg||""});if(p.ckpt||p.modelConfig){restoreModelSetup(p);}else{if(p.clip)setClip(p.clip);if(p.vae)setVae(p.vae);}if(p.clipType)setClipType(p.clipType);if(Array.isArray(p.loras))setSelLoras(p.loras);setW(p.baseW||p.w||w);setHh(p.baseH||p.h||hh);setSizeMultiplier(preciseSizeMultiplier(p.sizeMultiplier));if(p.steps)setSteps(p.steps);if(p.cfg!==undefined)setCfg(p.cfg);if(p.sampler)setSampler(p.sampler);if(p.scheduler)setScheduler(p.scheduler);if(p.usedSeed!==undefined||p.seed!==undefined)setSeed(p.usedSeed??p.seed);setSeedMode(p.seedMode||"lock");if(p.postControls||p.upscale!==undefined)setPostControls(normalizePost(p));if(p.upscale!==undefined)setUpscale(!!p.upscale);if(p.upscaleModel)setUpscaleModel(p.upscaleModel);if(p.upscaleFactor)setUpscaleFactor(p.upscaleFactor);setOutputDetail(null);switchTab("gen");setMsg("已用该图片的生成参数替换当前设置");}
+		    /**
+		     * 套用历史生成参数（2026-11-11 修）
+		     *
+		     * 原来按钮写的是 disabled:!item?.params —— 而列表接口 /outputs 为了轻量
+		     * 不带 params，只有 /outputs/detail 这条单条记录会带（侧车
+		     * _output_record(include_params=True)）。详情面板是异步合并的，按钮在
+		     * 参数回来之前一直是灰的；元数据缺失的图则永远灰着，点下去毫无反应，
+		     * 看起来就是「历史的套用功能坏了」。
+		     *
+		     * 现在按钮永远可点：手上没有参数就先补取一次 detail，取不到再明确告诉
+		     * 原因，不再静默。
+		     */
+		    async function applyOutputParamsWithFetch(item){
+		        if(!item){setMsg("没有选中图片");return;}
+		        if(item.params&&Object.keys(item.params).length){applyOutputParams(item);return;}
+		        if(!item.path){setMsg("Temp 输出没有持久文件路径，读不到生成参数");return;}
+		        setMsg("正在读取这张图的生成参数…");
+		        try{
+		            const data=await jget(EXPANDER+"/outputs/detail?path="+encodeURIComponent(item.path),20000);
+		            const merged={...item,...data,params:data.params||item.params||null};
+		            setOutputDetail(cur=>(cur&&outputKey(cur)===outputKey(item))?merged:cur);
+		            if(!merged.params||!Object.keys(merged.params).length){
+		                setMsg("这张图没有可读取的生成参数（PNG 元数据缺失，或不是本机 ComfyUI 生成的图），当前设置未改变");
+		                return;
+		            }
+		            applyOutputParams(merged);
+		        }catch(e){setMsg("读取生成参数失败："+errText(e));}
+		    }
 		    function outputModelsFor(item){
 		        const p=item?.params||{},rows=Array.isArray(p.models)?p.models.map(x=>({...x})):[],seen=new Set(rows.map(x=>(x.kind||'')+'|'+(x.name||'')));
 		        const add=(kind,name,detail='')=>{name=String(name||'').trim();if(!name)return;const key=kind+'|'+name;if(seen.has(key))return;seen.add(key);rows.push({kind,name,detail});};
@@ -10551,7 +10904,7 @@ window.__ModuleLoader__.load({
 		                h("dt",null,"保存状态"),h("dd",null,item?.saved?"已保存":"Temp / 未保存"),
 		                h("dt",null,"保存路径"),h("dd",null,item?.path||"ComfyUI temp（本次会话）"))),
 		            h("div",{className:"cc-output-inspector-actions"},
-		                h("button",{type:"button",style:S.btn,onClick:()=>applyOutputParams(item),disabled:!item?.params},"套用此图生成设置"),
+		                h("button",{type:"button",style:S.btn,title:"把这张图的提示词与全部生成参数还原到生成页",onClick:()=>applyOutputParamsWithFetch(item)},"套用此图生成设置"),
 		                h('button',{type:'button',style:S.btn2,onClick:()=>setPreviewOutput(item)},'加入模型预览图'),
 		                item?.saveFailed?h("button",{type:"button",style:S.btn,onClick:async()=>{const ok=await PBG.retrySave(item.promptId);if(ok){setOutputDetail(null);await loadOutputs();setMsg("已重新保存，无需重新生成");}else setMsg("保存重试失败：请确认 Temp 文件仍在、目标目录可写");}},"重试保存"):null,
 		                item?.path?h("button",{type:"button",style:S.btn2,onClick:()=>manageOutput(item,'open')},"打开所在位置"):null,
@@ -10662,7 +11015,7 @@ window.__ModuleLoader__.load({
 			return h("div", { ref: rootRef, className: "dsh-comfy-ui",
 		        // A 线二级页（历史 / 模型库）：S.wrap 的 padding 底部留了 48px，
 		        // 那是给独立界面「内容到面板底之间留呼吸」用的；二级页要顶到底，清零。
-		        style: Object.assign({}, S.wrap, theme, (props && props.page) ? { paddingBottom: 0 } : null) },
+		        style: Object.assign({}, S.wrap, theme, cVarsFromCC(theme), (props && props.page) ? { paddingBottom: 0 } : null) },
 		        h("style", null, UI_CSS),
 		        // 固定的全局工具栏与页面导航，同属一个 sticky 容器。
 		        h("div",{ref:stickyShellRef,className:"cc-sticky-shell"},
@@ -10675,7 +11028,7 @@ window.__ModuleLoader__.load({
 						status, renderTaskSummary()),
 					h("div", { style: { display: "flex", gap: "6px", flexWrap: "wrap", justifyContent: "flex-end", minWidth: 0 } },
 						comfyUpdate?.available?h("button",{type:"button",className:"cc-update-btn",title:"ComfyUI 有新版本可用",onClick:()=>{setUpdateError("");setUpdateOpen(true);}},"可更新"):null,
-						h(ComfyStartupButton, {
+						h(ComfyStartupButton, { theme,
 							starting, online,
 							session: startSession,
 							stopping: stoppingStart,
@@ -11118,9 +11471,9 @@ window.__ModuleLoader__.load({
 			    return () => { try { window.removeEventListener("resize", measure); clearTimeout(t); } catch (e) {} };
 			  } catch (e) { return; }
 			}, []);
-			// 切走生成页时清掉「已收尾」的出图（跑着的任务不清）。包一层，所有入口自动生效。
+			// 画布常驻：切走生成页**不再清图**（2026-11-10 用户要求）。
+			// 只有「生成下一张」会覆盖、「清空 / 全部清空」按钮会清 —— 切页、刷新都保留最近一张。
 			const setTab = (k) => {
-				if (tab === "gen" && k !== "gen" && BG.isFinished()) BG.clear();
 				setTabRaw(k);
 			};
 			/** 实验性功能页：体检输出（放在主 Console 里，切 tab 不会丢） */
@@ -11515,8 +11868,132 @@ window.__ModuleLoader__.load({
 			const [upscaleModel, setUpscaleModel] = React.useState(L.upscaleModel || "");
 			const [upscaleFactor, setUpscaleFactor] = React.useState(Number(L.upscaleFactor) || 4);
 			const [upscalers, setUpscalers] = React.useState([]);
+			/**
+			 * 工作流支路开关（0.8.1）。
+			 *
+			 * 这三个是 buildGraph 从「固定图」变成「可组合图」的第一步 ——
+			 * 都是可选支路，关掉时工作流与 0.8.0 逐节点一致，不开的人完全不受影响。
+			 *
+			 *   hires         二次采样：latent 放大再低 denoise 过一遍（33/34/35）
+			 *   splitEncoding 提示词分段编码：按空行切开分别编码再拼（41.. / 51.. / 61.. / 71..）
+			 *   initImage     图生图：LoadImage → VAEEncode → KSampler(denoise<1)（36/37）
+			 */
+			const [hires, setHires] = React.useState(Object.assign({ enabled: false, denoise: 0.45, scale: 1.5 }, L.hires || {}));
+			/**
+			 * 【实验性】手 / 脚局部重绘（节点 40 起）。
+			 *   mode  off 关闭 / hands 只手 / feet 只脚 / both 手+脚
+			 *   denoise 这块区域的重画强度（0.35 轻改、0.55 重画）
+			 *   guide   裁出来的区域放大到多高再重采（768 = 细节明显，但慢）
+			 * 区域按画面比例猜，不靠检测器 —— 所以是实验性功能，默认 off。
+			 */
+			const [detail, setDetail] = React.useState(Object.assign({ mode: "off", denoise: 0.42, guide: 768 }, L.detail || {}));
+			const [splitEncoding, setSplitEncoding] = React.useState(!!L.splitEncoding);
+			const [initImage, setInitImage] = React.useState(Object.assign({ image: "", denoise: 0.6 }, L.initImage || {}));
+			const [inputImages, setInputImages] = React.useState([]);
+			/**
+			 * 图生图的二级选择面板（0.8.1）。
+			 * 原来只有一个下拉读 ComfyUI input 目录 —— 那里面通常什么都没有。
+			 * 现在点「选择」弹面板，两个来源：历史（output 目录，走侧车 /outputs）与自己上传。
+			 * 两者最终都落到 ComfyUI input/dsh_init/（LoadImage 只认 input 目录）。
+			 */
+			const [initOpen, setInitOpen] = React.useState(false);
+			const [initTab, setInitTab] = React.useState("history");
+			const [initHistory, setInitHistory] = React.useState([]);
+			const [initBusy, setInitBusy] = React.useState(false);
+			// ---- 图生图入口：原来在 libTab 里，画布右下角的「工作流支路」也要调，提到 Console 主体 ----
+			/** 打开面板并拉一次历史（output 目录最近 48 张） */
+			async function openInitPicker() {
+				setInitOpen(true);
+				setInitTab("history");
+				await loadInitHistory();
+			}
+			/** 历史列表：侧车 /outputs 扫 outputDir，返回 items[].{path,filename,width,height,mtime} */
+			async function loadInitHistory() {
+				setInitBusy(true);
+				try {
+					const r = await jget(EXPANDER + "/outputs?limit=48", 20000);
+					setInitHistory((r && r.items) || []);
+				} catch (e) {
+					setMsg("拉不到历史图：" + errText(e));
+					setInitHistory([]);
+				} finally {
+					setInitBusy(false);
+				}
+			}
+
+				// OverlayModal 要的是 --cc-* 变量对象（hostPalette 的产物），不是面板自己的 theme state。
+				// 只在面板打开时算一次，避免每次渲染都 getComputedStyle。
+				const ccVars = initOpen && typeof document !== "undefined"
+					? hostPalette(document.querySelector(".dsh-comfy-ui") || document.body)
+					: undefined;
+
+			/** 选中历史图 → 侧车铺到 ComfyUI input/dsh_init → 记进 initImage.image */
+			async function pickInitFromHistory(it) {
+				setInitBusy(true);
+				try {
+					const r = await jpost(EXPANDER + "/comfy/stage-init", { path: it.path }, 40000);
+					if (r && r.ok) {
+						setInitImage(Object.assign({}, initImage, { image: r.image }));
+						setInitOpen(false);
+						setMsg("已用这张作初始图：" + r.name);
+					} else {
+						setMsg("铺图失败：" + ((r && r.error) || "未知原因"));
+					}
+				} catch (e) {
+					setMsg("铺图失败：" + errText(e));
+				} finally {
+					setInitBusy(false);
+				}
+			}
+			/** 自己上传：FileReader 读成 dataURL → 侧车 base64 落盘 → 同样记进 initImage.image */
+			async function uploadInitFile(files) {
+				const f = files && files[0];
+				if (!f) return;
+				setInitBusy(true);
+				try {
+					const dataUrl = await new Promise((res, rej) => {
+						const fr = new FileReader();
+						fr.onload = () => res(String(fr.result || ""));
+						fr.onerror = () => rej(new Error("读文件失败"));
+						fr.readAsDataURL(f);
+					});
+					const r = await jpost(EXPANDER + "/comfy/stage-init", { name: f.name, b64: dataUrl }, 90000);
+					if (r && r.ok) {
+						setInitImage(Object.assign({}, initImage, { image: r.image }));
+						setInitOpen(false);
+						setMsg("已上传并设为初始图：" + r.name);
+					} else {
+						setMsg("上传失败：" + ((r && r.error) || "未知原因"));
+					}
+				} catch (e) {
+					setMsg("上传失败：" + errText(e));
+				} finally {
+					setInitBusy(false);
+				}
+			}
 			// 主题：跟随系统 / 浅色 / 深色 / 纯白 / 纯黑 / 自定义（存进 USER.last，下次打开还是这个）
 			const [theme, setTheme] = React.useState(Object.assign({}, THEME_DEFAULTS, L.theme || {}));
+			/**
+			 * SelectMenu / OverlayModal 的弹层走 createPortal 挂到 body 下，拿不到
+			 * .dsh-comfy-ui 上的 CSS 变量，必须把 --cc-* 显式传进去。
+			 * 注意 theme 是「主题设置对象」（mode/bg/fg），不是变量表 —— 直接传它会让
+			 * 弹层没有 --cc-surface / --cc-border，背景透明、边框消失。
+			 */
+			const [uiVars, setUiVars] = React.useState({});
+			React.useEffect(() => {
+				if (typeof document === "undefined") return undefined;
+				const el = document.querySelector(".dsh-comfy-ui") || document.body;
+				let dead = false;
+				const apply = () => {
+					if (dead) return;
+					const next = hostPalette(el);
+					setUiVars((prev) => (JSON.stringify(prev) === JSON.stringify(next) ? prev : next));
+				};
+				apply();
+				// --c-* 由 resolveTheme 在同一帧注入，等它落盘后再测一次拿到真实底色
+				const timer = setTimeout(apply, 80);
+				return () => { dead = true; clearTimeout(timer); };
+			}, [theme]);
 			// auto 模式下系统换主题要能跟着变，用一个 tick 触发重渲染
 			// 系统是不是深色。resolveTheme 在 auto 模式下直接吃这个值，
 			// 系统换主题时它一变，组件就重渲染（原来是只写不读的 themeTick）。
@@ -11534,7 +12011,7 @@ window.__ModuleLoader__.load({
 			}, []);
 			// 每次改动都把这一套选择写回 localStorage，下次打开就是上次用的（2026-10-18 用户要求）
 			React.useEffect(() => {
-			  saveLast({ ckpt, clip, clipType, vae, loras: selLoras, w, h: hh, steps, cfg, sampler, scheduler, prefix, upscale, upscaleModel, upscaleFactor, theme, seed, lockSeed, viewKey, sizeMultiplier, seedMode });
+			  saveLast({ ckpt, clip, clipType, vae, loras: selLoras, w, h: hh, steps, cfg, sampler, scheduler, prefix, upscale, upscaleModel, upscaleFactor, theme, seed, lockSeed, viewKey, sizeMultiplier, seedMode, hires, splitEncoding, initImage, detail });
 			}, [ckpt, clip, clipType, vae, selLoras, w, hh, steps, cfg, sampler, scheduler, prefix, upscale, upscaleModel, upscaleFactor, theme, seed, lockSeed, viewKey, sizeMultiplier, seedMode]);
 
 			const [msg, setMsg] = React.useState("");
@@ -11623,9 +12100,7 @@ window.__ModuleLoader__.load({
 			/** 风格卡：选中 / 编辑中的草稿 / 插入二级菜单 */
 			const [styleSel, setStyleSel] = React.useState("");
 			const [styleEdit, setStyleEdit] = React.useState(null);
-				/** 风格卡插入菜单的第二级："" | "direct"（直插） | "stack"（叠插） */
-			const [styleSub, setStyleSub] = React.useState("");
-			const [styleMenu, setStyleMenu] = React.useState("");
+				const [styleMenu, setStyleMenu] = React.useState("");
 			/** 编辑界面「导出 ▾」二级菜单：存 cardType:id，空 = 关闭 */
 			/** 导入报告面板：{ f: 原始文件, d: 侧车返回 } —— 面板展示明细，缺件重试要重传同一个 File */
 			const [impRep, setImpRep] = React.useState(null);
@@ -11757,7 +12232,6 @@ window.__ModuleLoader__.load({
 		          if (tagAt) { setTagAt(""); setTagDraft(""); setTagNote(""); return; }  // 先收最里层：词库标签自动补全
 		          if (impRep) { setImpRep(null); return; }
 		          if (insMenu) { setInsMenu(""); return; }
-		          if (styleSub) { setStyleSub(""); return; }
 		          if (styleMenu) { setStyleMenu(""); return; }
 		          if (styleEdit) { setStyleEdit(null); return; }
 		          if (expandOpen) { setExpandOpen(false); return; }
@@ -11769,7 +12243,7 @@ window.__ModuleLoader__.load({
 		        };
 		        try { window.addEventListener("keydown", onKey, true); } catch (e1) { return; }
 		        return () => { try { window.removeEventListener("keydown", onKey, true); } catch (e2) {} };
-		      }, [expandOpen, apiOpen, loraOpen, promptOpen, cardEdit, insMenu, tagAt, styleEdit, styleMenu, styleSub, impRep]);
+		      }, [expandOpen, apiOpen, loraOpen, promptOpen, cardEdit, insMenu, tagAt, styleEdit, styleMenu, impRep]);
 		   // 依赖必须列全，否则 Esc 拿到的是旧闭包（风格卡的 styleEdit 曾因此按 Esc 无效）
 
 		const [outDraft, setOutDraft] = React.useState("");
@@ -11838,6 +12312,12 @@ window.__ModuleLoader__.load({
 								setUpscaleModel((cur) => (_us.indexOf(cur) >= 0 ? cur : (_us[0] || "")));
 							}
 						} catch (e) { /* 老 ComfyUI 或没装放大模型 */ }
+						// 图生图的初始图：ComfyUI input 目录里的文件（面板上传时侧车会 staging 到这里）
+						try {
+							const li = await jget(COMFY + "/object_info/LoadImage");
+							const _ii = comboOptions(li, "LoadImage", "image");
+							if (!dead) setInputImages(_ii);
+						} catch (e) { /* 没有 LoadImage 节点就先空着 */ }
 						setVae((cur) => (v.indexOf(cur) >= 0 ? cur : (v.indexOf("qwen_image_vae.safetensors") >= 0 ? "qwen_image_vae.safetensors" : (v[0] || ""))));
 						setClip((cur) => (t.indexOf(cur) >= 0 ? cur : (t[0] || "")));
 						const _smps = comboOptions(k, "KSampler", "sampler_name");
@@ -11854,9 +12334,21 @@ window.__ModuleLoader__.load({
 						try { await jget(COMFY + "/system_stats", 4000); }
 						catch (e) {
 							if (dead) return;
-		          setOnline(false);
-		          setMsg("ComfyUI 未运行：点右上「启动 ComfyUI」，或在 ComfyUI 目录里手动跑 main.py");
-		          return;
+							setOnline(false);
+							// 浏览器打不通不代表服务没起：ComfyUI 的 origin 校验对外部 Origin 直接 403，
+							// 而那个 403 不带 Access-Control-Allow-Origin，浏览器一律报 Failed to fetch。
+							// 侧车不受同源策略约束，让它替我们判一次，才能给出准确的下一步。
+							let srv = null;
+							try { srv = await jget(EXPANDER + "/comfy/online", 4000); } catch (e2) { /* 侧车也没起 */ }
+							if (dead) return;
+							if (srv && srv.running && srv.cors === false) {
+								setMsg("ComfyUI 在线，但页面被跨域拒绝（它由外部启动，没开 CORS）——点右上「重启 ComfyUI」，由插件带 CORS 接管");
+							} else if (srv && srv.running) {
+								setMsg("ComfyUI 在线但页面打不开（" + COMFY + "）：检查面板的 ComfyUI 地址是否指向它");
+							} else {
+								setMsg("ComfyUI 未运行：点右上「启动 ComfyUI」，或在 ComfyUI 目录里手动跑 main.py");
+							}
+							return;
 						}
 						if (dead) return;
 						setOnline(true);
@@ -11970,9 +12462,9 @@ window.__ModuleLoader__.load({
 			React.useEffect(() => {
 				const byType = Object.assign({}, (USER.last && USER.last.byType) || {});
 				if (ckpt) byType[isAnima ? "unet" : "ckpt"] = ckpt;
-				USER.last = Object.assign({}, USER.last || {}, { ckpt, clip, clipType, vae, loras: selLoras, pos, neg, w, h: hh, steps, cfg, sampler, scheduler, prefix, upscale, upscaleModel, upscaleFactor, theme, seed, lockSeed, viewKey, byType, sizeMultiplier, seedMode });
+				USER.last = Object.assign({}, USER.last || {}, { ckpt, clip, clipType, vae, loras: selLoras, pos, neg, w, h: hh, steps, cfg, sampler, scheduler, prefix, upscale, upscaleModel, upscaleFactor, theme, seed, lockSeed, viewKey, byType, sizeMultiplier, seedMode, hires, splitEncoding, initImage, detail });
 				saveUser();
-			}, [ckpt, vae, clip, clipType, selLoras, pos, neg, w, hh, steps, cfg, sampler, scheduler, prefix, upscale, upscaleModel, upscaleFactor, theme, sizeMultiplier, seedMode]);
+			}, [ckpt, vae, clip, clipType, selLoras, pos, neg, w, hh, steps, cfg, sampler, scheduler, prefix, upscale, upscaleModel, upscaleFactor, theme, sizeMultiplier, seedMode, hires, splitEncoding, initImage, detail, seed, lockSeed, viewKey]);
 
 			// ---- 动作 ----
 			/** 插到正向还是负面 —— 由词库页的「插入到」开关决定 */
@@ -12058,8 +12550,9 @@ window.__ModuleLoader__.load({
 					sampler, scheduler, seed: _usedSeed, prefix,
 					lllite: _wire,
 					upscale, upscaleModel, upscaleFactor,
+					hires, splitEncoding, initImage, detail,
 				});
-				await BG.run(graph, { w: _sz.w, h: _sz.h, steps, cfg, seed: _usedSeed, prefix, lllite: _extra ? _cp.weights_key + "/" + _cp.preset : "" }, _extra);
+				await BG.run(graph, { w: _sz.w, h: _sz.h, steps, cfg, seed: _usedSeed, prefix, lllite: _extra ? _cp.weights_key + "/" + _cp.preset : "", hires, splitEncoding, initImage }, _extra);
 				if (_sm !== "lock") setSeed(_usedSeed);
 			}
 		      // 取消：中断当前任务 + 清空队列（2026-10-18 用户要求「生成后面加取消」）
@@ -12523,13 +13016,13 @@ window.__ModuleLoader__.load({
 			function genTab() {
 			  const cFr = (availH && availH < 700) ? 1.4 : ((availH && availH < 820) ? 2.0 : 3.0);
 		  const cMin = availH ? Math.min(470, Math.max(200, Math.round(availH * 0.38))) : 360;  // 画布行下限：占可用高度约 38%（2026-10-18 用户反馈「竖向过长」后从 62% 调低）
-				const box = { display: "flex", flexDirection: "column", gap: "6px", minWidth: 0, overflow: "visible", border: "1px solid rgba(127,127,127,.28)", borderRadius: "10px", padding: "8px 10px" };
+				const box = { display: "flex", flexDirection: "column", gap: "6px", minWidth: 0, maxWidth: "100%", boxSizing: "border-box", overflow: "visible", border: "1px solid rgba(127,127,127,.28)", borderRadius: "10px", padding: "8px 10px" };
 				// 画布占 ~73%（2.7fr:1fr）；行用 minmax 下限，窗口再矮也不会把内容挤扁 ⇒ 整页可滚动
 			const narrow = rW > 0 ? rW < 640 : false;   // 用面板宽度（pW 是参数卡内网格宽度，别混用）  // 窄屏：单列堆叠（手机/平板竖屏，2026-10-18）
 						const tiny = rW > 0 ? rW < 460 : false;    // 手机竖屏：再压一档
 						const mid = rW > 0 && rW < 980;             // 中等宽：右栏收窄，别把左栏挤扁
 						const gpos = () => ({});   // 布局改成左右两列 flex 后不再需要行列定位（保留调用点）
-						const grid = { display: "grid", gridTemplateColumns: narrow ? "minmax(0,1fr)" : "minmax(0,1fr) clamp(210px, 32%, 420px)", alignItems: "stretch", gridAutoRows: "max-content", gap: "10px", width: "100%", minWidth: 0, boxSizing: "border-box", flex: "0 0 auto", minHeight: 0 };
+						const grid = { display: "grid", gridTemplateColumns: narrow ? "minmax(0,1fr)" : "minmax(0,1fr) clamp(210px, 32%, 420px)", alignItems: "stretch", gridAutoRows: "max-content", gap: "10px", width: "100%", maxWidth: "100%", minWidth: 0, boxSizing: "border-box", flex: "0 0 auto", minHeight: 0, overflowX: narrow ? "visible" : "clip" };
 						/** 提示词框行数：按内容自适应，2~5 行（2026-10-18 用户要求「竖向长度按需缩短」） */
 				const taRows = (t) => Math.min(5, Math.max(2, Math.ceil(String(t || "").length / (tiny ? 34 : (narrow ? 44 : 52)))));
 		const hd = { fontWeight: 700, fontSize: "13px", color: "var(--c-fg)" };
@@ -12750,15 +13243,6 @@ window.__ModuleLoader__.load({
 							() => setMsg("复制失败：浏览器拦了剪贴板"));
 					} catch (e) { setMsg("复制失败：" + e); }
 				};
-				/** 往某一栏直接加词（逗号可一次加多个）；和文本框写的是同一个 state */
-				const prAdd = (key, raw) => {
-					const add = String(raw || "").split(",").map((s) => s.trim()).filter(Boolean);
-					if (!add.length) return;
-					const setter = key === "pos" ? setPos : setNeg;
-					setter((cur) => mergeCsvTags(cur, add.join(", ")));
-					setMsg("已加入" + (key === "pos" ? "正向" : "负面") + "：" + add.join(", "));
-				};
-
 				/** 一栏胶囊（label + 计数 + 复制/清空 + 胶囊列表） */
 				const prRow = (key, label, tint) => {
 					const list = prTokens(key);
@@ -12982,7 +13466,7 @@ window.__ModuleLoader__.load({
 				                    onDrop: (e) => { e.preventDefault(); e.stopPropagation(); setLoraDropAt(""); loraMoveTo(loraDrag, g); },
 				                    title: loraDrag ? ("把「" + loraDrag + "」放进「" + g.label + "」") : g.label,
 				                    style: Object.assign({}, S.tab, g.key === _cur ? S.tabOn : S.tabOff,
-				                      loraDropAt === g.key ? { borderBottomColor: "var(--c-good, #16a34a)", background: "rgba(22,163,74,.14)" } : {}),
+				                      loraDropAt === g.key ? { borderBottomColor: "var(--c-ok, #16a34a)", background: "rgba(22,163,74,.14)" } : {}),
 				                  }, g.label + " (" + g.items.length + ")")))
 				              : null,
 				            h("div", Object.assign({ style: Object.assign({}, S.scrollBox, { maxHeight: "44vh", overflowY: "auto", padding: "2px" }) },
@@ -13156,16 +13640,38 @@ window.__ModuleLoader__.load({
 				  h("div", { className: "cfy-grid", style: grid },
 				  // ① 左上：画布出图展示
 
-				  			  h("div", { className: "cfy-left", style: { display: "flex", flexDirection: "column", gap: "10px", minWidth: 0, minHeight: 0 } },
+				  			  h("div", { className: "cfy-left", style: { display: "flex", flexDirection: "column", gap: "10px", width: "100%", maxWidth: "100%", minWidth: 0, minHeight: 0, boxSizing: "border-box" } },
 		h("div", { className: "cfy-canvas", style: Object.assign({}, box, gpos("1", "1"), { position: "relative", height: tiny ? "32vh" : (narrow ? "36vh" : "42vh"), flex: "0 0 auto", alignItems: "stretch", justifyContent: "flex-start", gap: "8px", minHeight: 0, overflow: "hidden", background: "repeating-conic-gradient(rgba(127,127,127,.07) 0% 25%, rgba(0,0,0,0) 0% 50%) 50% / 24px 24px" }) },
 				  	h("div", { style: { position: "relative", flex: "1 1 auto", minHeight: 0, maxHeight: "100%", overflow: "hidden", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "8px", overflow: "hidden", position: "relative" } },
 					  	h("span", { style: { position: "absolute", top: "6px", left: "8px", fontSize: "11.5px", color: "var(--c-fg4)", background: "rgba(255,255,255,.86)", border: "1px solid rgba(var(--c-ink-rgb),.10)", borderRadius: "4px", padding: "1px 6px", pointerEvents: "none", zIndex: 2, whiteSpace: "nowrap" } }, timeHintText()),
 				  		(job && job.image)
-				  			? h("img", { src: job.image, style: { position: "absolute", inset: 0, margin: "auto", maxWidth: "calc(100% - 10px)", maxHeight: "calc(100% - 10px)", width: "auto", height: "auto", objectFit: "contain", display: "block", borderRadius: "6px" } })
+				  			? h("img", {
+				  				src: job.image,
+				  				title: "点击放大查看（滚轮缩放 · 拖拽移动 · Esc 关闭）",
+				  				onClick: () => { try { if (!OUTPUT_VIEW_SINK) return; const it = (job && job.output) ? Object.assign({}, job.output, { url: job.image }) : { id: job.image, url: job.image, filename: "最近出图" }; OUTPUT_VIEW_SINK(it); } catch (e) {} },
+				  				style: { position: "absolute", inset: 0, margin: "auto", maxWidth: "calc(100% - 10px)", maxHeight: "calc(100% - 10px)", width: "auto", height: "auto", objectFit: "contain", display: "block", borderRadius: "6px", cursor: "zoom-in" } })
 				  			: h("span", { style: S.dim }, (job && job.status === "running") ? "正在出图…" : "画布出图展示 —— 点右下「生成」"),
 				  		(job && job.status === "running") ? h("span", { style: S.warn }, "生成中：" + (job.message || job.progress || job.status || "")) : null,
-				  		)),
+
+				  		),
+				  /* 工作流支路（2026-11-10 转正）：原来藏在词库页的实验性卡片里。
+				     放在画布容器内部的最后一行（flex 占位，不是 absolute）——
+				     画布是固定高 + overflow:hidden，absolute 会被裁掉，flex 行不会。 */
+				  h("div", { style: { flex: "0 0 auto", alignSelf: "stretch", display: "flex", alignItems: "center", justifyContent: "flex-end", gap: "7px", flexWrap: "wrap", background: "rgba(255,255,255,.92)", border: "1px solid rgba(var(--c-ink-rgb),.12)", borderRadius: "6px", padding: "3px 9px", fontSize: "11.5px", lineHeight: "1.5", boxShadow: "0 1px 4px rgba(0,0,0,.06)" } },
+				  	h("span", { style: { fontWeight: 700, color: "var(--c-fg)", whiteSpace: "nowrap" } }, "工作流支路"),
+				  	h("label", { style: { display: "flex", alignItems: "center", gap: "4px", cursor: "pointer", whiteSpace: "nowrap" }, title: "latent 放大后再采一遍：纹理是重新生成的，不是插值糊的。约慢一倍" },
+				  		h("input", { type: "checkbox", checked: !!hires.enabled, onChange: (e) => setHires(Object.assign({}, hires, { enabled: e.target.checked })) }), "二次采样"),
+				  	hires.enabled ? h("input", { type: "number", min: 0.05, max: 0.9, step: 0.05, value: hires.denoise, title: "高了改构图，低了没效果；实测 0.35~0.55 可用", style: Object.assign({}, S.inp, { width: "56px", padding: "2px 4px", fontSize: "11px" }), onChange: (e) => setHires(Object.assign({}, hires, { denoise: Number(e.target.value) })) }) : null,
+				  	hires.enabled ? h("select", { title: "latent 放大倍率", style: Object.assign({}, S.sel, { width: "auto", minWidth: "auto", padding: "1px 3px", fontSize: "11px" }), value: String(hires.scale), onChange: (e) => setHires(Object.assign({}, hires, { scale: Number(e.target.value) })) }, [1.25, 1.5, 2].map((f) => h("option", { key: f, value: String(f) }, "×" + f))) : null,
+				  	h("label", { style: { display: "flex", alignItems: "center", gap: "4px", cursor: "pointer", whiteSpace: "nowrap" }, title: "按空行切开分别编码再拼：超长时截断只影响最后一段，不会把 COMPOSITION 段吃掉" },
+				  		h("input", { type: "checkbox", checked: !!splitEncoding, onChange: (e) => setSplitEncoding(e.target.checked) }), "分段编码"),
+				  	h("button", { type: "button", style: Object.assign({}, S.btn2, { padding: "2px 7px", fontSize: "11px", fontWeight: 600, whiteSpace: "nowrap" }, initImage.image ? { borderColor: "rgba(120,170,255,.75)" } : null), onClick: openInitPicker, disabled: initBusy, title: "点开选参考图：从历史挑一张，或上传自己的图" }, initBusy ? "图生图…" : (initImage.image ? ("图生图：" + String(initImage.image).replace(/^dsh_init\//, "")) : "图生图 ▸")),
+				  	initImage.image ? h("input", { type: "number", min: 0.05, max: 1, step: 0.05, value: initImage.denoise, title: "越低越贴原图", style: Object.assign({}, S.inp, { width: "52px", padding: "2px 4px", fontSize: "11px" }), onChange: (e) => setInitImage(Object.assign({}, initImage, { denoise: Number(e.target.value) })) }) : null,
+				  	initImage.image ? h("button", { type: "button", style: Object.assign({}, S.btn2, { padding: "2px 6px", fontSize: "11px" }), onClick: () => setInitImage(Object.assign({}, initImage, { image: "" })), title: "关掉图生图，回到纯文生图" }, "×") : null),
+				  	),
+
 				  	h("div", { style: Object.assign({}, gpos("1", "2"), { alignSelf: "stretch", width: "100%", display: "flex", alignItems: "center", justifyContent: "flex-end", gap: "8px", flexWrap: "wrap", flexShrink: 0, minWidth: 0 }) },
+
 				  		h("label", { style: { display: "flex", alignItems: "center", gap: "6px", minWidth: 0, flex: "0 1 auto" } },
 				  			h("span", { style: Object.assign({}, S.label, { whiteSpace: "nowrap" }) }, "文件名前缀"),
 				  			h("input", { style: Object.assign({}, S.inp, { width: "104px", minWidth: 0, flex: "0 1 auto" }), value: prefix, onChange: (e) => setPrefix(e.target.value) })),
@@ -13222,7 +13728,7 @@ window.__ModuleLoader__.load({
 				  // ② 右上：底模 / 编码器 / LoRA
 				  		  		  // ③b 胶囊提示词面板：切换后取代「白话 → 提示词」+「正负提示词」两块
 				  zoneMode === "custom"
-				    ? h("div", { style: Object.assign({}, box, gpos("1", "3 / 6"), { gap: narrow ? "6px" : "8px", flex: narrow ? "0 0 auto" : "1 1 auto", alignSelf: "stretch", width: "100%", minHeight: narrow ? "0px" : "260px", overflow: "hidden" }) },
+				    ? h("div", { style: Object.assign({}, box, gpos("1", "3 / 6"), { gap: narrow ? "6px" : "8px", flex: "0 0 auto", alignSelf: "stretch", width: "100%", minHeight: "0", overflow: "hidden" }) },
 				        h("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", gap: "8px", flexWrap: "wrap" } },
 				          h("span", { style: hd, title: "面板宽 " + rW + "px · " + (tiny ? "tiny<460" : (narrow ? "narrow<640" : (mid ? "mid<980" : "wide≥980"))) }, "胶囊提示词"),
 				          h("span", { style: { display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" } },
@@ -13284,7 +13790,7 @@ window.__ModuleLoader__.load({
 			  		  ),
 		h("div", { style: narrow
 				      ? { display: "flex", flexDirection: "column", gap: "8px", minWidth: 0 }
-				      : { alignSelf: "stretch", alignContent: "flex-start", position: "sticky", top: 0, zIndex: 2, display: "flex", flexDirection: "column", gap: "8px", minHeight: 0, minWidth: 0, background: "var(--c-card)" } },
+				      : { alignSelf: "stretch", alignContent: "flex-start", position: "sticky", top: 0, zIndex: 2, display: "flex", flexDirection: "column", gap: "8px", width: "100%", maxWidth: "100%", minHeight: 0, minWidth: 0, boxSizing: "border-box", background: "var(--c-card)" } },
 				    h("div", { style: Object.assign({}, box, { minWidth: 0, flex: "0 0 auto", gap: "4px" }) },
 				    		    h("span", { style: hd }, "底模 / 编码器 / LoRA"),
 				    		    h("div", { style: Object.assign({}, S.field, { gap: "3px" }) },
@@ -13368,7 +13874,10 @@ window.__ModuleLoader__.load({
 				    		      // 倍率单独一行，限制宽度，别和宽高抢同一排
 				    		      h("div", { style: { gridColumn: "1 / -1", display: "flex", alignItems: "flex-end", justifyContent: "start" } },
 				    		        h("div", { style: Object.assign({}, S.field, { width: "150px", maxWidth: "150px", minWidth: 0, overflow: "hidden", flex: "0 0 auto" }) }, h("span", { style: S.label, title: "最终出图 = 宽高 × 倍率（按 8 对齐）" }, "倍率"), h(DraggableNumberInput, { value: sizeMultiplier, onChange: setSizeMultiplier, min: .25, max: 4, step: .01, precision: 2, dragPerPixel: 1 / 300, label: "尺寸倍率", decreaseLabel: "减小尺寸倍率", increaseLabel: "增大尺寸倍率", className: "cc-size-multiplier" }))),
-				    		      num("步数", steps, setSteps), num("CFG", cfg, setCfg, 0.1)),
+				    		      // 步数 + CFG 并排（2026-11-11）：num() 本来就是 flex:1 1 0 的小控件，
+				    		      // 直接放进栅格会被各自占一格、撑成两行；这里用一条占满宽度的 flex 行收拢。
+				    		      h("div", { style: { gridColumn: "1 / -1", display: "flex", flexWrap: "wrap", gap: "8px", alignItems: "flex-start", minWidth: 0 } },
+				    		        num("步数", steps, setSteps), num("CFG", cfg, setCfg, 0.1))),
 				    		    // 常用尺寸：收成一个按钮，点开二级菜单（0.7.119；原来一排按钮太占宽）
 				    		    h("div", { style: { position: "relative", display: "flex", flexWrap: "wrap", alignItems: "center", gap: "6px", marginTop: "2px" } },
 				    		      h("button", {
@@ -13426,10 +13935,11 @@ window.__ModuleLoader__.load({
 				    		            }, r[0] + "  " + r[1] + "×" + r[2]);
 				    		          }))]
 				    		        : null),
-				    		    h("div", { style: { display: "grid", gridTemplateColumns: pCols2 === 1 ? "minmax(0,1fr)" : "repeat(2, minmax(0,1fr))", gap: "8px", alignItems: "start", flexShrink: 0, minHeight: 0 } },
-				    		      // 采样器/调度器换成工作台那个可搜索下拉（采样器动辄几十个，原生 select 翻起来太慢）
-				    		      h("div", { style: S.field }, h("span", { style: S.label }, "采样器"), h(SelectMenu, { theme, label: "采样器", options: samplers, value: sampler, onChange: setSampler, minWidth: 0, forceSearch: true })),
-				    		      h("div", { style: S.field }, h("span", { style: S.label }, "调度器"), h(SelectMenu, { theme, label: "调度器", options: schedulers, value: scheduler, onChange: setScheduler, minWidth: 0, forceSearch: true }))),
+				    		    // 采样器 + 调度器始终同一排（2026-11-11）：这两个下拉各占一行太浪费，
+				    		    // 只有真正的窄屏（tiny）才退回单列。
+				    		    h("div", { style: { display: "grid", gridTemplateColumns: tiny ? "minmax(0,1fr)" : "repeat(2, minmax(0,1fr))", gap: "8px", alignItems: "start", flexShrink: 0, minHeight: 0 } },
+				    		      h("div", { style: S.field }, h("span", { style: S.label }, "采样器"), h(SelectMenu, { theme: uiVars, label: "采样器", options: samplers, value: sampler, onChange: setSampler, minWidth: 0, forceSearch: true })),
+				    		      h("div", { style: S.field }, h("span", { style: S.label }, "调度器"), h(SelectMenu, { theme: uiVars, label: "调度器", options: schedulers, value: scheduler, onChange: setScheduler, minWidth: 0, forceSearch: true }))),
 				    		    // 出图后放大：低分辨率出图 + 4x 放大，比 4K 直出快 20 倍且不出多头
 				    		    h("div", { style: { display: "flex", flexWrap: "wrap", alignItems: "center", gap: "8px", marginTop: "2px" } },
 				    		      h("label", { style: { display: "flex", alignItems: "center", gap: "5px", fontSize: "12.5px", cursor: "pointer" } },
@@ -13467,7 +13977,7 @@ window.__ModuleLoader__.load({
 				    		    // 种子：换成工作台那套 Seed + Seed 变化（0.7.123）
 				    		    h("div", { style: { display: "grid", gridTemplateColumns: pCols2 === 1 ? "minmax(0,1fr)" : "repeat(2, minmax(0,1fr))", gap: "8px", alignItems: "end", marginTop: "2px" } },
 				    		      h("div", { style: S.field }, h("span", { style: S.label, title: "填 0 配「锁定」= 每次随机" }, "Seed"), h("input", { type: "number", min: 0, step: 1, value: seed, style: Object.assign({}, S.inp, { width: "100%", minWidth: 0, maxWidth: "100%", boxSizing: "border-box" }), onChange: (e) => setSeed(e.target.value) })),
-				    		      h("div", { style: S.field }, h("span", { style: S.label, title: "锁定=复用这个种子；递增/递减=每次生成后 ±1；随机=每次换" }, "Seed 变化"), h(SelectMenu, { theme, label: "Seed 变化", value: seedMode, onChange: setSeedMode, minWidth: 0, options: [{ value: "lock", label: "锁定" }, { value: "increment", label: "递增" }, { value: "decrement", label: "递减" }, { value: "random", label: "随机" }] }))),
+				    		      h("div", { style: S.field }, h("span", { style: S.label, title: "锁定=复用这个种子；递增/递减=每次生成后 ±1；随机=每次换" }, "Seed 变化"), h(SelectMenu, { theme: uiVars, label: "Seed 变化", value: seedMode, onChange: setSeedMode, minWidth: 0, options: [{ value: "lock", label: "锁定" }, { value: "increment", label: "递增" }, { value: "decrement", label: "递减" }, { value: "random", label: "随机" }] }))),
 
 				    		    (Number(steps) >= 40 || imageSizeScaled(w, hh, sizeMultiplier, 8).w * imageSizeScaled(w, hh, sizeMultiplier, 8).h >= 1024 * 1400)
 				    		      ? h("div", { style: { border: "1px solid rgba(224,180,106,.5)", background: "rgba(224,180,106,.12)", borderRadius: "8px", padding: "5px 9px", fontSize: "12px", lineHeight: 1.45 } }, "⚠️ " + imageSizeScaled(w, hh, sizeMultiplier, 8).w + "×" + imageSizeScaled(w, hh, sizeMultiplier, 8).h + " / " + steps + " 步属重负载（896×1152/20 步约 45 秒）")
@@ -14001,7 +14511,7 @@ window.__ModuleLoader__.load({
 		// 道具族：按「这东西是干什么用的」分。顺序先特殊后常规——
 		// 枪和束缚器具的判定词一旦被「杂项」吃掉，就会出现「步枪被归成日用小物」这种误判。
 		const RND_PROP_FAM = [
-			{ k: "束缚", re: /\bbondage|shibari|spreader bar|straitjacket|suspension bar|corset|pet play|wax|ice cubes|feather|flogger|whip|clothespins|ring gag|harness|chastity|electro|latex sheet|stocks|vibrator|dildo|anal |butt plug|handcuffs|blindfold|ball gag|leash|nipple clamps|chain, shackle\b/i },
+			{ k: "束缚", re: /\bcorset|whip|clothespins|harness|handcuffs|blindfold|leash|chain, shackle\b/i },
 			{ k: "军事", re: /\brifle|pistol|handgun|shotgun|machine gun|submachine gun|ballistic shield|gas grenade|night vision|nvg|medical bag|dog tags|spotting scope|ammo|grenade|sledgehammer\b/i },
 			{ k: "血腥", re: /\bamputee|severed|wound|cross-section|blood|stump|bandage|skeleton mask|welding mask|gas mask|red cloth\b/i },
 			{ k: "兵器", re: /\blongsword|katana|drawn string|spear|battle axe|kunai|daggers|scythe|blade\b/i },
@@ -14091,18 +14601,6 @@ window.__ModuleLoader__.load({
 			const s = String(v || "").trim();
 			return s ? s.split(/\s+/)[0] : "";
 		}
-		// 从提示词里逐词删掉 texts 中出现过的词（大小写不敏感），其余顺序原样保留。
-		function posDropWords(cur, texts) {
-			const drop = new Set();
-			(texts || []).forEach((t) => {
-				String(t || "").split(",").forEach((w) => {
-					const s = w.trim().toLowerCase();
-					if (s) drop.add(s);
-				});
-			});
-			if (!drop.size) return String(cur || "").trim();
-			return String(cur || "").split(",").map((x) => x.trim()).filter((x) => x && !drop.has(x.toLowerCase())).join(", ");
-		}
 		// 三个按钮各自负责的槽位（账本按槽位记账，所以跨按钮重叠时后按的那个说了算）
 		// light（光影）归画面侧：它是状态不是本体，换光等于换一张照片，但人还是同一个。
 		const RND_APPLY_ROLE = ["look", "mood", "extra", "outfit", "prop"];
@@ -14125,7 +14623,7 @@ window.__ModuleLoader__.load({
 		// 直接拿池子里的词做字典反查，同一槽位堆了几段就只留最后一段。
 		// 副作用：用户手写的词若恰好与池中词同形（如 standing）也会被折叠，但只保留最后那套，
 		// 视觉上仍是「一套完整描述」，比一次堆五套强得多。
-		function rndStripBySlot(cur, slots) {
+		function rndStripBySlot(cur, slots, guard) {
 			const toks = String(cur || "").split(",").map((x) => x.trim()).filter(Boolean);
 			if (!toks.length) return String(cur || "").trim();
 			const maps = {};
@@ -14156,10 +14654,36 @@ window.__ModuleLoader__.load({
 				// 从尾部往前找连续的最后一个块，它之前的同槽位词全部丢掉
 				let start = idx.length - 1;
 				while (start > 0 && idx[start] - idx[start - 1] === 1) start--;
-				for (let j = 0; j < start; j++) drop.add(idx[j]);
+				for (let j = 0; j < start; j++) {
+					// 卡片插进来的词不进 drop：它们不是随机写的，不该被折叠掉
+					if (guard && guard.has(toks[idx[j]].toLowerCase())) continue;
+					drop.add(idx[j]);
+				}
 			}
 			if (!drop.size) return toks.join(", ");
 			return toks.filter((_, i) => !drop.has(i)).join(", ");
+		}
+		/**
+		 * 已插入卡片登记的词（2026-11-11）
+		 *
+		 * 随机三连按「槽位账本」剥词：账本 store 与历史集 seen 里记过的词一律当成
+		 * 上一轮随机写进去的，先剥掉再写新的。但风格卡插入时也往 pos 里写了词 ——
+		 * 那些词不在随机账本里，本不该被动到；可只要它们与某个槽位的池子同形
+		 * （光影、机位、姿态、道具本来就有大面积交叉），就会被当成「上一轮的旧词」
+		 * 剥掉。卡片于是被判成「部分移除」，用户看到的就是
+		 * 「随机一下，风格卡插入就丢了」。
+		 *
+		 * 这里把已插入卡片登记过的词全部列为受保护，任何随机剥除都绕开它们。
+		 */
+		function cardProtected() {
+			const keep = new Set();
+			try {
+				INSERTED.all().forEach((r) => {
+					(r.posTokens || []).forEach((t) => { const s = String(t).trim().toLowerCase(); if (s) keep.add(s); });
+					(r.negTokens || []).forEach((t) => { const s = String(t).trim().toLowerCase(); if (s) keep.add(s); });
+				});
+			} catch (e) { }
+			return keep;
 		}
 		function rndApply(slots, sel) {
 			const store = rndBySlot.current || {};
@@ -14170,9 +14694,20 @@ window.__ModuleLoader__.load({
 				const bag = seen[k];
 				if (bag) oldTexts.push(Object.keys(bag).join(", "));
 			});
-			const base0 = posDropWords(pos, oldTexts);
+			/* 受保护：已插入卡片（风格卡 / 角色卡）登记过的词，随机功能不得剥除。 */
+			const _guard = cardProtected();
+			const _drop = new Set();
+			(oldTexts || []).forEach((tx) => {
+				String(tx || "").split(",").forEach((w) => {
+					const s = w.trim().toLowerCase();
+					if (s && !_guard.has(s)) _drop.add(s);
+				});
+			});
+			const base0 = _drop.size
+				? String(pos || "").split(",").map((x) => x.trim()).filter((x) => x && !_drop.has(x.toLowerCase())).join(", ")
+				: String(pos || "").trim();
 			// 再按槽位折叠一次：账本没记录的老堆积、手贴的多套描述，同一槽位只留最后一段。
-			const base = rndStripBySlot(base0, slots);
+			const base = rndStripBySlot(base0, slots, _guard);
 			const add = [rndPrefix(), rndSlotText(sel, slots)].filter(Boolean).join(", ");
 			const items = add.split(",").map((x) => x.trim()).filter(Boolean);
 			const have = new Set(base.toLowerCase().split(",").map((x) => x.trim()).filter(Boolean));
@@ -14269,7 +14804,7 @@ window.__ModuleLoader__.load({
 					opacity: sel.preset && k !== "preset" ? 0.45 : 1,
 					display: "flex", alignItems: "center", gap: "10px", padding: "7px 10px", cursor: "pointer", borderRadius: "8px",
 					border: "1px solid " + (segOpen === k ? "var(--c-accent)" : (sel[k] ? "rgba(74,192,122,.55)" : "var(--c-line)")),
-					background: segOpen === k ? "var(--c-bg2)" : "transparent",
+					background: segOpen === k ? "var(--c-panel2)" : "transparent",
 				},
 			},
 				h("span", { style: { minWidth: "42px", fontSize: "12px", color: "var(--c-fg4)" } }, label[k] || k),
@@ -14543,7 +15078,7 @@ window.__ModuleLoader__.load({
 				onDrop: (e) => { e.preventDefault(); e.stopPropagation(); dropOnChip(x); },
 				style: Object.assign({}, S.chip, {
 					padding: "4px 10px 4px 12px", fontSize: "12.5px", display: "inline-flex", alignItems: "center", gap: "6px", cursor: "pointer",
-					outline: dragAt === "chip:" + x.key ? "2px dashed var(--c-good, #16a34a)" : "none",
+					outline: dragAt === "chip:" + x.key ? "2px dashed var(--c-ok, #16a34a)" : "none",
 					background: x.key === cardCat ? "var(--c-accent)" : "var(--c-accent-bg2)",
 					color: x.key === cardCat ? "var(--c-accent-on)" : "var(--c-fg2)",
 					borderColor: x.key === cardCat ? "var(--c-accent)" : "var(--c-line)",
@@ -14668,9 +15203,9 @@ window.__ModuleLoader__.load({
 						aspectRatio: "1 / 1", borderRadius: "10px", padding: "7px 7px 6px", cursor: "pointer",
 						display: "flex", flexDirection: "column", justifyContent: "space-between", gap: "3px",
 						background: on ? "var(--c-accent-bg)" : "var(--c-panel2)",
-						border: "1.5px solid " + (dragAt === it.cat + "\u0000" + it.cn ? "var(--c-good, #16a34a)"
+						border: "1.5px solid " + (dragAt === it.cat + "\u0000" + it.cn ? "var(--c-ok, #16a34a)"
 							: (on ? "var(--c-accent)" : "var(--c-line)")),
-						boxShadow: dragAt === it.cat + "\u0000" + it.cn ? "0 0 0 2px var(--c-good, #16a34a) inset" : "none",
+						boxShadow: dragAt === it.cat + "\u0000" + it.cn ? "0 0 0 2px var(--c-ok, #16a34a) inset" : "none",
 						overflow: "hidden", userSelect: "none", boxSizing: "border-box",
 					},
 				},
@@ -14747,7 +15282,7 @@ window.__ModuleLoader__.load({
 			if (segOn) return segBuilder();
 
 			return h("div", { style: { display: "flex", flexDirection: "column", gap: "10px" } },
-				h("div", { style: { display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap", padding: "6px 10px", borderRadius: "8px", border: "1px solid var(--c-line)", background: "var(--c-bg2)" } },
+				h("div", { style: { display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap", padding: "6px 10px", borderRadius: "8px", border: "1px solid var(--c-line)", background: "var(--c-panel2)" } },
 					h("span", { style: { fontSize: "12px", color: "var(--c-fg4)" } }, "词库模式："),
 					h("button", { style: S.btn, onClick: () => setSegOn(true), title: "六个槽位各选一段，自动拼成完整提示词" }, "提示词段构建 →"),
 					h("span", { style: { fontSize: "11.5px", color: "var(--c-fg5)" } }, "风格 · 人物 · 衣服 · 动作 · 场景 · 取景，选完即完整提示词")),
@@ -15205,7 +15740,7 @@ window.__ModuleLoader__.load({
 		    /**
 		     * 0.7.85：落盘曾经只写上面这份白名单 —— 卡 JSON 里白名单之外的字段（`id`、`schemaVersion`、
 		     * `loraNote`、`cover`、`packMode` …）会被**悄悄抹掉**：面板里还在，存一次盘就没了。
-		     * 2026-10-22 实测 絉林.json 少了 `schemaVersion: 2` 与整条 `loraNote`（只有备份里还有）。
+		     * 2026-10-22 实测 <角色卡>.json 少了 `schemaVersion: 2` 与整条 `loraNote`（只有备份里还有）。
 		     * 现在以「面板里那张卡」为底，白名单字段覆盖上去，其余原样保留。
 		     */
 		    const keep = Object.assign({}, rec || {});
@@ -15831,7 +16366,7 @@ window.__ModuleLoader__.load({
 										}
 
 				/** 插入风格卡：core=false 全量；core=true 去掉「光影 / 其它」，方便试不同氛围 */
-				function applyStyleInsert(c, core, mode) {
+				function applyStyleInsert(c, core) {
 				  const parts0 = (c.parts && typeof c.parts === "object") ? c.parts : null;
 				  const _fromParts = parts0 ? joinStyleParts(parts0) : "";
 				  const full = _fromParts.trim() || String(c.tags || "").trim();
@@ -15855,13 +16390,11 @@ window.__ModuleLoader__.load({
 				  setPos(_rp.t);
 				  setNeg(_rn.t);
 				  const chain = normStyleLoras(c);
-				  const direct = mode === "direct";
 				  const mk = (l) => ({ name: l.name, model: l.w, clip: l.w, src: "style" });
 				  let loraMsg = "";
-				  if (direct) {
-				    loraMsg = chain.length ? " · 直插：LoRA 已清空，只挂 " + chain.map((l) => shortLora(l.name) + " " + l.w).join(" + ") : " · 直插：LoRA 已清空（这张卡没挂 LoRA）";
-				    setSelLoras(chain.map(mk));
-				  } else if (chain.length) {
+				  /* 多卡插入：不删任何已有 LoRA，新卡的链叠上去；同名只更新强度。
+				     允许多张风格卡同时生效，各自可用「解除插入」单独撤。 */
+				  if (chain.length) {
 				    const list = (selLoras || []).filter(Boolean).map((x) => Object.assign({}, x));
 				    const added = [];
 				    for (const l of chain) {
@@ -15869,10 +16402,10 @@ window.__ModuleLoader__.load({
 				      if (i >= 0) list[i] = Object.assign({}, list[i], { model: l.w, clip: l.w, src: list[i].src || "style" });
 				      else { list.push(mk(l)); added.push(shortLora(l.name) + " " + l.w); }
 				    }
-				    loraMsg = " · 叠插（融合）：新增 " + (added.length ? added.join(" + ") : "0 个（都已存在，只更新强度）") + "，现有共 " + list.length + " 个 LoRA";
+				    loraMsg = " · 多卡叠加：新增 " + (added.length ? added.join(" + ") : "0 个（都已存在，只更新强度）") + "，现有共 " + list.length + " 个 LoRA";
 				    setSelLoras(list);
 				  } else {
-				    loraMsg = " · 叠插（这张卡没挂 LoRA，现有 LoRA 不动）";
+				    loraMsg = " · 这张卡没挂 LoRA，现有 LoRA 不动";
 				  }
 				  let metaMsg = "";
 				  if (c.ckpt) {
@@ -15890,16 +16423,25 @@ window.__ModuleLoader__.load({
 				    metaMsg += " · " + (Number(g.w) > 0 && Number(g.h) > 0 ? g.w + "×" + g.h : "") + (Number(g.steps) > 0 ? " / " + g.steps + " 步" : "") + (Number(g.cfg) > 0 ? " / CFG " + g.cfg : "") + (g.sampler ? " / " + g.sampler : "") + (g.scheduler ? " + " + g.scheduler : "");
 				  }
 				  /* 插入登记：只记差集，解除时按记录精确撤（不碰你原有的同名词） */
+				  let _insErr = "";
 				  try {
 					const _sid = String(c.id || c.name || "");
 					INSERTED.set(_sid, {
-					  id: _sid, kind: "style", name: String(c.name || ""), core: !!core, direct: !!direct,
+					  id: _sid, kind: "style", name: String(c.name || ""), core: !!core, direct: false,
 					  posTokens: diffTokens(pos, _rp.t), negTokens: diffTokens(neg, _rn.t),   /* 0.7.130：add() 返回的是 {t,n}，原来读 .text 恒为 undefined → tokList 得空数组 → 差集永远 []，取消插入撤不掉任何词 */
 					  loras: (chain || []).map((l) => ({ name: String(l.name), w: Number(l.w) })),
 					  locks: [], cond: null,
 					});
+				  } catch (e) { _insErr = e && (e.message || String(e)); }
+				  let _regMsg = "";
+				  try {
+				    const _k = String(c.id || c.name || "");
+				    const _hit = INSERTED.get(_k);
+				    _regMsg = " · 登记键=" + (_k || "(空)") + (_hit ? "（已登记）" : "（登记失败）")
+				      + " · 词数 " + ((_hit && _hit.posTokens) ? _hit.posTokens.length : 0)
+				      + " · 现有卡片 " + INSERTED.all().length + (_insErr ? " · 登记报错：" + _insErr : "");
 				  } catch (e) { }
-				  setMsg("已插入风格「" + c.name + "」" + (core ? "（核心画风）" : "") + " · 正向新增 " + np + " 条" + (ng ? " · 负面新增 " + nn + " 条" : "") + loraMsg + metaMsg + " · 再点这张卡可解除");
+				  setMsg("已插入风格「" + c.name + "」" + (core ? "（核心画风）" : "") + " · 正向新增 " + np + " 条" + (ng ? " · 负面新增 " + nn + " 条" : "") + loraMsg + metaMsg + _regMsg + " · 再点这张卡可解除");
 				  setStyleSel("");
 				  setStyleMenu("");
 				  setStyleSub("");
@@ -16358,14 +16900,45 @@ window.__ModuleLoader__.load({
 		}
 
 				/** 风格卡卡片（与角色卡同款：封面 + 名称 + 条数 + 标签预览 + 插入 ▾ / 编辑） */
+				/**
+				 * 已插入卡片：统一的记录查询（风格卡 / 角色卡共用一份）
+				 *
+				 * 插入登记用的键是 String(c.id || c.name || "")。历史上还出现三种情况：
+				 * 只用纯 id 存过的旧记录、没有 id 只有 name 的内置卡、卡改名后留下的老记录。
+				 * 三档查询一次覆盖：
+				 *   1) 组合键（与登记完全一致）  2) 纯 id（旧记录）  3) kind + 卡名反查
+				 * 两处徽标、两处点击解除都走这里，口径不再各写一套。
+				 */
+				function insertedRecOf(c, kind) {
+				  if (!c) return null;
+				  const key = String(c.id || c.name || "");
+				  return INSERTED.get(key)
+				    || (c.id ? INSERTED.get(String(c.id)) : null)
+				    || INSERTED.all().find((r) => r && r.kind === kind && String(r.name || "") === String(c.name || ""))
+				    || null;
+				}
+
+				/** 已插入 / 部分移除 徽标：与卡片右上角那一列同款 */
+				function insertedBadge(ins) {
+				  if (!ins) return null;
+				  return h("span", {
+				    style: { fontSize: "11px", lineHeight: "16px", padding: "0 7px", borderRadius: "999px", color: "#fff",
+				      background: ins.partial ? "rgba(200,140,30,.95)" : "rgba(45,105,225,.95)", boxShadow: "0 1px 4px rgba(0,0,0,.25)" },
+				  }, ins.partial ? "部分移除" : "已插入");
+				}
+
 				function styleTile(c) {
-				  const on = styleSel === c.id;
-				  const ins = INSERTED.get(c.id);
+				  /* 插入登记的键是 String(c.id || c.name || "")（见 applyStyleInsert 的 _sid）。
+				     这里原来只用 c.id 查 —— 没有 id 的内置风格卡登记后永远查不到，
+				     徽标就一直不显示「已插入」。取键必须与登记口径一致。 */
+				  const _sk = String(c.id || c.name || "");
+				  const on = String(styleSel || "") === _sk;
+				  const ins = insertedRecOf(c, "style");
 				  return h("div", { key: c.id || c.name, style: { display: "flex", flexDirection: "column", gap: "6px" } },
 				    h("div", {
 				      style: { position: "relative", borderRadius: "10px", overflow: "hidden", border: on ? "2px solid rgba(130,190,255,.95)" : (ins ? "2px solid " + (ins.partial ? "rgba(230,170,60,.95)" : "rgba(60,120,235,.95)") : "1px solid rgba(var(--c-ink-rgb),.14)"), background: "var(--c-panel)", cursor: "pointer" },
 				      title: (c.tags || "") + (c.note ? "\n备注：" + c.note : ""),
-				      onClick: () => { const _r = INSERTED.get(c.id); if (_r) { removeInserted(_r); return; } setStyleSel(on ? "" : c.id); },
+				      onClick: () => { const _r = insertedRecOf(c, "style"); if (_r) { removeInserted(_r); return; } setStyleSel(on ? "" : _sk); },
 				    },
 				    cardCoverBox(c),
 				    /* 右上角一列：插入状态（条件）在上、适配底模（always）在下，共用一个纵向容器免得互相压住 */
@@ -16374,10 +16947,7 @@ window.__ModuleLoader__.load({
 				        flexDirection: "column", alignItems: "flex-end", gap: "4px",
 				        maxWidth: "calc(100% - 12px)", pointerEvents: "none" },
 				    },
-				      ins ? h("span", {
-				        style: { fontSize: "11px", lineHeight: "16px", padding: "0 7px", borderRadius: "999px", color: "#fff",
-				          background: ins.partial ? "rgba(200,140,30,.95)" : "rgba(45,105,225,.95)", boxShadow: "0 1px 4px rgba(0,0,0,.25)" },
-				      }, ins.partial ? "部分移除" : "已插入") : null,
+				      insertedBadge(ins),
 				      (() => { const b = bmBadge(c); return h("span", {
 				        style: Object.assign({ maxWidth: "100%", fontSize: "10.5px", lineHeight: "15px", padding: "0 6px", borderRadius: "5px",
 				          background: "rgba(10,10,12,.66)", color: "rgba(255,255,255,.92)",
@@ -16397,39 +16967,14 @@ window.__ModuleLoader__.load({
 				        h("button", {
 				          style: Object.assign({}, CARD_BTN_ACCENT, { flex: 1 }),
 				          title: "完整 = 全部画风条目；核心 = 去掉光影/其它（去掉光影/其它）",
-				          onClick: (e) => { if (e && e.stopPropagation) e.stopPropagation(); setStyleMenu(styleMenu === c.id ? "" : c.id); setStyleSub(""); },
+				          onClick: (e) => { if (e && e.stopPropagation) e.stopPropagation(); setStyleMenu(styleMenu === c.id ? "" : c.id); },
 				        }, "插入 ▾"),
-				        		        styleMenu === c.id ? h("div", {
+				        styleMenu === c.id ? h("div", {
 				          style: { position: "absolute", top: "calc(100% + 4px)", left: 0, zIndex: 60, minWidth: "206px", background: "var(--c-card)", border: "1px solid rgba(var(--c-ink-rgb),.18)", borderRadius: "8px", boxShadow: "0 10px 26px rgba(var(--c-ink-rgb),.18)", padding: "4px", display: "flex", flexDirection: "column", gap: "3px" },
-				          onMouseLeave: () => setStyleSub(""),
 				        },
-				          h("div", { style: { position: "relative" }, onClick: (e) => { if (e && e.stopPropagation) e.stopPropagation(); setStyleSub(styleSub === "direct" ? "" : "direct"); } },
-				            h("button", {
-				              style: Object.assign({}, CARD_BTN_ACCENT, { width: "100%", textAlign: "left", padding: "6px 10px", display: "flex", alignItems: "center", gap: "8px" }),
-				              title: "直插：先把 LoRA 列整个清空，再只挂这张风格卡的链（角色 LoRA 也会被清掉）",
-				              onClick: (e) => { if (e && e.stopPropagation) e.stopPropagation(); setStyleSub(styleSub === "direct" ? "" : "direct"); },
-				            },
-				              h("span", { style: { flex: 1 } }, "直插"),
-				              h("span", { style: { fontSize: "11px", opacity: 0.85, whiteSpace: "nowrap" } }, "清空 LoRA ▸")),
-				            styleSub === "direct" ? h("div", {
-				              style: { marginTop: "3px", marginLeft: "10px", background: "rgba(var(--c-ink-rgb),.05)", border: "1px solid rgba(var(--c-ink-rgb),.10)", borderRadius: "6px", padding: "3px", display: "flex", flexDirection: "column", gap: "2px" },
-				            },
-				              h("button", { style: Object.assign({}, CARD_BTN_ACCENT, { textAlign: "left", padding: "6px 10px" }), title: "清空 LoRA + 插入全部画风条目", onClick: () => applyStyleInsert(c, false, "direct") }, "完整插入（全部画风）"),
-				              h("button", { style: Object.assign({}, CARD_BTN, { textAlign: "left", padding: "6px 10px" }), title: "清空 LoRA + 只留画风/线条/上色（去掉光影与其它）", onClick: () => applyStyleInsert(c, true, "direct") }, "只插核心（去掉光影/其它）")) : null),
-				          h("div", { style: { position: "relative" }, onClick: (e) => { if (e && e.stopPropagation) e.stopPropagation(); setStyleSub(styleSub === "stack" ? "" : "stack"); } },
-				            h("button", {
-				              style: Object.assign({}, CARD_BTN, { width: "100%", textAlign: "left", padding: "6px 10px", display: "flex", alignItems: "center", gap: "8px" }),
-				              title: "叠插：一个 LoRA 都不清空，把这张卡的链叠加上去（同名只更新强度）—— 用来融合多张风格卡",
-				              onClick: (e) => { if (e && e.stopPropagation) e.stopPropagation(); setStyleSub(styleSub === "stack" ? "" : "stack"); },
-				            },
-				              h("span", { style: { flex: 1 } }, "叠插"),
-				              h("span", { style: { fontSize: "11px", color: "var(--c-fg4)", whiteSpace: "nowrap" } }, "叠加融合 ▸")),
-				            styleSub === "stack" ? h("div", {
-				              style: { marginTop: "3px", marginLeft: "10px", background: "rgba(var(--c-ink-rgb),.05)", border: "1px solid rgba(var(--c-ink-rgb),.10)", borderRadius: "6px", padding: "3px", display: "flex", flexDirection: "column", gap: "2px" },
-				            },
-				              h("button", { style: Object.assign({}, CARD_BTN_ACCENT, { textAlign: "left", padding: "6px 10px" }), title: "叠加融合：一个 LoRA 都不删，把这张卡的链加进去，再插全部画风条目", onClick: () => applyStyleInsert(c, false, "stack") }, "完整插入（全部画风）"),
-				              h("button", { style: Object.assign({}, CARD_BTN, { textAlign: "left", padding: "6px 10px" }), title: "叠加融合 + 只留画风/线条/上色", onClick: () => applyStyleInsert(c, true, "stack") }, "只插核心（去掉光影/其它）")) : null)
-				        ) : null),		      h("button", { style: Object.assign({}, CARD_BTN, { flex: 1 }), onClick: () => { setStyleSel(""); editStyleCard(c); } }, "编辑")) : null);
+				          h("button", { style: Object.assign({}, CARD_BTN_ACCENT, { textAlign: "left", padding: "6px 10px" }), title: "插入这张卡的全部画风条目。已有 LoRA 一个不删 —— 多张风格卡可同时生效，各自用「解除插入」单独撤", onClick: () => { applyStyleInsert(c, false); setStyleMenu(""); } }, "插入（全部画风）"),
+				          h("button", { style: Object.assign({}, CARD_BTN, { textAlign: "left", padding: "6px 10px" }), title: "只插入画风/线条/上色，去掉光影与其它。已有 LoRA 不动", onClick: () => { applyStyleInsert(c, true); setStyleMenu(""); } }, "只插核心（去掉光影/其它）")
+				        ) : null),h("button", { style: Object.assign({}, CARD_BTN, { flex: 1 }), onClick: () => { setStyleSel(""); editStyleCard(c); } }, "编辑")) : null);
 				}
 
 				/** 风格卡编辑器（与角色卡同一套：模块 → 中文备注胶囊） */
@@ -16536,7 +17081,7 @@ window.__ModuleLoader__.load({
 				              h("input", { style: Object.assign({}, ciN, { width: "54px" }), value: String(l.w), onChange: (e) => { const a = (d.loras || []).slice(); a[i] = { name: l.name, w: Number(e.target.value) || 0.6 }; set("loras", a); } }),
 				              h("span", { style: chipX, title: "移除这个 LoRA", onClick: () => set("loras", (d.loras || []).filter((x, j) => j !== i)) }, "×")))
 				            : h("span", { style: { fontSize: "12px", color: "var(--c-fg4)" } }, "还没挂 LoRA（只插文字）")),
-				        h("div", { style: { fontSize: "12px", color: "var(--c-fg4)" } }, "直插 = 清空 LoRA 后只挂这张卡；叠插 = 叠加到现有 LoRA 上（融合多张画风）· 触发词写最前 · 官方 LoRA 建议 0.35~0.5，自训 0.5~0.7"))),
+				        h("div", { style: { fontSize: "12px", color: "var(--c-fg4)" } }, "插入 = 把这张卡的全部画风条目追加进来，已有 LoRA 一个不删；多张风格卡可同时生效，各自用「解除插入」单独撤 · 触发词写最前 · 官方 LoRA 建议 0.35~0.5，自训 0.5~0.7"))),
 		h("div", { style: row }, h("span", { style: lab }, "比例"),
 				      h("div", { style: { display: "flex", gap: "8px", flexWrap: "wrap", flex: 1, alignItems: "center" } },
 				        h("select", {
@@ -16626,6 +17171,7 @@ window.__ModuleLoader__.load({
 				    h("div", { style: { display: "flex", alignItems: "center", gap: "10px" } },
 				      h("span", { style: { fontWeight: 700, fontSize: "15px", color: "var(--c-fg)" } }, "风格卡"),
 				      h("span", { style: { fontSize: "12px", color: "var(--c-fg3)" } }, cards.length + " 张 · 内置 " + nB + " · 自建 " + (cards.length - nB)),
+				      h("span", { style: { fontSize: "12px", fontWeight: 700, color: "var(--c-accent)" }, title: "INSERTED 登记表里的记录数。为 0 而词已进提示词 = 插入了但没登记；不为 0 而卡片没徽标 = 登记了但徽标没渲染" }, "· 已插入 " + INSERTED.all().length + " 张（风格 " + INSERTED.all().filter((r) => r && r.kind === "style").length + " / 角色 " + INSERTED.all().filter((r) => r && r.kind === "char").length + "）"),
 				      h("span", { style: { flex: 1 } }),
 				      h("button", { style: CARD_BTN, onClick: exportAllStyleCards, title: "把自建风格卡全部导出成一个 .json" }, "导出全部"),
 				      h("label", { style: Object.assign({}, CARD_BTN, { display: "inline-flex", alignItems: "center" }), title: "从 .json / .dslcard / .dslrecipe 导入风格卡" }, "导入", h("input", { type: "file", accept: ".json,.dslcard,.dslrecipe,application/json,application/octet-stream", style: { display: "none" }, onChange: importStyleCards })),
@@ -16636,7 +17182,7 @@ window.__ModuleLoader__.load({
 				    cards.length
 				      ? h("div", Object.assign({ style: { display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(190px,1fr))", gap: "14px" } }, dropJsonProps(importStyleCardsFromFile)), cards.map((c) => styleTile(c)))
 				      : h("div", { style: { padding: "32px", textAlign: "center", fontSize: "13px", color: "var(--c-fg3)", border: "1px dashed rgba(var(--c-ink-rgb),.12)", borderRadius: "10px" } }, "还没有风格卡，点右上角「+ 新建」"),
-				    h("div", { style: { fontSize: "12px", color: "var(--c-fg3)" } }, "点卡片 = 选中 · 「插入 ▾」三级菜单：直插（清空 LoRA 后只挂这张卡）/ 叠插（叠加，用于融合多张画风）→ 完整 / 核心 · 提示词都追加到末尾、自动去重 · 封面可自定义 · 可导入导出，也可直接拖 .json / .dslcard / .dslrecipe 到卡片区"));
+				    h("div", { style: { fontSize: "12px", color: "var(--c-fg3)" } }, "点卡片 = 选中 · 「插入 ▾」两个动作：插入（全部画风）/ 只插核心（去掉光影与其它）· 多张卡可同时插、互不清空 · 提示词都追加到末尾、自动去重 · 封面可自定义 · 可导入导出，也可直接拖 .json / .dslcard / .dslrecipe 到卡片区"));
 				}
 
 
@@ -16698,7 +17244,15 @@ window.__ModuleLoader__.load({
 					  cond: _cpick ? { name: String(c.name || ""), preset: _cpick } : null,
 					});
 				  } catch (e) { }
-		  setMsg("已追加「" + c.name + "」" + (withOutfit ? "（完整）" : "（不含服饰）") + " · 正向新增 " + addedPos + " 条" + (ng ? " · 负面新增 " + addedNeg + " 条" : "") + (lockHit.length ? " · 三道锁剔 " + lockHit.length + " 条→负向" : "") + (c.lora ? " · LoRA 已切到 " + c.lora : "") + (c.conditioning && c.conditioning.enabled ? " · 条件图解析中…" : ""));
+		  let _regMsg = "";
+		  try {
+		    const _k = String(c.id || c.name || "");
+		    const _hit = INSERTED.get(_k);
+		    _regMsg = " · 登记键=" + (_k || "(空)") + (_hit ? "（已登记）" : "（登记失败）")
+		      + " · 词数 " + ((_hit && _hit.posTokens) ? _hit.posTokens.length : 0)
+		      + " · 现有卡片 " + INSERTED.all().length;
+		  } catch (e) { }
+		  setMsg("已追加「" + c.name + "」" + (withOutfit ? "（完整）" : "（不含服饰）") + " · 正向新增 " + addedPos + " 条" + (ng ? " · 负面新增 " + addedNeg + " 条" : "") + (lockHit.length ? " · 三道锁剔 " + lockHit.length + " 条→负向" : "") + (c.lora ? " · LoRA 已切到 " + c.lora : "") + (c.conditioning && c.conditioning.enabled ? " · 条件图解析中…" : "") + _regMsg);
 				  setCardSel("");
 				  setInsMenu("");
 				}
@@ -16743,12 +17297,12 @@ window.__ModuleLoader__.load({
 
 			function cardTile(c) {
 						const on = cardSel === c.id;
-						const ins = INSERTED.get(c.id || c.name);
+						const ins = insertedRecOf(c, "char");
 				return h("div", { key: c.id || c.name, style: { display: "flex", flexDirection: "column", gap: "6px" } },
 					h("div", {
 						style: { position: "relative", borderRadius: "10px", overflow: "hidden", border: on ? "2px solid rgba(130,190,255,.95)" : (ins ? "2px solid " + (ins.partial ? "rgba(230,170,60,.95)" : "rgba(60,120,235,.95)") : "1px solid rgba(var(--c-ink-rgb),.14)"), background: "rgba(var(--c-ink-rgb),.05)", cursor: "pointer" },
 						title: (c.tags || "") + (c.note ? "\n备注：" + c.note : ""),
-						onClick: () => { const _r = INSERTED.get(c.id || c.name); if (_r) { removeInserted(_r); return; } setCardSel(on ? "" : c.id); },
+						onClick: () => { const _r = insertedRecOf(c, "char"); if (_r) { removeInserted(_r); return; } setCardSel(on ? "" : String(c.id || c.name)); },
 					},
 					cardCoverBox(c),
 					/* 右上角一列：插入状态（条件）在上、适配底模（always）在下，和风格卡同款 */
@@ -16757,7 +17311,7 @@ window.__ModuleLoader__.load({
 							flexDirection: "column", alignItems: "flex-end", gap: "4px",
 							maxWidth: "calc(100% - 12px)", pointerEvents: "none" },
 					},
-						ins ? h("span", { style: { fontSize: "11px", lineHeight: "16px", padding: "0 7px", borderRadius: "999px", color: "#fff", background: ins.partial ? "rgba(200,140,30,.95)" : "rgba(45,105,225,.95)", boxShadow: "0 1px 4px rgba(0,0,0,.25)" } }, ins.partial ? "部分移除" : "已插入") : null,
+						insertedBadge(ins),
 						(() => { const b = bmBadge(c); return h("span", {
 							style: Object.assign({ maxWidth: "100%", fontSize: "10.5px", lineHeight: "15px", padding: "0 6px", borderRadius: "5px",
 								background: "rgba(10,10,12,.66)", color: "rgba(255,255,255,.92)",
@@ -16826,6 +17380,7 @@ window.__ModuleLoader__.load({
 					h("div", { style: { display: "flex", alignItems: "center", gap: "10px" } },
 						h("span", { style: { fontWeight: 700, fontSize: "15px", color: "var(--c-fg)" } }, "角色卡"),
 						h("span", { style: { fontSize: "12px", color: "var(--c-fg3)" } }, cards.length + " 张 · 内置 " + nB + " · 自建 " + (cards.length - nB)),
+						h("span", { style: { fontSize: "12px", fontWeight: 700, color: "var(--c-accent)" }, title: "INSERTED 登记表里的记录数。为 0 而词已进提示词 = 插入了但没登记；不为 0 而卡片没徽标 = 登记了但徽标没渲染" }, "· 已插入 " + INSERTED.all().length + " 张（风格 " + INSERTED.all().filter((r) => r && r.kind === "style").length + " / 角色 " + INSERTED.all().filter((r) => r && r.kind === "char").length + "）"),
 						h("span", { style: { flex: 1 } }),
 
 						      h("button", { style: CARD_BTN, onClick: exportAllCards, title: "把自建卡全部导出成一个 .json 备份" }, "导出全部"),
@@ -16843,6 +17398,7 @@ window.__ModuleLoader__.load({
 					pasteOpen ? pasteModal() : null,
 					h("div", { style: { fontSize: "12px", color: "var(--c-fg3)" } }, "点卡片 = 选中 · 下方「插入 ▾」可选完整插入 / 不插入服饰（换装用），追加到正向/负面末尾（自动去重，不清空已有） · 封面可自定义 · 可导入导出，也可直接拖 .json / .dslcard / .dslrecipe 到卡片区；磁盘上的卡由「重扫磁盘」同步 · v1051"));
 			}
+
 
 			// ==================== 预设页 ====================
 
@@ -16914,6 +17470,22 @@ window.__ModuleLoader__.load({
 						h("span", { style: S.label }, "实验性功能"),
 						h("span", { style: S.dim }, "这里的入口不进主流程、随时可能改或撤；下面的诊断都只读，不写你的预设、词库和出图目录。")),
 
+
+								/* 实验性页 · 手 / 脚局部重绘：参数存在 Console 的 detail 状态里，走 buildGraph 的 40 号节点段。 */
+					h("div", { style: S.card },
+						h("span", { style: S.label }, "手 / 脚局部重绘（实验）"),
+						h("span", { style: S.dim }, "裁出目标区域 → 放大到引导尺寸 → 只重画这块 → 羽化贴回。全程只用 ComfyUI 内置节点，不装 Impact Pack、不下载检测器。区域是按画面比例猜的：全身竖图默认值可用；半身、坐姿、举手过头、趴姿会框偏。框偏不会崩，只是那块被重新画了一遍。"),
+						h("div", { style: { display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap", marginTop: "10px" } },
+							h("span", { style: { fontSize: "12px", opacity: .8 } }, "重绘范围"),
+							h("select", { value: detail.mode, style: { fontSize: "12px", padding: "3px 6px", borderRadius: "6px" }, onChange: (e) => setDetail(Object.assign({}, detail, { mode: e.target.value })) },
+								[["off", "关闭"], ["hands", "手"], ["feet", "脚"], ["both", "手 + 脚"]].map((pair) => h("option", { key: pair[0], value: pair[0] }, pair[1]))),
+							detail.mode === "off" ? null : h("span", { style: { display: "flex", alignItems: "center", gap: "6px", fontSize: "12px" } }, "强度",
+								h("input", { type: "number", min: 0.1, max: 0.85, step: 0.05, value: detail.denoise, title: "0.35 轻改、0.55 重画；超过 0.6 容易把手指画成新的样子", style: { width: "64px", fontSize: "12px", padding: "3px 6px", borderRadius: "6px" }, onChange: (e) => setDetail(Object.assign({}, detail, { denoise: Number(e.target.value) })) })),
+							detail.mode === "off" ? null : h("span", { style: { display: "flex", alignItems: "center", gap: "6px", fontSize: "12px" } }, "引导尺寸",
+								h("select", { value: String(detail.guide), title: "区域放大到多高再重采：越大越细，也越慢（1024 约等于再跑半张图）", style: { fontSize: "12px", padding: "3px 6px", borderRadius: "6px" }, onChange: (e) => setDetail(Object.assign({}, detail, { guide: Number(e.target.value) })) },
+									[512, 768, 1024].map((g) => h("option", { key: g, value: String(g) }, g + "px"))))),
+						h("span", { style: { fontSize: "12px", opacity: .72, marginTop: "6px" } }, detail.mode === "off" ? "当前：关闭（不影响出图）" : ("当前：" + (detail.mode === "hands" ? "只手" : detail.mode === "feet" ? "只脚" : "手 + 脚") + " · 强度 " + detail.denoise + " · 引导 " + detail.guide + "px · 每张多花约 15–35% 时间")),
+						h("span", { style: { fontSize: "12px", opacity: .72 } }, "位置：二次采样之后、超分之前。开了二次采样时按放大后的画面框区域。")),
 					h("div", {
 						style: Object.assign({}, S.card, upd && upd.ok && upd.hasUpdate
 							? { borderColor: "rgba(150,200,120,.62)", background: "rgba(150,200,120,.08)" }
@@ -16961,6 +17533,7 @@ window.__ModuleLoader__.load({
 						h("div", { style: S.row },
 							h("button", { style: S.btn2, onClick: clearPortsCache, title: "删掉 localStorage 里记的 comfy / sidecar 地址" }, "清掉并重新探测"),
 							h("span", { style: S.dim }, "侧车端口换过、或者界面一直显示连不上时用（清完刷新页面）"))),
+
 				);
 			}
 
@@ -17043,7 +17616,7 @@ window.__ModuleLoader__.load({
 
 
 			// ==================== 组装 ====================
-			return h("div", { ref: rootRef, className: "dcomfy-panel", style: Object.assign({}, S.wrap, resolveTheme(theme, systemDark), availH ? { height: availH + "px", maxHeight: availH + "px", minHeight: 0 } : null) },
+			return h("div", { ref: rootRef, className: "dcomfy-panel", style: (() => { const tv = resolveTheme(theme, systemDark); return Object.assign({}, S.wrap, tv, ccVarsFromC(tv), availH ? { height: availH + "px", maxHeight: availH + "px", minHeight: 0 } : null); })() },
 				h("style", { key: "dcomfy-theme-css" }, PANEL_CSS),
 				// 顶栏
 				h("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px", flexWrap: "wrap" } },
@@ -17174,6 +17747,50 @@ window.__ModuleLoader__.load({
 					tab === "preset" ? h(presetTab, { key: "preset" }) : null,
 					tab === "lab" ? h(experimentalTab, { key: "lab" }) : null),
 				impRep ? importReportPanel() : null,
+				/* 图生图二级面板（2026-11-10 从实验性页提到页面级）：
+				   画布右下角的「图生图 ▸」和词库页原按钮共用这一个弹窗，切到哪页都能弹。 */
+					// 图生图的二级选择面板。
+					// 走项目统一的 OverlayModal：它 portal 到 document.body、带 --cc-* 主题变量、
+					// 有 Esc 关闭与焦点陷阱；自己写 fixed div 会拿不到宿主主题色（上一版就是这个问题）。
+					initOpen
+						? h(OverlayModal, {
+							title: "选择图生图的参考图",
+							onClose: () => setInitOpen(false),
+							width: 780,
+							theme: ccVars,
+							zIndex: 2147482600,
+						},
+							h("div", { style: { display: "flex", gap: "6px", alignItems: "center" } },
+								[["history", "从历史选"], ["upload", "上传自己的图"]].map(([k, lb]) => h("button", {
+									key: k, type: "button",
+									style: Object.assign({}, S.btn2, initTab === k ? { fontWeight: 600, borderColor: "var(--cc-accent, rgba(120,170,255,.7))" } : null),
+									onClick: () => { setInitTab(k); if (k === "history" && !initHistory.length) loadInitHistory(); },
+								}, lb)),
+								h("span", { style: Object.assign({}, S.dim, { marginLeft: "auto" }) },
+									initTab === "history" ? ("output 目录最近 " + initHistory.length + " 张") : "png / jpg / webp，≤48MB")),
+
+							initTab === "upload"
+								? h("div", { style: { display: "flex", flexDirection: "column", gap: "10px", padding: "22px 8px", alignItems: "center", border: "1px dashed var(--cc-border, rgba(127,127,127,.45))", borderRadius: "8px" } },
+									h("input", { type: "file", accept: "image/png,image/jpeg,image/webp", disabled: initBusy, onChange: (e) => uploadInitFile(e.target.files) }),
+									h("span", { style: S.dim }, "选好即自动铺到 ComfyUI 的 input/dsh_init/ 并设为初始图"))
+								: h("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(98px, 1fr))", gap: "8px", overflowY: "auto", minHeight: "120px", maxHeight: "min(52vh, 420px)", paddingRight: "2px", alignContent: "start" } },
+									initBusy && !initHistory.length
+										? h("span", { style: S.dim }, "读取中…")
+										: initHistory.length
+											? initHistory.map((it) => h("button", {
+												key: it.id || it.path, type: "button", disabled: initBusy,
+												title: it.filename + "　" + (it.width || "?") + "×" + (it.height || "?"),
+												style: { padding: 0, border: "1px solid var(--cc-border, rgba(127,127,127,.3))", borderRadius: "6px", overflow: "hidden", background: "var(--cc-surface, rgba(127,127,127,.08))", cursor: initBusy ? "wait" : "pointer", aspectRatio: "3/4" },
+												onClick: () => pickInitFromHistory(it),
+											}, h("img", {
+												src: EXPANDER + "/outputs/thumb?path=" + encodeURIComponent(it.path) + "&m=" + Math.round((it.mtime || 0) * 1000),
+												alt: it.filename, loading: "lazy",
+												style: { width: "100%", height: "100%", objectFit: "cover", display: "block" },
+											})))
+											: h("span", { style: S.dim }, "output 目录里还没有图 —— 先去生成一张，或者切到「上传自己的图」")),
+
+							h("div", { style: Object.assign({}, S.dim, { fontSize: "12px" }) }, "选中的图会复制到 ComfyUI input/dsh_init/，不动原文件；工作流里接 LoadImage → VAEEncode → 主采样。"))
+						: null,
 
 
 		);

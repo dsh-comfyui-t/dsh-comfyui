@@ -4,7 +4,7 @@
 检查项：
   1. 所有 .js 的 node --check（语法）
   2. 所有 .py 的 py_compile（语法）
-  3. lib/client.js 与 lib/{dict,presets,workflow,app}.js 是否一致（build_client --check）
+  3. lib/client.js 与 lib/*.js 源模块是否一致（build_client --check）
   4. hook 依赖数组的 TDZ（依赖渲染时立即求值，比声明早就是 ReferenceError）
   5. test_theme：主题调色板与 resolveTheme 的单测
   6. test_views：视角 applyView / detectView 的单测
@@ -40,9 +40,18 @@ def run(label, cmd, cwd=None, expect_zero=True):
 
 def main():
     print('=== 1. JS 语法 ===')
+    # app 系列源码是**拼接片段**而不是独立 ES 模块：app-library.js 里有顶层 return，
+    # app-console.js 的花括号要和 app.js 合起来才平衡。单独 node --check 必然报错，
+    # 它们的语法正确性由第 3 项（client.js 与源一致 + client.js 自身 --check）覆盖。
+    FRAGMENTS = {'app-util.js', 'app-branch.js', 'app-registry.js', 'app-css.js', 'app-ui.js',
+                 'app-tutorial.js', 'app-preview.js', 'app-console.js', 'app-library.js'}
     for f in sorted(os.listdir(os.path.join(PLUGIN, 'lib'))):
-        if f.endswith('.js'):
-            run(f, ['node', '--check', os.path.join(PLUGIN, 'lib', f)])
+        if not f.endswith('.js'):
+            continue
+        if f in FRAGMENTS:
+            print('  SKIP %s（拼接片段，随 client.js 一并校验）' % f)
+            continue
+        run(f, ['node', '--check', os.path.join(PLUGIN, 'lib', f)])
 
     print('=== 2. Python 语法 ===')
     for f in sorted(os.listdir(PLUGIN)):
@@ -52,7 +61,7 @@ def main():
                     os.path.join(PLUGIN, f)])
 
     print('=== 3. client.js 与源一致 ===')
-    run('build_client --check', [sys.executable, 'tools/build_client.py', '--check'], cwd=PLUGIN)
+    run('build_client --check', ['node', 'tools/build_client.mjs', '--check'], cwd=PLUGIN)
 
     print('=== 3b. 包名一致性 ===')
     run('check_naming', [sys.executable, os.path.join(TOOLS, 'check_naming.py')])

@@ -28,7 +28,14 @@ const CLIENT = path.join(LIB, 'client.js');
 const IND = '\t\t';
 const TAIL_ANCHOR = '\n' + IND + 'exports.apply = apply;';
 const MARK_RE = /^\t\t\/\/ =+ [^\n]*来自 lib\/(\w+)\.js[^\n]*$/gm;
-const SOURCES = ['dict', 'presets', 'workflow', 'dictcard', 'online_models', 'randomlib', 'app'];
+// 一个元素 = client.js 里的一段；相邻源文件要共用同一个分段标记时写成数组。
+// app 系列拼接后与原单文件 app.js 逐字节等价 —— 拆文件只为便于阅读与定位，
+// 产物仍然是同一个工厂函数体，不涉及模块隔离（这也正是它们能共存的原因）。
+const SOURCES = [
+  ['dict'], ['presets'], ['workflow'], ['dictcard'], ['online_models'], ['randomlib'],
+  ['app', 'app-util', 'app-branch', 'app-registry', 'app-css', 'app-ui',
+   'app-tutorial', 'app-preview', 'app-console', 'app-library'],
+];
 const EXPORT_RE = /^[ \t]*export\s+(default\s+)?/;
 
 const rd = (p) => fs.readFileSync(p, 'utf8');
@@ -38,8 +45,9 @@ export function build() {
   const c = rd(CLIENT);
   const marks = [...c.matchAll(MARK_RE)];
   const found = marks.map((m) => m[1]);
-  if (found.join(',') !== SOURCES.join(',')) {
-    throw new Error('client.js 分段标记不对：[' + found.join(', ') + ']（应为 [' + SOURCES.join(', ') + ']）');
+  const expect = SOURCES.map((g) => g[0]);
+  if (found.join(',') !== expect.join(',')) {
+    throw new Error('client.js 分段标记不对：[' + found.join(', ') + ']（应为 [' + expect.join(', ') + ']）');
   }
   const head = c.slice(0, marks[0].index);
   const t = c.indexOf(TAIL_ANCHOR, marks[marks.length - 1].index + marks[marks.length - 1][0].length);
@@ -47,7 +55,8 @@ export function build() {
   const tail = c.slice(t + 1);
   const out = [head];
   marks.forEach((m, i) => {
-    const src = rd(path.join(LIB, SOURCES[i] + '.js')).replace(/\n+$/, '');
+    // 组内原样首尾相接：不插换行、不单独去尾，拼出来才与原单文件逐字节相同
+    const src = SOURCES[i].map((g) => rd(path.join(LIB, g + '.js'))).join('').replace(/\n+$/, '');
     const body = src.split('\n').map((ln) => {
       const stripped = ln.replace(EXPORT_RE, '');
       return stripped.trim() ? IND + stripped : '';
