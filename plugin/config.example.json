@@ -1,0 +1,48 @@
+{
+  "_description": "DSH ComfyUI Console 0.7.0 default configuration. Personal paths and instanceId must be set on installation; never overwrite an existing config.json during upgrade.",
+  "_说明": "DSH × ComfyUI。Windows / WSL 均支持，要求用户已有本机 ComfyUI；填 startScript 后在插件 UI 启动或连接。",
+  "_字段": {
+    "comfyRoot": "ComfyUI 安装目录：便携版内有 ComfyUI/main.py；源码版内有 main.py 和 folder_paths.py 或 comfy/cli_args.py。",
+    "pythonExe": "sidecar Python 解释器；可自动使用便携版 python_standalone / python_embeded。在 WSL DSH + Windows ComfyUI 场景请使用 Windows Python。",
+    "workDir": "sidecar 工作目录（放日志）。留空 = 用插件目录",
+    "credsFile": "DSH 凭证文件，用于读 DeepSeek API key 做提示词扩写。留空 = 只走本地 LLM",
+    "comfyPort": "ComfyUI 端口",
+    "sidecarPort": "sidecar 端口",
+    "extraComfyArgs": "ComfyUI 启动参数。内存紧张的机器必须保留 --disable-pinned-memory",
+    "allowedOrigins": "额外允许的页面 Origin。默认已放行 DSH 桌面客户端（dsh-app://app、app://app）与 localhost/127.0.0.1 浏览器来源；如用其他宿主或自定义域名，在这里追加",
+    "allowNullOrigin": "文件协议页面 Origin 为 null 时是否放行。默认 true 以兼容 DSH 桌面客户端与本地 file:// 页面；若只从 localhost 浏览器访问，可改为 false 收紧",
+    "startScript": "ComfyUI 本地启动脚本绝对路径，如 D:\\ComfyUI\\ComfyUI_Windows_portable\\run_nvidia_gpu.bat；可在插件 UI 内设置",
+    "dataDir": "词库持久化目录；由实际 sidecar 的操作系统解析。留空使用 LOCALAPPDATA/DSH/ComfyUIConsole（Windows）或 XDG_DATA_HOME/DSH/ComfyUIConsole（Linux）。不能放到插件目录、WSL 挂载盘或网络共享。",
+    "dbPath": "可选 SQLite 绝对路径；优先于 dataDir，只能由 sidecar 单独访问。",
+    "outputDirectory": "输出目录的绝对路径；留空读取启动参数或默认 output。明确指定时须已存在。",
+    "tempDirectory": "与 ComfyUI --temp-directory 一致，填写已存在的父目录，最终图片位于其 temp 子目录。",
+    "extraModelPathsConfig": "额外模型 YAML 绝对路径数组，与启动脚本中的 --extra-model-paths-config 共同加载。",
+    "comfyPythonExe": "ComfyUI 直接启动使用的 Python 绝对路径。留空优先识别脚本解释器、安装目录 venv/embedded，再使用 Sidecar 解释器。脚本启动按脚本本身的解释器执行。",
+    "instanceId": "安装器生成的实例标识，Host/浏览器/Sidecar 必须匹配；不要跨 Profile 手动复用。发行包留空，安装时生成。"
+  },
+  "comfyRoot": "",
+  "pythonExe": "",
+  "workDir": "",
+  "credsFile": "",
+  "comfyPort": 8188,
+  "sidecarPort": 8199,
+  "extraComfyArgs": [
+    "--disable-pinned-memory",
+    "--disable-async-offload",
+    "--disable-dynamic-vram",
+    "--cache-none"
+  ],
+  "allowedOrigins": [
+    "dsh-app://app",
+    "app://app"
+  ],
+  "allowNullOrigin": true,
+  "startScript": "",
+  "dataDir": "",
+  "dbPath": "",
+  "outputDirectory": "",
+  "tempDirectory": "",
+  "extraModelPathsConfig": [],
+  "comfyPythonExe": "",
+  "instanceId": ""
+}

@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>DSH · 自定义工作流</title>
+<style>html,body,#root{height:100%;margin:0}body{font:13px system-ui;background:#202124;color:#e8eaed}#loading{padding:24px}.cc-native-workflow{height:100%;box-sizing:border-box;padding:14px;display:flex;flex-direction:column;gap:10px;background:var(--cc-bg);color:var(--cc-text);color-scheme:var(--cc-scheme)}.cc-native-workflow .cc-flow-editor{height:auto;flex:1;min-height:0}.cc-native-workflow .cc-flow-top{flex-wrap:wrap}.cc-native-workflow button,.cc-native-workflow input{font:inherit}.cc-native-workflow .cc-flow-top button{white-space:nowrap}
+#workflow-boot{position:fixed;inset:0;z-index:100;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:24px;text-align:center;background:var(--cc-bg,#202124);color:var(--cc-text,#e8eaed)}#workflow-boot[hidden]{display:none}#workflow-boot-detail{font-size:12px;color:var(--cc-muted,#bdc1c6);max-width:560px;white-space:pre-wrap;overflow-wrap:anywhere}.workflow-boot-spinner{width:30px;height:30px;box-sizing:border-box;border:3px solid var(--cc-border,#5f6368);border-top-color:var(--cc-accent,#8ab4f8);border-radius:50%;animation:workflow-boot-spin .8s linear infinite}#workflow-boot.boot-error .workflow-boot-spinner{display:none}#workflow-boot-retry{font:inherit;min-height:32px;padding:6px 12px;border:1px solid var(--cc-border,#5f6368);border-radius:6px;background:var(--cc-control,#303134);color:inherit;cursor:pointer}#workflow-boot-retry[hidden]{display:none}#workflow-boot-retry:hover{background:var(--cc-hover,#3c4043)}#workflow-boot-retry:focus-visible{outline:2px solid var(--cc-accent,#8ab4f8);outline-offset:2px}@keyframes workflow-boot-spin{to{transform:rotate(360deg)}}@media(prefers-reduced-motion:reduce){.workflow-boot-spinner{animation:none}}
+</style>
+</head><body>
+<div id="workflow-boot" role="status" aria-live="polite"><span class="workflow-boot-spinner" aria-hidden="true"></span><strong id="workflow-boot-text">正在准备自定义节点编辑器…</strong><span id="workflow-boot-detail">正在加载本地编辑器资源，请稍候</span><button id="workflow-boot-retry" hidden>重新加载</button></div>
+<div id="root" inert aria-busy="true"></div>
+<script id="workflow-boot-controller">
+(()=>{
+ const panel=document.getElementById('workflow-boot'),text=document.getElementById('workflow-boot-text'),detail=document.getElementById('workflow-boot-detail'),retry=document.getElementById('workflow-boot-retry'),root=document.getElementById('root');
+ const boot=window.dshWorkflowBoot={active:true,failure:'',stage(message){if(this.active&&!this.failure)text.textContent=message;},theme(tokens){for(const [key,value] of Object.entries(tokens||{}))if(/^--cc-[a-z-]+$/.test(key)&&typeof value==='string'&&value.length<200)document.documentElement.style.setProperty(key,value);},ready(){if(this.failure)return;this.active=false;panel.hidden=true;root.removeAttribute('inert');root.setAttribute('aria-busy','false');window.pywebview?.api?.ready?.();},error(message){if(!this.active)return;this.failure=String(message);panel.classList.add('boot-error');panel.setAttribute('role','alert');text.textContent='自定义节点编辑器加载失败';detail.textContent=this.failure;retry.hidden=false;root.setAttribute('aria-busy','false');window.pywebview?.api?.failed?.(this.failure);}};
+ retry.addEventListener('click',()=>location.reload());
+ window.addEventListener('error',event=>{if(event.target?.tagName==='SCRIPT')boot.error('本地编辑器资源未能加载，请重新加载后重试');else if(event.message)boot.error(event.message);},true);
+ window.addEventListener('unhandledrejection',event=>boot.error(event.reason?.message||'编辑器初始化失败，请重新加载'));
+ window.addEventListener('pywebviewready',()=>{if(!boot.active)window.pywebview?.api?.ready?.();else if(boot.failure)window.pywebview?.api?.failed?.(boot.failure);});
+ window.__ModuleLoader__={load:function(m){window.workflowModule=m.factory(function(name){if(name==='react')return React;if(name==='react-dom')return ReactDOM;throw Error('未知模块 '+name)})}};
+ window.addEventListener('DOMContentLoaded',()=>{try{if(!window.workflowModule?.mountWorkflowEditor)throw Error('编辑器资源未能初始化，请重新加载');Promise.resolve(window.workflowModule.mountWorkflowEditor(root)).catch(e=>boot.error(e.message||String(e)));}catch(e){boot.error(e.message||String(e));}},{once:true});
+})();
+</script>
+<script defer src="react.js"></script><script defer src="react-dom.js"></script><script defer src="client.js"></script>
+</body></html>

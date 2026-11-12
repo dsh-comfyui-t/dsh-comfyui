@@ -1,0 +1,32 @@
+node_modules/
+*.pyc
+__pycache__/
+.venv/
+plugin/logs/
+plugin/host-plugin.log
+backups/
+
+# 运行时与临时产物
+*.log
+tmp/
+dist/
+*.zip
+*.tar.xz
+test-results/
+.codegraph/
+
+# A-alpha 分支：随仓库分发的资产
+# 允许：catalog 引用的 5 个模型、字体、2 个词库 sqlite
+# 排除：未引用的隐藏模型、天空盒
+plugin/scene3d/models/*.glb
+!plugin/scene3d/models/bodykun-rig2.glb
+!plugin/scene3d/models/bodychan-rig3.glb
+!plugin/scene3d/models/deepseek-chan-textured.glb
+!plugin/scene3d/models/base-study-female-rigged-v5.glb
+!plugin/scene3d/models/base-study-male-rigged-v5.glb
+plugin/scene3d/sky/*.jpg
+plugin/scene3d/sky/*.png
+plugin/scene3d/sky/*.hdr
+
+# 运行时配置（安装器生成，仓库只提供 config.example.json）
+plugin/config.json

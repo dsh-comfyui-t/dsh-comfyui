@@ -1,0 +1,1382 @@
+[
+  {
+    "category": "质量",
+    "label": "杰作",
+    "output": "masterpiece, best quality, very aesthetic, absurdres"
+  },
+  {
+    "category": "质量",
+    "label": "最高画质",
+    "output": "best quality, amazing quality, very aesthetic, absurdres, HDR"
+  },
+  {
+    "category": "质量",
+    "label": "高清",
+    "output": "highres, absurdres, HDR"
+  },
+  {
+    "category": "质量",
+    "label": "极简质量串",
+    "output": "masterpiece, best quality"
+  },
+  {
+    "category": "风格",
+    "label": "平涂赛璐璐",
+    "output": "flat color, cel shading, flat shading, solid color blocks, minimal gradient"
+  },
+  {
+    "category": "风格",
+    "label": "干净线稿",
+    "output": "clean crisp lineart, prominent clean lineart"
+  },
+  {
+    "category": "风格",
+    "label": "粗线稿",
+    "output": "bold lineart, thick outlines, heavy line weight"
+  },
+  {
+    "category": "风格",
+    "label": "线稿加重",
+    "output": "(lineart:1.4), prominent clean lineart"
+  },
+  {
+    "category": "风格",
+    "label": "2D 动画风",
+    "output": "2d anime illustration"
+  },
+  {
+    "category": "风格",
+    "label": "望月けい风",
+    "output": "(@mochizuki_kei, mochizuki_kei style)"
+  },
+  {
+    "category": "风格",
+    "label": "厚涂",
+    "output": "painterly, thick painting, detailed shading, soft lighting"
+  },
+  {
+    "category": "风格",
+    "label": "电影感",
+    "output": "cinematic lighting, depth of field, lens flare, bokeh, dramatic shadows"
+  },
+  {
+    "category": "风格",
+    "label": "复古赛璐璐",
+    "output": "retro anime, 90s anime, cel animation, film grain"
+  },
+  {
+    "category": "风格",
+    "label": "水彩",
+    "output": "watercolor, soft edges, paper texture"
+  },
+  {
+    "category": "风格",
+    "label": "像素画",
+    "output": "pixel art, limited palette, dithering"
+  },
+  {
+    "category": "风格",
+    "label": "高对比",
+    "output": "high contrast, strong shadows, vivid colors"
+  },
+  {
+    "category": "角色-涟崎桦",
+    "label": "白发",
+    "output": "white hair"
+  },
+  {
+    "category": "角色-涟崎桦",
+    "label": "鲻鱼头",
+    "output": "her hairstyle is a mullet, short hair on the top and sides, long hair at the back"
+  },
+  {
+    "category": "角色-涟崎桦",
+    "label": "波波头",
+    "output": "bob cut, short hair, blunt bangs"
+  },
+  {
+    "category": "角色-涟崎桦",
+    "label": "及腰长发",
+    "output": "very long hair, long hair flowing down her back"
+  },
+  {
+    "category": "角色-涟崎桦",
+    "label": "蓝粉渐变发尾",
+    "output": "multicolored hair, gradient hair, colored tips"
+  },
+  {
+    "category": "角色-涟崎桦",
+    "label": "红瞳",
+    "output": "bright red eyes"
+  },
+  {
+    "category": "角色-涟崎桦",
+    "label": "蓝花发饰",
+    "output": "blue flower hair ornament, light blue flower hair clip"
+  },
+  {
+    "category": "角色-涟崎桦",
+    "label": "红耳坠",
+    "output": "red drop earrings"
+  },
+  {
+    "category": "角色-涟崎桦",
+    "label": "纤细体态",
+    "output": "slender, slim, delicate build, light frame, narrow shoulders, thin arms and legs"
+  },
+  {
+    "category": "角色-涟崎桦",
+    "label": "小胸",
+    "output": "modest bust, small breasts"
+  },
+  {
+    "category": "角色-涟崎桦",
+    "label": "冷脸美人",
+    "output": "kuudere, aloof, calm expression, closed mouth"
+  },
+  {
+    "category": "角色-涟崎桦",
+    "label": "垂眼",
+    "output": "tareme, droopy eyes, half-closed eyes"
+  },
+  {
+    "category": "角色-涟崎桦",
+    "label": "单挑眼",
+    "output": "tsurime, upturned eyes, cat eyes"
+  },
+  {
+    "category": "角色-涟崎桦",
+    "label": "三白眼",
+    "output": "sanpaku eyes, jitome"
+  },
+  {
+    "category": "角色-涟崎桦",
+    "label": "圆眼",
+    "output": "round eyes, large eyes"
+  },
+  {
+    "category": "衣服-常服",
+    "label": "白大衣",
+    "output": "long white trench coat, open coat"
+  },
+  {
+    "category": "衣服-常服",
+    "label": "白衬衫",
+    "output": "white shirt"
+  },
+  {
+    "category": "衣服-常服",
+    "label": "薄荷领结",
+    "output": "light blue bowtie"
+  },
+  {
+    "category": "衣服-常服",
+    "label": "蓝百褶裙",
+    "output": "light blue pleated skirt"
+  },
+  {
+    "category": "衣服-常服",
+    "label": "白过膝袜",
+    "output": "white thighhighs, zettai ryouiki"
+  },
+  {
+    "category": "衣服-常服",
+    "label": "白高跟靴",
+    "output": "white high heel ankle boots"
+  },
+  {
+    "category": "衣服-常服",
+    "label": "校服",
+    "output": "school uniform, blazer, plaid skirt"
+  },
+  {
+    "category": "衣服-常服",
+    "label": "水手服",
+    "output": "serafuku, sailor collar, pleated skirt"
+  },
+  {
+    "category": "衣服-常服",
+    "label": "连衣裙",
+    "output": "one-piece dress"
+  },
+  {
+    "category": "衣服-常服",
+    "label": "毛衣",
+    "output": "sweater, knitwear"
+  },
+  {
+    "category": "衣服-常服",
+    "label": "牛仔裤",
+    "output": "jeans, denim"
+  },
+  {
+    "category": "衣服-常服",
+    "label": "运动服",
+    "output": "tracksuit, jersey"
+  },
+  {
+    "category": "衣服-军礼服",
+    "label": "军礼服·大类",
+    "output": "(military dress uniform:1.3)"
+  },
+  {
+    "category": "衣服-军礼服",
+    "label": "肩章",
+    "output": "gold epaulettes"
+  },
+  {
+    "category": "衣服-军礼服",
+    "label": "绶带",
+    "output": "gold aiguillette on the shoulder"
+  },
+  {
+    "category": "衣服-军礼服",
+    "label": "勋章",
+    "output": "ribbon bar and medals on the chest"
+  },
+  {
+    "category": "衣服-军礼服",
+    "label": "大檐帽",
+    "output": "peaked cap with gold insignia"
+  },
+  {
+    "category": "衣服-军礼服",
+    "label": "白手套",
+    "output": "white gloves"
+  },
+  {
+    "category": "衣服-军礼服",
+    "label": "双排扣",
+    "output": "double-breasted jacket with gold buttons"
+  },
+  {
+    "category": "衣服-军礼服",
+    "label": "金侧条裤",
+    "output": "white trousers with a gold side stripe"
+  },
+  {
+    "category": "衣服-军礼服",
+    "label": "长尾礼服大衣",
+    "output": "long ceremonial dress coat with tails"
+  },
+  {
+    "category": "衣服-军礼服",
+    "label": "披风",
+    "output": "ceremonial cape over the shoulders, red cape lining"
+  },
+  {
+    "category": "衣服-军礼服",
+    "label": "佩剑",
+    "output": "ceremonial saber at her hip"
+  },
+  {
+    "category": "衣服-军礼服",
+    "label": "联邦白礼服",
+    "output": "white ceremonial dress uniform, earth federation dress uniform"
+  },
+  {
+    "category": "衣服-军礼服",
+    "label": "吉翁绿礼服",
+    "output": "olive green officer dress uniform, zeon officer dress uniform"
+  },
+  {
+    "category": "衣服-军礼服",
+    "label": "藏青礼服",
+    "output": "navy blue dress uniform, red trim and red cuffs"
+  },
+  {
+    "category": "衣服-军礼服",
+    "label": "绯红礼服",
+    "output": "crimson red dress uniform, gold trim"
+  },
+  {
+    "category": "衣服-军礼服",
+    "label": "黑金礼服",
+    "output": "black and gold dress uniform, ornate gold embroidery"
+  },
+  {
+    "category": "衣服-军礼服",
+    "label": "女式礼服裙装",
+    "output": "white dress uniform jacket, matching knee-length pleated skirt"
+  },
+  {
+    "category": "衣服-驾驶员服",
+    "label": "驾驶员服·大类",
+    "output": "(pilot suit:1.3)"
+  },
+  {
+    "category": "衣服-驾驶员服",
+    "label": "宇宙服",
+    "output": "(normal suit:1.3), pressurized space suit"
+  },
+  {
+    "category": "衣服-驾驶员服",
+    "label": "联邦宇宙服",
+    "output": "white and blue normal suit, earth federation space force normal suit"
+  },
+  {
+    "category": "衣服-驾驶员服",
+    "label": "吉翁宇宙服",
+    "output": "olive green zeon space suit, zeon principality space force normal suit"
+  },
+  {
+    "category": "衣服-驾驶员服",
+    "label": "夏亚红",
+    "output": "crimson red zeon normal suit, zeon ace pilot suit"
+  },
+  {
+    "category": "衣服-驾驶员服",
+    "label": "天人的",
+    "output": "black and white celestial being pilot suit, gundam 00 pilot suit"
+  },
+  {
+    "category": "衣服-驾驶员服",
+    "label": "ZAFT红衣",
+    "output": "red zaft military uniform, gundam seed zaft red uniform"
+  },
+  {
+    "category": "衣服-驾驶员服",
+    "label": "OZ制服",
+    "output": "white oz military uniform, blue cape, gundam wing oz uniform"
+  },
+  {
+    "category": "衣服-驾驶员服",
+    "label": "铁血驾驶员服",
+    "output": "white and red utilitarian flight suit, gundam iron blooded orphans pilot suit"
+  },
+  {
+    "category": "衣服-驾驶员服",
+    "label": "头盔夹腋下",
+    "output": "sealed helmet held under one arm"
+  },
+  {
+    "category": "衣服-驾驶员服",
+    "label": "生命维持背包",
+    "output": "life support backpack, chest control panel"
+  },
+  {
+    "category": "姿态-站",
+    "label": "立正",
+    "output": "standing at attention, both legs straight and together, both arms straight at her sides"
+  },
+  {
+    "category": "姿态-站",
+    "label": "正面证件照",
+    "output": "standing up straight, facing directly forward, body squarely facing the viewer, both feet together pointing forward, both arms straight down at her sides, formal upright posture"
+  },
+  {
+    "category": "姿态-站",
+    "label": "自然站",
+    "output": "standing, straight legs, both arms relaxed at her sides, weight on one leg"
+  },
+  {
+    "category": "姿态-站",
+    "label": "手插口袋",
+    "output": "standing, both hands in coat pockets, shoulders relaxed, contrapposto"
+  },
+  {
+    "category": "姿态-站",
+    "label": "靠墙站",
+    "output": "leaning against a wall, back against the wall, one leg bent with foot on the wall"
+  },
+  {
+    "category": "姿态-站",
+    "label": "叉腰",
+    "output": "hands on hips, akimbo"
+  },
+  {
+    "category": "姿态-站",
+    "label": "抱臂",
+    "output": "crossed arms"
+  },
+  {
+    "category": "姿态-站",
+    "label": "背手",
+    "output": "arms behind back, hands behind her back"
+  },
+  {
+    "category": "姿态-坐",
+    "label": "坐椅子",
+    "output": "sitting on a chair, legs crossed at the knee, upper body upright"
+  },
+  {
+    "category": "姿态-坐",
+    "label": "抱膝坐",
+    "output": "sitting on the ground, knees drawn up to her chest, arms wrapped around her knees"
+  },
+  {
+    "category": "姿态-坐",
+    "label": "侧坐伸腿",
+    "output": "sitting on the ground, legs extended to one side, one hand planted on the ground"
+  },
+  {
+    "category": "姿态-坐",
+    "label": "盘腿坐",
+    "output": "sitting cross-legged on the ground"
+  },
+  {
+    "category": "姿态-坐",
+    "label": "跪坐",
+    "output": "kneeling on both knees, sitting back on her heels, wariza"
+  },
+  {
+    "category": "姿态-坐",
+    "label": "坐在桌边",
+    "output": "sitting on the edge of a desk, legs dangling"
+  },
+  {
+    "category": "姿态-坐",
+    "label": "屈膝坐床",
+    "output": "sitting on a bed, knees up, hugging a pillow"
+  },
+  {
+    "category": "姿态-其他",
+    "label": "蹲姿",
+    "output": "crouching, knees deeply bent, one hand touching the ground"
+  },
+  {
+    "category": "姿态-其他",
+    "label": "跪姿",
+    "output": "kneeling on both knees, sitting back on her heels"
+  },
+  {
+    "category": "姿态-其他",
+    "label": "仰卧",
+    "output": "lying on her back, arms spread out to the sides"
+  },
+  {
+    "category": "姿态-其他",
+    "label": "俯卧",
+    "output": "lying on her stomach, on her front"
+  },
+  {
+    "category": "姿态-其他",
+    "label": "侧卧",
+    "output": "lying on her side"
+  },
+  {
+    "category": "姿态-其他",
+    "label": "漂浮",
+    "output": "floating in the air, coat fluttering, hair floating upward"
+  },
+  {
+    "category": "姿态-其他",
+    "label": "跳跃",
+    "output": "jumping, mid-air, legs bent"
+  },
+  {
+    "category": "姿态-其他",
+    "label": "回头",
+    "output": "looking back, turning head"
+  },
+  {
+    "category": "姿态-其他",
+    "label": "踮脚",
+    "output": "standing on tiptoes, tiptoes"
+  },
+  {
+    "category": "动作",
+    "label": "比耶",
+    "output": "peace sign, v sign"
+  },
+  {
+    "category": "动作",
+    "label": "手举到脸边比耶",
+    "output": "one hand raised beside her head making a sideways peace sign"
+  },
+  {
+    "category": "动作",
+    "label": "挥手",
+    "output": "waving, waving hand"
+  },
+  {
+    "category": "动作",
+    "label": "伸手",
+    "output": "reaching out, outstretched arm, reaching towards viewer"
+  },
+  {
+    "category": "动作",
+    "label": "鼓掌",
+    "output": "clapping"
+  },
+  {
+    "category": "动作",
+    "label": "敬礼",
+    "output": "salute, military salute"
+  },
+  {
+    "category": "动作",
+    "label": "扶帽檐",
+    "output": "hand on the brim of her cap, adjusting her hat"
+  },
+  {
+    "category": "动作",
+    "label": "拨头发",
+    "output": "hand in her own hair, brushing hair"
+  },
+  {
+    "category": "动作",
+    "label": "手放胸前",
+    "output": "hand on own chest"
+  },
+  {
+    "category": "动作",
+    "label": "握拳",
+    "output": "clenched fist, hand on hip"
+  },
+  {
+    "category": "动作",
+    "label": "举剑",
+    "output": "holding a sword, raised sword"
+  },
+  {
+    "category": "动作",
+    "label": "持花",
+    "output": "holding a flower, holding a rose"
+  },
+  {
+    "category": "动作",
+    "label": "捧书",
+    "output": "holding a book, reading"
+  },
+  {
+    "category": "动作",
+    "label": "拿咖啡",
+    "output": "holding a coffee cup"
+  },
+  {
+    "category": "动作",
+    "label": "双手捧脸",
+    "output": "hands on own face, hands framing face"
+  },
+  {
+    "category": "动作",
+    "label": "撑伞",
+    "output": "holding an umbrella, umbrella"
+  },
+  {
+    "category": "动作",
+    "label": "拉手",
+    "output": "holding hands, linked hands"
+  },
+  {
+    "category": "动作",
+    "label": "递东西",
+    "output": "holding out an object towards viewer"
+  },
+  {
+    "category": "表情",
+    "label": "眨眼",
+    "output": "one eye closed, wink"
+  },
+  {
+    "category": "表情",
+    "label": "坏笑",
+    "output": "mischievous smile, grin, open mouth"
+  },
+  {
+    "category": "表情",
+    "label": "浅笑",
+    "output": "slight smile, closed mouth"
+  },
+  {
+    "category": "表情",
+    "label": "面瘫",
+    "output": "expressionless, blank stare, emotionless"
+  },
+  {
+    "category": "表情",
+    "label": "惊讶",
+    "output": "surprised, wide-eyed, open mouth"
+  },
+  {
+    "category": "表情",
+    "label": "害羞",
+    "output": "blush, embarrassed, shy"
+  },
+  {
+    "category": "表情",
+    "label": "生气",
+    "output": "angry, pout, frown"
+  },
+  {
+    "category": "表情",
+    "label": "伤心",
+    "output": "sad, crying, tears"
+  },
+  {
+    "category": "表情",
+    "label": "沉思",
+    "output": "thinking, pensive"
+  },
+  {
+    "category": "表情",
+    "label": "自信",
+    "output": "confident, smug, smirk"
+  },
+  {
+    "category": "表情",
+    "label": "困倦",
+    "output": "sleepy, heavy eyelids, yawning"
+  },
+  {
+    "category": "表情",
+    "label": "挑衅",
+    "output": "smug, teasing smile"
+  },
+  {
+    "category": "表情",
+    "label": "张嘴笑",
+    "output": "open mouth, laughing, happy"
+  },
+  {
+    "category": "背景",
+    "label": "纯色背景",
+    "output": "simple background, pure color background"
+  },
+  {
+    "category": "背景",
+    "label": "深灰背景",
+    "output": "((dark grey background))"
+  },
+  {
+    "category": "背景",
+    "label": "蓝玫瑰背景",
+    "output": "blue roses in the background, blue theme"
+  },
+  {
+    "category": "背景",
+    "label": "白背景",
+    "output": "white background"
+  },
+  {
+    "category": "背景",
+    "label": "黑背景",
+    "output": "black background"
+  },
+  {
+    "category": "背景",
+    "label": "渐变背景",
+    "output": "gradient background"
+  },
+  {
+    "category": "背景",
+    "label": "星星背景",
+    "output": "starry sky, night sky, stars"
+  },
+  {
+    "category": "背景",
+    "label": "樱花背景",
+    "output": "cherry blossoms, sakura, falling petals"
+  },
+  {
+    "category": "背景",
+    "label": "教室",
+    "output": "classroom, school desk"
+  },
+  {
+    "category": "背景",
+    "label": "街道",
+    "output": "city street, urban, buildings"
+  },
+  {
+    "category": "背景",
+    "label": "海边",
+    "output": "beach, ocean, seaside"
+  },
+  {
+    "category": "背景",
+    "label": "森林",
+    "output": "forest, trees"
+  },
+  {
+    "category": "背景",
+    "label": "天空",
+    "output": "sky, clouds"
+  },
+  {
+    "category": "背景",
+    "label": "虚化背景",
+    "output": "blurry background, bokeh, depth of field"
+  },
+  {
+    "category": "背景",
+    "label": "几何背景",
+    "output": "geometric background, abstract background"
+  },
+  {
+    "category": "镜头",
+    "label": "全身",
+    "output": "full body"
+  },
+  {
+    "category": "镜头",
+    "label": "半身",
+    "output": "upper body, portrait"
+  },
+  {
+    "category": "镜头",
+    "label": "胸像",
+    "output": "bust shot"
+  },
+  {
+    "category": "镜头",
+    "label": "膝上",
+    "output": "cowboy shot"
+  },
+  {
+    "category": "镜头",
+    "label": "特写",
+    "output": "close-up, face focus"
+  },
+  {
+    "category": "镜头",
+    "label": "大特写",
+    "output": "extreme close-up"
+  },
+  {
+    "category": "镜头",
+    "label": "正面",
+    "output": "front view, straight-on view"
+  },
+  {
+    "category": "镜头",
+    "label": "四分之三侧",
+    "output": "three-quarter view"
+  },
+  {
+    "category": "镜头",
+    "label": "侧面",
+    "output": "from side, profile"
+  },
+  {
+    "category": "镜头",
+    "label": "背面",
+    "output": "from behind, back view"
+  },
+  {
+    "category": "镜头",
+    "label": "俯视",
+    "output": "from above, high angle shot"
+  },
+  {
+    "category": "镜头",
+    "label": "仰视",
+    "output": "from below, low angle shot"
+  },
+  {
+    "category": "镜头",
+    "label": "平视",
+    "output": "eye-level shot"
+  },
+  {
+    "category": "镜头",
+    "label": "荷兰角",
+    "output": "Dutch angle, tilted angle shot"
+  },
+  {
+    "category": "镜头",
+    "label": "广角",
+    "output": "wide shot, subtle wide-angle perspective"
+  },
+  {
+    "category": "镜头",
+    "label": "对称构图",
+    "output": "centered composition, symmetrical framing"
+  },
+  {
+    "category": "镜头",
+    "label": "居中",
+    "output": "centered composition"
+  },
+  {
+    "category": "镜头",
+    "label": "海报构图",
+    "output": "dynamic poster composition, clear silhouette"
+  },
+  {
+    "category": "负面",
+    "label": "质量负面",
+    "output": "worst quality, low quality, blurry"
+  },
+  {
+    "category": "负面",
+    "label": "解剖负面",
+    "output": "bad anatomy, bad proportions, bad hands, extra fingers, missing fingers, fused fingers"
+  },
+  {
+    "category": "负面",
+    "label": "肢体负面",
+    "output": "extra limbs, extra arms, extra legs, missing limbs, malformed limbs"
+  },
+  {
+    "category": "负面",
+    "label": "手部负面",
+    "output": "bad hands, extra digits, fewer digits, wrong hand placement"
+  },
+  {
+    "category": "负面",
+    "label": "多图负面",
+    "output": "multiple views, reference sheet, character sheet, collage, split screen"
+  },
+  {
+    "category": "负面",
+    "label": "文字负面",
+    "output": "text, watermark, signature, username, artist name, jpeg artifacts"
+  },
+  {
+    "category": "负面",
+    "label": "幼态负面",
+    "output": "loli, child, chibi, toddler"
+  },
+  {
+    "category": "负面",
+    "label": "多人负面",
+    "output": "2girls, multiple girls, duo"
+  },
+  {
+    "category": "负面",
+    "label": "厚涂负面",
+    "output": "painterly rendering, thick painting, glossy 3d rendering, realistic lighting"
+  },
+  {
+    "category": "负面",
+    "label": "腿长负面",
+    "output": "long legs, extremely long legs, stilt legs, disproportionate legs"
+  },
+  {
+    "category": "负面",
+    "label": "健硕负面",
+    "output": "muscular, muscular female, broad shoulders, heavy build, stocky, thick thighs"
+  },
+  {
+    "category": "负面",
+    "label": "裁切负面",
+    "output": "cropped body, cropped feet, out of frame"
+  },
+  {
+    "category": "负面",
+    "label": "低头负面",
+    "output": "(look down, face down)"
+  },
+  {
+    "category": "负面",
+    "label": "CloseUp负面",
+    "output": "(close up)"
+  },
+  {
+    "category": "常用词",
+    "label": "白色",
+    "output": "white"
+  },
+  {
+    "category": "常用词",
+    "label": "黑色",
+    "output": "black"
+  },
+  {
+    "category": "常用词",
+    "label": "红色",
+    "output": "red"
+  },
+  {
+    "category": "常用词",
+    "label": "蓝色",
+    "output": "blue"
+  },
+  {
+    "category": "常用词",
+    "label": "粉色",
+    "output": "pink"
+  },
+  {
+    "category": "常用词",
+    "label": "紫色",
+    "output": "purple"
+  },
+  {
+    "category": "常用词",
+    "label": "绿色",
+    "output": "green"
+  },
+  {
+    "category": "常用词",
+    "label": "黄色",
+    "output": "yellow"
+  },
+  {
+    "category": "常用词",
+    "label": "金色",
+    "output": "gold"
+  },
+  {
+    "category": "常用词",
+    "label": "银色",
+    "output": "silver"
+  },
+  {
+    "category": "常用词",
+    "label": "灰色",
+    "output": "grey"
+  },
+  {
+    "category": "常用词",
+    "label": "橙色",
+    "output": "orange"
+  },
+  {
+    "category": "常用词",
+    "label": "长",
+    "output": "long"
+  },
+  {
+    "category": "常用词",
+    "label": "短",
+    "output": "short"
+  },
+  {
+    "category": "常用词",
+    "label": "大",
+    "output": "large"
+  },
+  {
+    "category": "常用词",
+    "label": "小",
+    "output": "small"
+  },
+  {
+    "category": "常用词",
+    "label": "少女",
+    "output": "1girl"
+  },
+  {
+    "category": "常用词",
+    "label": "一个人",
+    "output": "solo"
+  },
+  {
+    "category": "常用词",
+    "label": "女性",
+    "output": "female"
+  },
+  {
+    "category": "常用词",
+    "label": "头发",
+    "output": "hair"
+  },
+  {
+    "category": "常用词",
+    "label": "眼睛",
+    "output": "eyes"
+  },
+  {
+    "category": "常用词",
+    "label": "脸",
+    "output": "face"
+  },
+  {
+    "category": "常用词",
+    "label": "手",
+    "output": "hands"
+  },
+  {
+    "category": "常用词",
+    "label": "衣服",
+    "output": "clothes"
+  },
+  {
+    "category": "常用词",
+    "label": "帽子",
+    "output": "hat"
+  },
+  {
+    "category": "常用词",
+    "label": "裙子",
+    "output": "skirt"
+  },
+  {
+    "category": "常用词",
+    "label": "裤子",
+    "output": "pants"
+  },
+  {
+    "category": "常用词",
+    "label": "鞋",
+    "output": "shoes"
+  },
+  {
+    "category": "常用词",
+    "label": "靴子",
+    "output": "boots"
+  },
+  {
+    "category": "常用词",
+    "label": "手套",
+    "output": "gloves"
+  },
+  {
+    "category": "常用词",
+    "label": "披风",
+    "output": "cape"
+  },
+  {
+    "category": "常用词",
+    "label": "微笑",
+    "output": "smile"
+  },
+  {
+    "category": "常用词",
+    "label": "笑",
+    "output": "smile"
+  },
+  {
+    "category": "常用词",
+    "label": "哭",
+    "output": "crying"
+  },
+  {
+    "category": "常用词",
+    "label": "生气",
+    "output": "angry"
+  },
+  {
+    "category": "常用词",
+    "label": "看镜头",
+    "output": "looking at viewer"
+  },
+  {
+    "category": "常用词",
+    "label": "看向旁边",
+    "output": "looking away"
+  },
+  {
+    "category": "常用词",
+    "label": "闭眼",
+    "output": "closed eyes"
+  },
+  {
+    "category": "常用词",
+    "label": "睁眼",
+    "output": "open eyes"
+  },
+  {
+    "category": "常用词",
+    "label": "花",
+    "output": "flower"
+  },
+  {
+    "category": "常用词",
+    "label": "玫瑰",
+    "output": "rose"
+  },
+  {
+    "category": "常用词",
+    "label": "蓝玫瑰",
+    "output": "blue roses"
+  },
+  {
+    "category": "常用词",
+    "label": "星星",
+    "output": "stars"
+  },
+  {
+    "category": "常用词",
+    "label": "月亮",
+    "output": "moon"
+  },
+  {
+    "category": "常用词",
+    "label": "太阳",
+    "output": "sun"
+  },
+  {
+    "category": "常用词",
+    "label": "雨",
+    "output": "rain"
+  },
+  {
+    "category": "常用词",
+    "label": "雪",
+    "output": "snow"
+  },
+  {
+    "category": "常用词",
+    "label": "风",
+    "output": "wind"
+  },
+  {
+    "category": "常用词",
+    "label": "室内",
+    "output": "indoors"
+  },
+  {
+    "category": "常用词",
+    "label": "室外",
+    "output": "outdoors"
+  },
+  {
+    "category": "常用词",
+    "label": "白天",
+    "output": "day"
+  },
+  {
+    "category": "常用词",
+    "label": "夜晚",
+    "output": "night"
+  },
+  {
+    "category": "常用词",
+    "label": "单色",
+    "output": "monochrome"
+  },
+  {
+    "category": "常用词",
+    "label": "彩色",
+    "output": "colorful"
+  },
+  {
+    "category": "常用词",
+    "label": "和风",
+    "output": "japanese clothes, kimono"
+  },
+  {
+    "category": "常用词",
+    "label": "汉服",
+    "output": "hanfu, chinese clothes"
+  },
+  {
+    "category": "常用词",
+    "label": "制服",
+    "output": "uniform"
+  },
+  {
+    "category": "常用词",
+    "label": "军装",
+    "output": "military uniform"
+  },
+  {
+    "category": "常用词",
+    "label": "礼服",
+    "output": "dress uniform"
+  },
+  {
+    "category": "常用词",
+    "label": "机甲",
+    "output": "mecha"
+  },
+  {
+    "category": "常用词",
+    "label": "机器人",
+    "output": "robot"
+  },
+  {
+    "category": "常用词",
+    "label": "飞船",
+    "output": "spaceship"
+  },
+  {
+    "category": "常用词",
+    "label": "武器",
+    "output": "weapon"
+  },
+  {
+    "category": "常用词",
+    "label": "刀",
+    "output": "sword, katana"
+  },
+  {
+    "category": "常用词",
+    "label": "枪",
+    "output": "gun"
+  },
+  {
+    "category": "常用词",
+    "label": "眼镜",
+    "output": "glasses"
+  },
+  {
+    "category": "常用词",
+    "label": "耳机",
+    "output": "headphones"
+  },
+  {
+    "category": "常用词",
+    "label": "项圈",
+    "output": "collar"
+  },
+  {
+    "category": "常用词",
+    "label": "尾巴",
+    "output": "tail"
+  },
+  {
+    "category": "常用词",
+    "label": "翅膀",
+    "output": "wings"
+  },
+  {
+    "category": "常用词",
+    "label": "角",
+    "output": "horns"
+  },
+  {
+    "category": "常用词",
+    "label": "猫耳",
+    "output": "cat ears, nekomimi"
+  },
+  {
+    "category": "常用词",
+    "label": "兽耳",
+    "output": "animal ears"
+  },
+  {
+    "category": "常用词",
+    "label": "站姿",
+    "output": "standing"
+  },
+  {
+    "category": "常用词",
+    "label": "坐姿",
+    "output": "sitting"
+  },
+  {
+    "category": "常用词",
+    "label": "蹲姿",
+    "output": "crouching"
+  },
+  {
+    "category": "常用词",
+    "label": "跪姿",
+    "output": "kneeling"
+  },
+  {
+    "category": "常用词",
+    "label": "躺姿",
+    "output": "lying down"
+  },
+  {
+    "category": "常用词",
+    "label": "卧姿",
+    "output": "lying down"
+  },
+  {
+    "category": "常用词",
+    "label": "姿势",
+    "output": "pose"
+  },
+  {
+    "category": "常用词",
+    "label": "动作姿势",
+    "output": "pose"
+  },
+  {
+    "category": "常用词",
+    "label": "军礼服",
+    "output": "(military dress uniform:1.3)"
+  },
+  {
+    "category": "常用词",
+    "label": "礼服",
+    "output": "dress uniform"
+  },
+  {
+    "category": "常用词",
+    "label": "驾驶员服",
+    "output": "(pilot suit:1.3)"
+  },
+  {
+    "category": "常用词",
+    "label": "宇宙服",
+    "output": "(normal suit:1.3)"
+  },
+  {
+    "category": "常用词",
+    "label": "军服",
+    "output": "military uniform"
+  },
+  {
+    "category": "常用词",
+    "label": "军装",
+    "output": "military uniform"
+  },
+  {
+    "category": "常用词",
+    "label": "私服",
+    "output": "casual clothes"
+  },
+  {
+    "category": "常用词",
+    "label": "便服",
+    "output": "casual clothes"
+  },
+  {
+    "category": "常用词",
+    "label": "发饰",
+    "output": "hair ornament"
+  },
+  {
+    "category": "常用词",
+    "label": "头饰",
+    "output": "hair ornament"
+  },
+  {
+    "category": "常用词",
+    "label": "耳坠",
+    "output": "drop earrings"
+  },
+  {
+    "category": "常用词",
+    "label": "耳环",
+    "output": "earrings"
+  },
+  {
+    "category": "常用词",
+    "label": "赛璐璐",
+    "output": "cel shading"
+  },
+  {
+    "category": "常用词",
+    "label": "平涂",
+    "output": "flat color, cel shading, flat shading"
+  },
+  {
+    "category": "常用词",
+    "label": "线稿",
+    "output": "lineart"
+  },
+  {
+    "category": "常用词",
+    "label": "高画质",
+    "output": "best quality, very aesthetic, absurdres"
+  },
+  {
+    "category": "常用词",
+    "label": "正面",
+    "output": "front view"
+  },
+  {
+    "category": "常用词",
+    "label": "侧面",
+    "output": "from side"
+  },
+  {
+    "category": "常用词",
+    "label": "背面",
+    "output": "from behind"
+  },
+  {
+    "category": "常用词",
+    "label": "全身",
+    "output": "full body"
+  },
+  {
+    "category": "常用词",
+    "label": "半身",
+    "output": "upper body"
+  },
+  {
+    "category": "常用词",
+    "label": "特写",
+    "output": "close-up"
+  }
+]

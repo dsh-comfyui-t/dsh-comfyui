@@ -1,0 +1,7 @@
+{
+  "repository": "https://github.com/storytold/photocraft",
+  "revision": "44f356c6de63e0b35cf9ca5e3354b9b63e4a1e18",
+  "source": "crates/ui-egui/src/canvas/ants.rs",
+  "license": "MIT",
+  "scope": "Device-pixel marching-ants rendering port for DSH browser editor"
+}

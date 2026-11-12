@@ -1,0 +1,27 @@
+{
+  "name": "@local/dsh-comfyui-console",
+  "version": "0.7.0",
+  "private": true,
+  "description": "DSH ComfyUI 绘图台：SQLite 词库、提示词编辑、本地模型预览、在线模型库、图片参数与输出图库",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": {
+      "default": "./lib/index.js"
+    },
+    "./client": {
+      "default": "./lib/client.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "dsh": {
+    "client": {
+      "inject": [],
+      "platform": "web"
+    }
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "^4.0.2"
+  },
+  "license": "MIT"
+}

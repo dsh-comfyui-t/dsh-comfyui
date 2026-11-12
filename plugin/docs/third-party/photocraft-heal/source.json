@@ -1,0 +1,19 @@
+{
+  "repository": "https://github.com/storytold/photocraft",
+  "revision": "b49c6c97c5742f6747658ebf9656fc5d03b21f8c",
+  "license": "MIT",
+  "files": [
+    {
+      "path": "crates/engine/src/cmd/retouch_cmds/heal.rs",
+      "sha256": "9bd32ed5ac0e7bef0d0549825477e925e811e11afaafcc17864937c7dd3e1db8"
+    },
+    {
+      "path": "crates/algo/src/inpaint/synthesis.rs",
+      "sha256": "a7c60b379a3d65455fc7e3a49fec3b56ebcc8ff55b470e2a84c138d0f3b526c9"
+    },
+    {
+      "path": "crates/algo/src/poisson.rs",
+      "sha256": "8ce2c3df38eb272ddef90365015b033be24931a274260f50c80e0b8a9b89d12a"
+    }
+  ]
+}

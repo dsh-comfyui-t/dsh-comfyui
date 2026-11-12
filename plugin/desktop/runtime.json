@@ -1,0 +1,1 @@
+{"version": "45.0.0", "source": "https://github.com/electron/electron/releases", "platforms": ["win32-x64", "win32-arm64", "darwin-x64", "darwin-arm64", "linux-x64", "linux-arm64"]}

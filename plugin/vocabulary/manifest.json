@@ -1,0 +1,74 @@
+{
+  "format": 1,
+  "sources": {
+    "danbooru_revision": "8c82a48deb6f5548d893a1b1e82943a5bcf15c2e",
+    "files": [
+      {
+        "file": "tags-general.csv",
+        "url": "https://huggingface.co/datasets/ame-la/danbooru-tags-data-zh/resolve/8c82a48deb6f5548d893a1b1e82943a5bcf15c2e/tags/general.csv",
+        "bytes": 2590122,
+        "sha256": "f990b250330aa56573008d4d40d867729e26f02d0cae37af32fb1a4faa810384"
+      },
+      {
+        "file": "tags-artist.csv",
+        "url": "https://huggingface.co/datasets/ame-la/danbooru-tags-data-zh/resolve/8c82a48deb6f5548d893a1b1e82943a5bcf15c2e/tags/artist.csv",
+        "bytes": 2186184,
+        "sha256": "13130273637b3f3ac82c637593d586e88c93a81d96e20d306fe84995c03be3ec"
+      },
+      {
+        "file": "tags-copyright.csv",
+        "url": "https://huggingface.co/datasets/ame-la/danbooru-tags-data-zh/resolve/8c82a48deb6f5548d893a1b1e82943a5bcf15c2e/tags/copyright.csv",
+        "bytes": 1253741,
+        "sha256": "f44fb49e631e595e948fc01f71773ed2b9903507049f1acaf4a51096869864ee"
+      },
+      {
+        "file": "tags-character.csv",
+        "url": "https://huggingface.co/datasets/ame-la/danbooru-tags-data-zh/resolve/8c82a48deb6f5548d893a1b1e82943a5bcf15c2e/tags/character.csv",
+        "bytes": 4020573,
+        "sha256": "7a6057260dbdae09476834a75a87c24f33d0bad868461f82e54e4313d232d6c6"
+      },
+      {
+        "file": "tags-meta.csv",
+        "url": "https://huggingface.co/datasets/ame-la/danbooru-tags-data-zh/resolve/8c82a48deb6f5548d893a1b1e82943a5bcf15c2e/tags/meta.csv",
+        "bytes": 54467,
+        "sha256": "5b7269e96d3f07d07b46469e005c4b3e4c05c9e0acdff8bcd0393b5e15fda12a"
+      },
+      {
+        "file": "LICENSE",
+        "url": "https://huggingface.co/datasets/ame-la/danbooru-tags-data-zh/resolve/8c82a48deb6f5548d893a1b1e82943a5bcf15c2e/LICENSE",
+        "bytes": 1065,
+        "sha256": "d9db28b2e55ae4694f7ec9b38c3849cc604366a97470d347e7ef7d4e9e73e940"
+      },
+      {
+        "file": "README.md",
+        "url": "https://huggingface.co/datasets/ame-la/danbooru-tags-data-zh/resolve/8c82a48deb6f5548d893a1b1e82943a5bcf15c2e/README.md",
+        "bytes": 3497,
+        "sha256": "3bb363e84d9bc4ed1a9073c69d5c794897ba99e3e336bda7611a38278152829f"
+      },
+      {
+        "file": "cedict.txt.gz",
+        "url": "https://www.mdbg.net/chinese/export/cedict/cedict_1_0_ts_utf-8_mdbg.txt.gz",
+        "bytes": 3983348,
+        "sha256": "68f54ba4159aa8234326c881482705e81277b4a84e8e67e090a1318068e5e0aa"
+      },
+      {
+        "file": "translate-zh_en-1_9.argosmodel",
+        "url": "https://argos-net.com/v1/translate-zh_en-1_9.argosmodel",
+        "bytes": 74481402,
+        "sha256": "62e7af5a3a48b530e47b7b3e5c78c2de79073ecd815750d2bf3ab35b4a67da2d"
+      }
+    ]
+  },
+  "catalogs": {
+    "translation": {
+      "entries": 176307,
+      "bytes": 39649280,
+      "sha256": "4e18a1b537bfc381a525cdb3d1556dcd660cea1ea844b4954abd159a3729f36a"
+    },
+    "danbooru": {
+      "entries": 99952,
+      "bytes": 32256000,
+      "sha256": "0d1e8685efacf2bb1a140cfd690af8ca10cfe7430376c6157cc09350ea4d47bc"
+    }
+  }
+}

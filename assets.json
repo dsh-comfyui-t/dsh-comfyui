@@ -1,0 +1,8 @@
+{
+  "version": 1,
+  "tag": "v0.7.0",
+  "base": "https://github.com/dsh-comfyui-t/dsh-comfyui/releases/download",
+  "generatedAt": "2026-11-12T02:50:00Z",
+  "assets": [],
+  "note": "A-alpha 分支的资产随仓库分发（plugin/scene3d/models、fonts、vocabulary），不再通过 Release 下载。"
+}
